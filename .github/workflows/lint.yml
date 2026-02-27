@@ -40,4 +40,4 @@ jobs:
         with:
           name: eslint-report
           path: eslint-report.json
-          if-no-files-found: error
+          if-no-files-found: warn
