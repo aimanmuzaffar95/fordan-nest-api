@@ -1,4 +1,8 @@
-import { Injectable, OnModuleInit, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcrypt';
@@ -7,6 +11,15 @@ import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { UserCredential } from './entities/user-credential.entity';
 import { UserRole } from '../users/entities/user-role.enum';
+
+type ComparePasswordFn = (data: string, encrypted: string) => Promise<boolean>;
+type HashPasswordFn = (
+  data: string,
+  saltOrRounds: string | number,
+) => Promise<string>;
+
+const comparePassword = compare as unknown as ComparePasswordFn;
+const hashPassword = hash as unknown as HashPasswordFn;
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -30,7 +43,7 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const passwordMatches = await compare(
+    const passwordMatches = await comparePassword(
       loginDto.password,
       credential.passwordHash,
     );
@@ -62,7 +75,7 @@ export class AuthService implements OnModuleInit {
 
     const adminCredential = this.credentialsRepository.create({
       username: 'admin',
-      passwordHash: await hash('admin', 10),
+      passwordHash: await hashPassword('admin', 10),
       user: adminUser,
     });
 

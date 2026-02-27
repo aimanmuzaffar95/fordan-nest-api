@@ -9,6 +9,12 @@ import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { UserCredential } from './entities/user-credential.entity';
 
+type HashPasswordFn = (
+  data: string,
+  saltOrRounds: string | number,
+) => Promise<string>;
+const hashPassword = hash as unknown as HashPasswordFn;
+
 describe('AuthService', () => {
   let authService: AuthService;
   let credentialsRepository: Repository<UserCredential>;
@@ -47,7 +53,7 @@ describe('AuthService', () => {
   it('returns a token for valid admin credentials', async () => {
     (credentialsRepository.findOne as jest.Mock).mockResolvedValue({
       username: 'admin',
-      passwordHash: await hash('admin', 1),
+      passwordHash: await hashPassword('admin', 1),
       user: {
         id: 'user-id',
         role: UserRole.ADMIN,

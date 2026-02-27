@@ -16,6 +16,14 @@ interface StandardSuccessResponse<T> {
   path: string;
 }
 
+interface HttpResponseLike {
+  statusCode: number;
+}
+
+interface HttpRequestLike {
+  url: string;
+}
+
 function isStandardResponse<T>(
   data: unknown,
 ): data is StandardSuccessResponse<T> {
@@ -32,16 +40,17 @@ function isStandardResponse<T>(
 }
 
 @Injectable()
-export class SuccessResponseInterceptor<T>
-  implements NestInterceptor<T, StandardSuccessResponse<T>>
-{
+export class SuccessResponseInterceptor<T> implements NestInterceptor<
+  T,
+  StandardSuccessResponse<T>
+> {
   intercept(
     context: ExecutionContext,
     next: CallHandler,
   ): Observable<StandardSuccessResponse<T>> {
     const httpContext = context.switchToHttp();
-    const response = httpContext.getResponse();
-    const request = httpContext.getRequest();
+    const response = httpContext.getResponse<HttpResponseLike>();
+    const request = httpContext.getRequest<HttpRequestLike>();
 
     return next.handle().pipe(
       map((data: T) => {
