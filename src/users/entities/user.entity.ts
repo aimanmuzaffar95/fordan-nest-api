@@ -19,7 +19,7 @@ export class User {
   @Column({ type: 'varchar', length: 30 })
   phoneNumber: string;
 
-  @Column({ type: 'enum', enum: UserRole })
+  @Column({ type: 'varchar', length: 20, default: UserRole.INSTALLER })
   role: UserRole;
 
   @OneToOne(() => UserCredential, (credential) => credential.user)

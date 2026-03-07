@@ -34,7 +34,7 @@ describe('AuthService', () => {
         {
           provide: UsersService,
           useValue: {
-            createAdminIfMissing: jest.fn(),
+            seedDefaultUsers: jest.fn(),
           },
         },
         {
@@ -50,7 +50,7 @@ describe('AuthService', () => {
     credentialsRepository = moduleRef.get(getRepositoryToken(UserCredential));
   });
 
-  it('returns a token for valid admin credentials', async () => {
+  it('returns a token and role for valid admin credentials', async () => {
     (credentialsRepository.findOne as jest.Mock).mockResolvedValue({
       username: 'admin',
       passwordHash: await hashPassword('admin', 1),
@@ -62,7 +62,7 @@ describe('AuthService', () => {
 
     await expect(
       authService.login({ username: 'admin', password: 'admin' }),
-    ).resolves.toEqual({ accessToken: 'mock-token' });
+    ).resolves.toEqual({ accessToken: 'mock-token', role: UserRole.ADMIN });
   });
 
   it('rejects invalid credentials', async () => {
