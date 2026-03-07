@@ -2,6 +2,11 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import {
+  AdminGuard,
+  InstallerGuard,
+  ManagerGuard,
+} from '../auth/guards/role.guards';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { User } from './entities/user.entity';
@@ -16,7 +21,14 @@ import { UsersService } from './users.service';
     }),
   ],
   controllers: [UsersController],
-  providers: [UsersService, JwtAuthGuard, RolesGuard],
+  providers: [
+    UsersService,
+    JwtAuthGuard,
+    RolesGuard,
+    AdminGuard,
+    ManagerGuard,
+    InstallerGuard,
+  ],
   exports: [UsersService],
 })
 export class UsersModule {}

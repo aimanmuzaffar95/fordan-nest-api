@@ -1,5 +1,5 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { AdminOnly } from '../auth/decorators/role-access.decorators';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CreateUserByAdminDto } from './dto/create-user-by-admin.dto';
@@ -12,7 +12,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN)
+  @AdminOnly()
   createUserByAdmin(
     @Body() dto: CreateUserByAdminDto,
   ): Promise<{ id: string; username: string; role: UserRole }> {
