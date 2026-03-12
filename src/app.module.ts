@@ -4,6 +4,8 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UserCredential } from './auth/entities/user-credential.entity';
+import { CustomersModule } from './customers/customers.module';
+import { Customer } from './customers/entities/customer.entity';
 import { User } from './users/entities/user.entity';
 
 @Module({
@@ -18,10 +20,11 @@ import { User } from './users/entities/user.entity';
         process.env.DATABASE_PASSWORD ?? process.env.DB_PASSWORD ?? 'postgres',
       database:
         process.env.DATABASE_NAME ?? process.env.DB_DATABASE ?? 'nestdb',
-      entities: [User, UserCredential],
+      entities: [User, UserCredential, Customer],
       synchronize: true,
     }),
     AuthModule,
+    CustomersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
