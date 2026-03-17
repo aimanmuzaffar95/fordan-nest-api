@@ -246,16 +246,15 @@ export class InstallerService {
   }
 
   async restartWeb(): Promise<InstallerRunRecord> {
-    // Safe restart: avoid recreating api-dev (this container) to keep installer reachable.
+    // Use `docker compose restart` so we only restart the web-dev
+    // container and do not recreate api-dev (this container).
     return this.startRun('restart-web', 'docker', [
       'compose',
       '-f',
       'docker-compose.yml',
       '-f',
       'docker-compose.dev.yml',
-      'up',
-      '-d',
-      '--build',
+      'restart',
       'web-dev',
     ]);
   }
