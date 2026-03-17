@@ -7,6 +7,7 @@ import { UserCredential } from './auth/entities/user-credential.entity';
 import { CustomersModule } from './customers/customers.module';
 import { Customer } from './customers/entities/customer.entity';
 import { User } from './users/entities/user.entity';
+import { InstallerModule } from './installer/installer.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { User } from './users/entities/user.entity';
     }),
     AuthModule,
     CustomersModule,
+    InstallerModule,
   ],
   controllers: [AppController],
   providers: [AppService],
