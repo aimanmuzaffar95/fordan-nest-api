@@ -26,7 +26,14 @@ export class AuthService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.usersService.seedDefaultUsers();
+    const nodeEnv = (process.env.NODE_ENV ?? 'development').toLowerCase();
+    const seedFlag =
+      process.env.SEED_DEFAULT_USERS ??
+      (nodeEnv === 'production' ? 'false' : 'true');
+    const shouldSeed = seedFlag.toLowerCase() === 'true';
+    if (shouldSeed) {
+      await this.usersService.seedDefaultUsers();
+    }
   }
 
   async login(

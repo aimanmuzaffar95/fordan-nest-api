@@ -47,6 +47,7 @@ const DB_PASSWORD =
 const DB_NAME =
   process.env.DATABASE_NAME ?? process.env.DB_DATABASE ?? 'nestdb';
 const DB_SOCKET_PATH = process.env.DATABASE_SOCKET_PATH?.trim() || undefined;
+const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
 
 @Module({
   imports: [
@@ -72,7 +73,7 @@ const DB_SOCKET_PATH = process.env.DATABASE_SOCKET_PATH?.trim() || undefined;
         ? { extra: { socketPath: DB_SOCKET_PATH } }
         : {}),
       entities: [User, UserCredential, Customer],
-      synchronize: true,
+      synchronize: SYNCHRONIZE,
     }),
     AuthModule,
     CustomersModule,
