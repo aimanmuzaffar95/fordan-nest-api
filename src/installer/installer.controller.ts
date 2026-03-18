@@ -99,4 +99,12 @@ export class InstallerController {
     const rec = await this.installer.restartWeb();
     return { runId: rec.id };
   }
+
+  @Post('seed')
+  @AdminOnly()
+  async seed() {
+    this.assertEnabled();
+    const rec = await this.installer.seed();
+    return { runId: rec.id };
+  }
 }

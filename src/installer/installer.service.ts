@@ -5,7 +5,12 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export type InstallerRunKind = 'setup' | 'upgrade' | 'migrate' | 'restart-web';
+export type InstallerRunKind =
+  | 'setup'
+  | 'upgrade'
+  | 'migrate'
+  | 'restart-web'
+  | 'seed';
 
 export type InstallerStatus = {
   repoRoot: string;
@@ -256,6 +261,15 @@ export class InstallerService {
       'docker-compose.dev.yml',
       'restart',
       'web-dev',
+    ]);
+  }
+
+  async seed(): Promise<InstallerRunRecord> {
+    return this.startRun('seed', 'npm', [
+      '--prefix',
+      'apps/api',
+      'run',
+      'seed:run',
     ]);
   }
 }
