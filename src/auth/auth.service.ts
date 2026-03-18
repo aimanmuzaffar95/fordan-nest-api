@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
-import { compare } from 'bcrypt';
+import { compare } from 'bcryptjs';
 import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';

@@ -2,7 +2,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { hash } from 'bcrypt';
+import { hash } from 'bcryptjs';
 import { Repository } from 'typeorm';
 import { UserRole } from '../users/entities/user-role.enum';
 import { UsersService } from '../users/users.service';

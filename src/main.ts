@@ -11,6 +11,9 @@ async function bootstrap() {
     origin: [
       'http://localhost:8080', // docker dev web
       'http://localhost:5173', // host dev web (common vite default)
+      'https://crm.fordan.com.au',
+      'https://api.fordan.com.au',
+      'https://dbprovider.us-west-1.clawcloudrun.com',
     ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
