@@ -168,7 +168,7 @@ export class JobsService {
       const job = jobsRepository.create({
         customerId,
         customer,
-        managerId: assignedManager.id,
+        managerId: assignedManager?.id ?? null,
         manager: assignedManager,
         installers: [],
         systemType: dto.systemType,
@@ -692,7 +692,7 @@ export class JobsService {
     performedByRole: UserRole | null,
     dto: CreateJobForCustomerDto,
     manager: DataSource['manager'],
-  ): Promise<User> {
+  ): Promise<User | null> {
     if (performedByRole === UserRole.MANAGER) {
       if (!performedById) {
         throw new BadRequestException('Authenticated manager not found');
@@ -709,9 +709,7 @@ export class JobsService {
 
     if (performedByRole === UserRole.ADMIN) {
       if (!dto.managerId) {
-        throw new BadRequestException(
-          'managerId is required when an admin creates a customer job.',
-        );
+        return null;
       }
 
       return this.assertManagerExists(dto.managerId, manager);

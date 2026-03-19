@@ -32,12 +32,12 @@ export class Job {
   @JoinColumn({ name: 'customerId' })
   customer: Customer;
 
-  @Column({ type: 'uuid' })
-  managerId: string;
+  @Column({ type: 'uuid', nullable: true })
+  managerId: string | null;
 
-  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => User, { onDelete: 'RESTRICT', nullable: true })
   @JoinColumn({ name: 'managerId' })
-  manager: User;
+  manager: User | null;
 
   @ManyToMany(() => User, { onDelete: 'RESTRICT' })
   @JoinTable({

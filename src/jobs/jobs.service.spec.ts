@@ -184,4 +184,87 @@ describe('JobsService', () => {
     expect(txJobsRepository.save).toHaveBeenCalledTimes(1);
     expect(txAuditRepository.save).not.toHaveBeenCalled();
   });
+
+  it('allows admin to create a customer job without manager assignment', async () => {
+    type SavedAuditEntry = {
+      action: JobAuditAction;
+      newValue: { managerId: string | null } | null;
+    };
+
+    const customer = { id: 'customer-1' } as Customer;
+    const createdJob = {
+      id: 'job-1',
+      customerId: 'customer-1',
+      managerId: null,
+      manager: null,
+      systemType: JobSystemType.SOLAR,
+      jobStatus: JobStatus.LEAD,
+      systemSizeKw: '5.50',
+      batterySizeKwh: null,
+      projectPrice: '0.00',
+      depositAmount: '0.00',
+      installers: [],
+    };
+
+    const txCustomersRepository = {
+      findOne: jest.fn().mockResolvedValue(customer),
+    };
+
+    const txJobsRepository = {
+      create: jest.fn((payload: unknown) => payload),
+      save: jest.fn().mockResolvedValue(createdJob),
+    };
+
+    const txUsersRepository = {
+      findOne: jest.fn(),
+    };
+
+    const saveAuditMock = jest.fn() as jest.MockedFunction<
+      (entries: SavedAuditEntry[]) => void
+    >;
+
+    const txAuditRepository = {
+      create: jest.fn((payload: unknown) => payload),
+      save: saveAuditMock,
+    };
+
+    const txEntityManager = {
+      getRepository: jest.fn((entity: unknown) => {
+        if (entity === Customer) return txCustomersRepository;
+        if (entity === Job) return txJobsRepository;
+        if (entity === User) return txUsersRepository;
+        if (entity === JobAuditLog) return txAuditRepository;
+        return { findOne: jest.fn(), find: jest.fn().mockResolvedValue([]) };
+      }),
+    };
+
+    dataSource.transaction.mockImplementation((cb: (m: unknown) => unknown) =>
+      Promise.resolve(cb(txEntityManager)),
+    );
+
+    jest.spyOn(service, 'findOne').mockResolvedValue(createdJob as Job);
+
+    await expect(
+      service.createForCustomer('admin-1', UserRole.ADMIN, 'customer-1', {
+        systemType: JobSystemType.SOLAR,
+        systemSizeKw: 5.5,
+      }),
+    ).resolves.toEqual(createdJob);
+
+    expect(txUsersRepository.findOne).not.toHaveBeenCalled();
+    expect(txJobsRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId: 'customer-1',
+        managerId: null,
+        manager: null,
+      }),
+    );
+    const [savedAuditEntries = []] = saveAuditMock.mock.calls[0] ?? [];
+    const jobCreatedEntry = savedAuditEntries.find(
+      (entry) => entry.action === JobAuditAction.JOB_CREATED,
+    );
+
+    expect(jobCreatedEntry).toBeDefined();
+    expect(jobCreatedEntry?.newValue?.managerId).toBeNull();
+  });
 });
