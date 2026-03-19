@@ -186,6 +186,11 @@ describe('JobsService', () => {
   });
 
   it('allows admin to create a customer job without manager assignment', async () => {
+    type SavedAuditEntry = {
+      action: JobAuditAction;
+      newValue: { managerId: string | null } | null;
+    };
+
     const customer = { id: 'customer-1' } as Customer;
     const createdJob = {
       id: 'job-1',
@@ -214,9 +219,13 @@ describe('JobsService', () => {
       findOne: jest.fn(),
     };
 
+    const saveAuditMock = jest.fn() as jest.MockedFunction<
+      (entries: SavedAuditEntry[]) => void
+    >;
+
     const txAuditRepository = {
       create: jest.fn((payload: unknown) => payload),
-      save: jest.fn(),
+      save: saveAuditMock,
     };
 
     const txEntityManager = {
@@ -236,15 +245,10 @@ describe('JobsService', () => {
     jest.spyOn(service, 'findOne').mockResolvedValue(createdJob as Job);
 
     await expect(
-      service.createForCustomer(
-        'admin-1',
-        UserRole.ADMIN,
-        'customer-1',
-        {
-          systemType: JobSystemType.SOLAR,
-          systemSizeKw: 5.5,
-        },
-      ),
+      service.createForCustomer('admin-1', UserRole.ADMIN, 'customer-1', {
+        systemType: JobSystemType.SOLAR,
+        systemSizeKw: 5.5,
+      }),
     ).resolves.toEqual(createdJob);
 
     expect(txUsersRepository.findOne).not.toHaveBeenCalled();
@@ -255,15 +259,12 @@ describe('JobsService', () => {
         manager: null,
       }),
     );
-    expect(txAuditRepository.save).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          action: JobAuditAction.JOB_CREATED,
-          newValue: expect.objectContaining({
-            managerId: null,
-          }),
-        }),
-      ]),
+    const [savedAuditEntries = []] = saveAuditMock.mock.calls[0] ?? [];
+    const jobCreatedEntry = savedAuditEntries.find(
+      (entry) => entry.action === JobAuditAction.JOB_CREATED,
     );
+
+    expect(jobCreatedEntry).toBeDefined();
+    expect(jobCreatedEntry?.newValue?.managerId).toBeNull();
   });
 });
