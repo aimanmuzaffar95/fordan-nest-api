@@ -53,11 +53,36 @@ export class Job {
   })
   systemType: JobSystemType;
 
+  @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
+  systemSizeKw: string | null;
+
+  @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
+  batterySizeKwh: string | null;
+
+  @Column({
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    default: 0,
+  })
+  projectPrice: string;
+
   @Column({ type: 'boolean', default: false })
   contractSigned: boolean;
 
+  @Column({
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    default: 0,
+  })
+  depositAmount: string;
+
   @Column({ type: 'boolean', default: false })
   depositPaid: boolean;
+
+  @Column({ type: 'date', nullable: true })
+  depositDate: string | null;
 
   @Column({ type: 'date', nullable: true })
   installDate: string | null;

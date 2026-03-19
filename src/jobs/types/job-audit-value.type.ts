@@ -1,7 +1,9 @@
-export type JobAuditValue =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: JobAuditValue }
-  | JobAuditValue[];
+export type JobAuditScalar = string | number | boolean | null;
+
+export type JobAuditObject = {
+  [key: string]: JobAuditValue;
+};
+
+export type JobAuditArray = JobAuditValue[];
+
+export type JobAuditValue = JobAuditScalar | JobAuditObject | JobAuditArray;

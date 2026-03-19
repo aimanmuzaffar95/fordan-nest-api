@@ -6,11 +6,11 @@ import { AuthModule } from './auth/auth.module';
 import { UserCredential } from './auth/entities/user-credential.entity';
 import { CustomersModule } from './customers/customers.module';
 import { Customer } from './customers/entities/customer.entity';
+import { InstallerModule } from './installer/installer.module';
 import { JobAuditLog } from './jobs/entities/job-audit-log.entity';
 import { Job } from './jobs/entities/job.entity';
 import { JobsModule } from './jobs/jobs.module';
 import { User } from './users/entities/user.entity';
-import { InstallerModule } from './installer/installer.module';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
