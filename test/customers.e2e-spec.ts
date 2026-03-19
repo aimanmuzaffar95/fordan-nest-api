@@ -1,4 +1,5 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
@@ -17,6 +18,7 @@ type SuccessBody<T> = {
 describe('Customers (e2e)', () => {
   let app: INestApplication<App>;
   let customersRepository: Repository<Customer>;
+  let accessToken: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -47,6 +49,9 @@ describe('Customers (e2e)', () => {
       getRepositoryToken(Customer),
     );
 
+    const jwtService = moduleFixture.get(JwtService);
+    accessToken = jwtService.sign({ sub: 'e2e-user-id', role: 'admin' });
+
     await app.init();
   });
 
@@ -61,6 +66,7 @@ describe('Customers (e2e)', () => {
   it('creates a customer (201)', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/customers')
+      .set('Authorization', `Bearer ${accessToken}`)
       .send({
         firstName: '  Jane  ',
         lastName: '  Doe ',
@@ -88,6 +94,7 @@ describe('Customers (e2e)', () => {
   it('returns 400 for invalid create payload', async () => {
     await request(app.getHttpServer())
       .post('/api/customers')
+      .set('Authorization', `Bearer ${accessToken}`)
       .send({
         firstName: '  ',
         lastName: 'Doe',
@@ -119,6 +126,7 @@ describe('Customers (e2e)', () => {
 
     const response = await request(app.getHttpServer())
       .get('/api/customers?page=1&limit=1')
+      .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
 
     const body = response.body as SuccessBody<{
@@ -142,6 +150,7 @@ describe('Customers (e2e)', () => {
   it('returns 400 when list limit is above cap', async () => {
     await request(app.getHttpServer())
       .get('/api/customers?page=1&limit=101')
+      .set('Authorization', `Bearer ${accessToken}`)
       .expect(400);
   });
 
@@ -158,6 +167,7 @@ describe('Customers (e2e)', () => {
 
     const response = await request(app.getHttpServer())
       .get(`/api/customers/${customer.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
 
     const body = response.body as SuccessBody<{ id: string; email: string }>;
@@ -178,6 +188,7 @@ describe('Customers (e2e)', () => {
 
     const response = await request(app.getHttpServer())
       .patch(`/api/customers/${customer.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
       .send({
         firstName: '  Marcus ',
         email: '  marcus@example.com ',
@@ -221,12 +232,15 @@ describe('Customers (e2e)', () => {
 
     const byName = await request(app.getHttpServer())
       .get('/api/customers/search?q=aiman')
+      .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     const byEmail = await request(app.getHttpServer())
       .get('/api/customers/search?q=bob@example.com')
+      .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     const byPhone = await request(app.getHttpServer())
       .get('/api/customers/search?q=+155502')
+      .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
 
     const nameBody = byName.body as SuccessBody<{
@@ -252,18 +266,23 @@ describe('Customers (e2e)', () => {
   });
 
   it('returns 400 when search query is missing', async () => {
-    await request(app.getHttpServer()).get('/api/customers/search').expect(400);
+    await request(app.getHttpServer())
+      .get('/api/customers/search')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(400);
   });
 
   it('returns 404 on missing id', async () => {
     await request(app.getHttpServer())
       .get('/api/customers/01f4a9d1-8f35-4ddd-8d98-6630f58c4c2b')
+      .set('Authorization', `Bearer ${accessToken}`)
       .expect(404);
   });
 
   it('returns 404 when updating a missing customer', async () => {
     await request(app.getHttpServer())
       .patch('/api/customers/01f4a9d1-8f35-4ddd-8d98-6630f58c4c2b')
+      .set('Authorization', `Bearer ${accessToken}`)
       .send({ firstName: 'Updated' })
       .expect(404);
   });
@@ -281,6 +300,7 @@ describe('Customers (e2e)', () => {
 
     const response = await request(app.getHttpServer())
       .post('/api/customers')
+      .set('Authorization', `Bearer ${accessToken}`)
       .send({
         firstName: 'Dup',
         lastName: 'Two',
