@@ -1,6 +1,6 @@
 import { UserRole } from '../../users/entities/user-role.enum';
-import { JobAuditAction } from '../job-audit-action.enum';
-import { JobSystemType } from '../job-system-type.enum';
+import { JobAuditAction } from '../enums/job-audit-action.enum';
+import { JobSystemType } from '../enums/job.enums';
 import { JobAuditValue } from '../types/job-audit-value.type';
 
 export type JobDetailCustomerDto = {
