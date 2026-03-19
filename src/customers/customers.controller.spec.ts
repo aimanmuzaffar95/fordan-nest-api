@@ -1,4 +1,6 @@
 import { Test } from '@nestjs/testing';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
 
@@ -21,7 +23,12 @@ describe('CustomersController', () => {
           useValue: customersService,
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: jest.fn().mockReturnValue(true) })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: jest.fn().mockReturnValue(true) })
+      .compile();
 
     controller = moduleRef.get(CustomersController);
     jest.clearAllMocks();

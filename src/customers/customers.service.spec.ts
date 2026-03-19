@@ -148,7 +148,7 @@ describe('CustomersService', () => {
     const result = await service.search('aiman', 1, 20);
 
     expect(repository.createQueryBuilder.mock.calls[0]?.[0]).toBe('customer');
-    expect(qb.orderBy).toHaveBeenCalledWith('matchPriority', 'ASC');
+    expect(qb.orderBy).toHaveBeenCalledWith('matchpriority', 'ASC');
     expect(result.items[0]?.email).toBe('aiman@example.com');
   });
 

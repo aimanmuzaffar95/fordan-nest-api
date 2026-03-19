@@ -66,38 +66,45 @@ export class CustomersService {
     limit = 20,
   ): Promise<PaginatedCustomers> {
     const term = `%${query.toLowerCase()}%`;
+    const escape =
+      (
+        this.customersRepository.manager as
+          | { connection?: { driver?: { escape: (value: string) => string } } }
+          | undefined
+      )?.connection?.driver?.escape ?? ((value: string) => value);
+    const firstNameColumn = `customer.${escape('firstName')}`;
+    const lastNameColumn = `customer.${escape('lastName')}`;
+    const emailColumn = `customer.${escape('email')}`;
+    const phoneColumn = `customer.${escape('phone')}`;
+    const createdAtColumn = `customer.${escape('createdAt')}`;
+    const fullNameExpression = `CONCAT(${firstNameColumn}, ' ', ${lastNameColumn})`;
 
     const searchQueryBuilder = this.customersRepository
       .createQueryBuilder('customer')
       .where(
         new Brackets((qb) => {
-          qb.where('LOWER(customer.firstName) LIKE :term', { term })
-            .orWhere('LOWER(customer.lastName) LIKE :term', { term })
-            .orWhere(
-              "LOWER(customer.firstName || ' ' || customer.lastName) LIKE :term",
-              {
-                term,
-              },
-            )
-            .orWhere('LOWER(customer.email) LIKE :term', { term })
-            .orWhere('LOWER(customer.phone) LIKE :term', { term });
+          qb.where(`LOWER(${firstNameColumn}) LIKE :term`, { term })
+            .orWhere(`LOWER(${lastNameColumn}) LIKE :term`, { term })
+            .orWhere(`LOWER(${fullNameExpression}) LIKE :term`, { term })
+            .orWhere(`LOWER(${emailColumn}) LIKE :term`, { term })
+            .orWhere(`LOWER(${phoneColumn}) LIKE :term`, { term });
         }),
       )
       .addSelect(
         `
           CASE
-            WHEN LOWER(customer.firstName) LIKE :term THEN 0
-            WHEN LOWER(customer.lastName) LIKE :term THEN 0
-            WHEN LOWER(customer.firstName || ' ' || customer.lastName) LIKE :term THEN 0
-            WHEN LOWER(customer.email) LIKE :term THEN 1
-            WHEN LOWER(customer.phone) LIKE :term THEN 2
+            WHEN LOWER(${firstNameColumn}) LIKE :term THEN 0
+            WHEN LOWER(${lastNameColumn}) LIKE :term THEN 0
+            WHEN LOWER(${fullNameExpression}) LIKE :term THEN 0
+            WHEN LOWER(${emailColumn}) LIKE :term THEN 1
+            WHEN LOWER(${phoneColumn}) LIKE :term THEN 2
             ELSE 3
           END
         `,
-        'matchPriority',
+        'matchpriority',
       )
-      .orderBy('matchPriority', 'ASC')
-      .addOrderBy('customer.createdAt', 'DESC')
+      .orderBy('matchpriority', 'ASC')
+      .addOrderBy(createdAtColumn, 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
 

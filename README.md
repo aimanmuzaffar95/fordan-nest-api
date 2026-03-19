@@ -44,6 +44,15 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## Docker development (hot reload)
+
+```bash
+# API + postgres + pgadmin with source mounted and Nest watch mode
+$ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+This keeps the API container running in `start:dev` mode, so local `src` changes are picked up automatically without restarting the container.
+
 ## Run tests
 
 ```bash

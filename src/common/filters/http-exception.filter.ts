@@ -52,7 +52,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
         }
       }
     }
-
     const payload: StandardErrorResponse = {
       success: false,
       statusCode: status,
