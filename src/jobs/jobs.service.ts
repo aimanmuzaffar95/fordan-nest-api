@@ -1,19 +1,22 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
+  PreconditionFailedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { Customer } from '../customers/entities/customer.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { User } from '../users/entities/user.entity';
+import { CreateJobForCustomerDto } from './dto/create-job-for-customer.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
-import { JobAuditAction } from './enums/job-audit-action.enum';
 import { JobAuditLog } from './entities/job-audit-log.entity';
 import { Job } from './entities/job.entity';
-import { JobMeterStatus, JobStatus } from './enums/job.enums';
+import { JobAuditAction } from './enums/job-audit-action.enum';
+import { JobMeterStatus, JobStatus, JobSystemType } from './enums/job.enums';
 import { JobAuditValue } from './types/job-audit-value.type';
 
 type FindJobsInput = {
@@ -21,6 +24,8 @@ type FindJobsInput = {
   limit: number;
   managerId?: string;
   installerId?: string;
+  customerId?: string;
+  contractSigned?: boolean;
   includeDeleted: boolean;
 };
 
@@ -79,8 +84,13 @@ export class JobsService {
         manager: assignedManager,
         installers,
         systemType: dto.systemType,
+        systemSizeKw: null,
+        batterySizeKwh: null,
+        projectPrice: '0.00',
         contractSigned: dto.contractSigned ?? false,
+        depositAmount: '0.00',
         depositPaid: dto.depositPaid ?? false,
+        depositDate: null,
         installDate: dto.installDate ?? null,
         preMeterStatus: dto.preMeterStatus ?? JobMeterStatus.NOT_STARTED,
         postMeterStatus: dto.postMeterStatus ?? JobMeterStatus.NOT_STARTED,
@@ -124,6 +134,98 @@ export class JobsService {
     return this.findOne(createdJobId);
   }
 
+  async createForCustomer(
+    performedById: string | null,
+    performedByRole: UserRole | null,
+    customerId: string,
+    dto: CreateJobForCustomerDto,
+  ): Promise<Job> {
+    const createdJobId = await this.dataSource.transaction(async (manager) => {
+      const customersRepository = manager.getRepository(Customer);
+      const jobsRepository = manager.getRepository(Job);
+      const jobAuditLogsRepository = manager.getRepository(JobAuditLog);
+
+      const customer = await customersRepository.findOne({
+        where: { id: customerId },
+      });
+
+      if (!customer) {
+        throw new NotFoundException('Customer not found');
+      }
+
+      const assignedManager = await this.resolveCreateForCustomerManager(
+        performedById,
+        performedByRole,
+        dto,
+        manager,
+      );
+      const depositPaid = dto.depositPaid ?? false;
+      const projectPrice = (dto.projectPrice ?? 0).toFixed(2);
+      const depositAmount = depositPaid
+        ? (dto.depositAmount ?? 0).toFixed(2)
+        : '0.00';
+
+      const job = jobsRepository.create({
+        customerId,
+        customer,
+        managerId: assignedManager.id,
+        manager: assignedManager,
+        installers: [],
+        systemType: dto.systemType,
+        systemSizeKw: this.normalizeSystemSize(
+          dto.systemType,
+          dto.systemSizeKw,
+        ),
+        batterySizeKwh: this.normalizeBatterySize(
+          dto.systemType,
+          dto.batterySizeKwh,
+        ),
+        projectPrice,
+        contractSigned: dto.contractSigned ?? false,
+        depositAmount,
+        depositPaid,
+        depositDate: depositPaid ? new Date().toISOString().slice(0, 10) : null,
+        installDate: dto.installDate ?? null,
+        preMeterStatus: JobMeterStatus.NOT_STARTED,
+        postMeterStatus: JobMeterStatus.NOT_STARTED,
+        jobStatus: dto.jobStatus ?? JobStatus.LEAD,
+        notes: null,
+        internalComments: null,
+      });
+
+      const savedJob = await jobsRepository.save(job);
+
+      await this.writeAuditLogs(
+        jobAuditLogsRepository,
+        savedJob.id,
+        performedById,
+        [
+          {
+            action: JobAuditAction.JOB_CREATED,
+            newValue: {
+              jobId: savedJob.id,
+              customerId: savedJob.customerId,
+              managerId: savedJob.managerId,
+              systemType: savedJob.systemType,
+              jobStatus: savedJob.jobStatus,
+              systemSizeKw: savedJob.systemSizeKw,
+              batterySizeKwh: savedJob.batterySizeKwh,
+              projectPrice: savedJob.projectPrice,
+              depositAmount: savedJob.depositAmount,
+            },
+            metadata: {
+              source: 'job_create_form',
+            },
+          },
+        ],
+      );
+
+      return savedJob.id;
+    });
+
+    return this.findOne(createdJobId);
+  }
+
   async findAll(input: FindJobsInput): Promise<PaginatedJobs> {
     const queryBuilder = this.jobsRepository
       .createQueryBuilder('job')
@@ -151,6 +253,18 @@ export class JobsService {
         .andWhere('installerFilter.id = :installerId', {
           installerId: input.installerId,
         });
+    }
+
+    if (input.customerId) {
+      queryBuilder.andWhere('job.customerId = :customerId', {
+        customerId: input.customerId,
+      });
+    }
+
+    if (typeof input.contractSigned === 'boolean') {
+      queryBuilder.andWhere('job.contractSigned = :contractSigned', {
+        contractSigned: input.contractSigned,
+      });
     }
 
     const [items, total] = await queryBuilder.getManyAndCount();
@@ -336,12 +450,10 @@ export class JobsService {
         job.jobStatus = dto.jobStatus;
       }
 
-      // Notes and internal comments are intentionally excluded from audit logging.
       if (Object.prototype.hasOwnProperty.call(dto, 'notes')) {
         job.notes = dto.notes ?? null;
       }
 
-      // Internal comments are intentionally excluded from audit logging.
       if (Object.prototype.hasOwnProperty.call(dto, 'internalComments')) {
         job.internalComments = dto.internalComments ?? null;
       }
@@ -354,6 +466,75 @@ export class JobsService {
         performedById,
         auditEntries,
       );
+
+      return job.id;
+    });
+
+    return this.findOne(updatedJobId);
+  }
+
+  async transitionStage(
+    performedById: string | null,
+    performedByRole: UserRole | null,
+    id: string,
+    toStage: JobStatus,
+    overridePreMeterLock = false,
+  ): Promise<Job> {
+    const updatedJobId = await this.dataSource.transaction(async (manager) => {
+      const jobsRepository = manager.getRepository(Job);
+      const jobAuditLogsRepository = manager.getRepository(JobAuditLog);
+
+      const job = await jobsRepository.findOne({
+        where: { id },
+        relations: {
+          customer: true,
+          manager: true,
+          installers: true,
+        },
+      });
+
+      if (!job) {
+        throw new NotFoundException('Job not found');
+      }
+
+      if (job.jobStatus === toStage) {
+        return job.id;
+      }
+
+      if (
+        toStage === JobStatus.INSTALLED &&
+        !this.hasPreMeterApprovalForInstall(job.jobStatus)
+      ) {
+        if (!overridePreMeterLock) {
+          throw new PreconditionFailedException(
+            'Pre-meter is not approved. An admin must manually override the pre-meter lock before moving this job to Installed.',
+          );
+        }
+
+        if (performedByRole !== UserRole.ADMIN) {
+          throw new ForbiddenException(
+            'Only admins can override the pre-meter lock.',
+          );
+        }
+      }
+
+      const previousStage = job.jobStatus;
+      job.jobStatus = toStage;
+      await jobsRepository.save(job);
+
+      await this.writeAuditLogs(jobAuditLogsRepository, job.id, performedById, [
+        {
+          action: JobAuditAction.JOB_STATUS_CHANGED,
+          field: 'jobStatus',
+          oldValue: previousStage,
+          newValue: toStage,
+          metadata: {
+            source: 'pipeline_drag_drop',
+            overridePreMeterLock:
+              toStage === JobStatus.INSTALLED && overridePreMeterLock,
+          },
+        },
+      ]);
 
       return job.id;
     });
@@ -504,6 +685,92 @@ export class JobsService {
       }
       return installer;
     });
+  }
+
+  private async resolveCreateForCustomerManager(
+    performedById: string | null,
+    performedByRole: UserRole | null,
+    dto: CreateJobForCustomerDto,
+    manager: DataSource['manager'],
+  ): Promise<User> {
+    if (performedByRole === UserRole.MANAGER) {
+      if (!performedById) {
+        throw new BadRequestException('Authenticated manager not found');
+      }
+
+      if (dto.managerId && dto.managerId !== performedById) {
+        throw new ForbiddenException(
+          'Managers can only assign customer jobs to themselves.',
+        );
+      }
+
+      return this.assertManagerExists(performedById, manager);
+    }
+
+    if (performedByRole === UserRole.ADMIN) {
+      if (!dto.managerId) {
+        throw new BadRequestException(
+          'managerId is required when an admin creates a customer job.',
+        );
+      }
+
+      return this.assertManagerExists(dto.managerId, manager);
+    }
+
+    throw new ForbiddenException(
+      'Only admins and managers can create customer jobs.',
+    );
+  }
+
+  private normalizeSystemSize(
+    systemType: JobSystemType,
+    systemSizeKw: number | undefined,
+  ): string | null {
+    if (
+      systemType !== JobSystemType.SOLAR &&
+      systemType !== JobSystemType.BOTH
+    ) {
+      return null;
+    }
+
+    return typeof systemSizeKw === 'number' ? systemSizeKw.toFixed(2) : null;
+  }
+
+  private normalizeBatterySize(
+    systemType: JobSystemType,
+    batterySizeKwh: number | undefined,
+  ): string | null {
+    if (
+      systemType !== JobSystemType.BATTERY &&
+      systemType !== JobSystemType.BOTH
+    ) {
+      return null;
+    }
+
+    return typeof batterySizeKwh === 'number'
+      ? batterySizeKwh.toFixed(2)
+      : null;
+  }
+
+  private hasPreMeterApprovalForInstall(stage: JobStatus): boolean {
+    const stageOrder: JobStatus[] = [
+      JobStatus.LEAD,
+      JobStatus.QUOTED,
+      JobStatus.WON,
+      JobStatus.PRE_METER_SUBMITTED,
+      JobStatus.PRE_METER_APPROVED,
+      JobStatus.SCHEDULED,
+      JobStatus.INSTALLED,
+      JobStatus.POST_METER_SUBMITTED,
+      JobStatus.COMPLETED,
+      JobStatus.INVOICED,
+      JobStatus.PAID,
+    ];
+
+    return (
+      stageOrder.indexOf(stage) >=
+      stageOrder.indexOf(JobStatus.PRE_METER_APPROVED)
+    );
   }
 
   private async writeAuditLogs(

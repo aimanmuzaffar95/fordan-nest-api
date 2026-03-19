@@ -19,6 +19,7 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { CreateJobDto } from './dto/create-job.dto';
 import { FindJobAuditLogQueryDto } from './dto/find-job-audit-log-query.dto';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
+import { TransitionJobStageDto } from './dto/transition-job-stage.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { JobsService } from './jobs.service';
 
@@ -45,7 +46,7 @@ export class JobsController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   findAll(@Query() query: FindJobsQueryDto, @Req() req: AuthenticatedRequest) {
     const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = query.pageSize ?? query.limit ?? 20;
     const isAdmin = req.user?.role === UserRole.ADMIN;
     const managerId = isAdmin ? query.managerId : (req.user?.sub ?? undefined);
 
@@ -55,7 +56,27 @@ export class JobsController {
       managerId,
       installerId: query.installerId,
       includeDeleted: query.includeDeleted ?? false,
+      ...(query.customerId ? { customerId: query.customerId } : {}),
+      ...(typeof query.contractSigned === 'boolean'
+        ? { contractSigned: query.contractSigned }
+        : {}),
     });
+  }
+
+  @Post(':id/stage')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  transitionStage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: TransitionJobStageDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.jobsService.transitionStage(
+      req.user?.sub ?? null,
+      req.user?.role ?? null,
+      id,
+      dto.toStage,
+      dto.overridePreMeterLock ?? false,
+    );
   }
 
   @Get(':id')

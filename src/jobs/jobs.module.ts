@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Customer } from '../customers/entities/customer.entity';
 import { User } from '../users/entities/user.entity';
+import { CustomerJobsController } from './customer-jobs.controller';
 import { JobAuditLog } from './entities/job-audit-log.entity';
 import { Job } from './entities/job.entity';
 import { JobsController } from './jobs.controller';
@@ -17,7 +18,7 @@ import { JobsService } from './jobs.service';
       secret: process.env.JWT_SECRET ?? 'development-secret',
     }),
   ],
-  controllers: [JobsController],
+  controllers: [JobsController, CustomerJobsController],
   providers: [JobsService, JwtAuthGuard, RolesGuard],
   exports: [JobsService],
 })
