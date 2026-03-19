@@ -3,6 +3,8 @@ import { DataSource } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { Customer } from '../customers/entities/customer.entity';
+import { JobAuditLog } from '../jobs/entities/job-audit-log.entity';
+import { Job } from '../jobs/entities/job.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -62,7 +64,7 @@ export const AppDataSource = new DataSource({
   ...(DB_SOCKET_PATH && (DIALECT === 'mysql' || DIALECT === 'mariadb')
     ? { extra: { socketPath: DB_SOCKET_PATH } }
     : {}),
-  entities: [User, UserCredential, Customer],
+  entities: [User, UserCredential, Customer, Job, JobAuditLog],
   migrations: ['dist/migrations/*.js'],
   synchronize: SYNCHRONIZE,
   migrationsRun: false,

@@ -2,9 +2,11 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { Job } from '../../jobs/entities/job.entity';
 
 @Entity('customers')
 export class Customer {
@@ -25,6 +27,9 @@ export class Customer {
 
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
+
+  @OneToMany(() => Job, (job) => job.customer)
+  jobs: Job[];
 
   @CreateDateColumn()
   createdAt: Date;
