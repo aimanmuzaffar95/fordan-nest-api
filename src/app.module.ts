@@ -8,6 +8,7 @@ import { CustomersModule } from './customers/customers.module';
 import { Customer } from './customers/entities/customer.entity';
 import { User } from './users/entities/user.entity';
 import { InstallerModule } from './installer/installer.module';
+import { JobAuditLog } from './jobs/entities/job-audit-log.entity';
 import { JobsModule } from './jobs/jobs.module';
 import { Job } from './jobs/entities/job.entity';
 import { Invoice } from './invoices/entities/invoice.entity';
@@ -83,6 +84,7 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
         UserCredential,
         Customer,
         Job,
+        JobAuditLog,
         Invoice,
         InvoiceItem,
         InvoicePayment,

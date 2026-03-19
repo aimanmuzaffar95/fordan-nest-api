@@ -5,6 +5,8 @@ import { UserCredential } from '../auth/entities/user-credential.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { hash } from 'bcryptjs';
 import { Job } from '../jobs/entities/job.entity';
+import { JobPipelineStage } from '../jobs/job-pipeline-stage.enum';
+import { JobSystemType } from '../jobs/job-system-type.enum';
 
 type SeedUser = {
   username: string;
@@ -14,6 +16,14 @@ type SeedUser = {
   emailAddress: string;
   phoneNumber: string;
   role: UserRole;
+};
+
+const formatDate = (date: Date): string => date.toISOString().slice(0, 10);
+
+const offsetDate = (days: number): string => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return formatDate(date);
 };
 
 const seedUsers = (): SeedUser[] => {
@@ -88,32 +98,122 @@ async function main(): Promise<void> {
       );
     }
 
-    // Minimal jobs seed so the invoice/order flow has records to link against.
+    if ((await customersRepo.count()) === 0) {
+      await customersRepo.save([
+        customersRepo.create({
+          firstName: 'John',
+          lastName: 'Smith',
+          address: '12 Oak Street, Brisbane QLD 4000',
+          phone: '0412345678',
+          email: 'john.smith@local.dev',
+        }),
+        customersRepo.create({
+          firstName: 'Sarah',
+          lastName: 'Johnson',
+          address: '45 River Road, Gold Coast QLD 4217',
+          phone: '0423456789',
+          email: 'sarah.johnson@local.dev',
+        }),
+        customersRepo.create({
+          firstName: 'Michael',
+          lastName: 'Brown',
+          address: '78 Hill Avenue, Sunshine Coast QLD 4556',
+          phone: '0434567890',
+          email: 'michael.brown@local.dev',
+        }),
+      ]);
+    }
+
+    // Seed stage-aware jobs so the pipeline board has meaningful local data.
     if ((await jobsRepo.count()) === 0) {
-      const customer = await customersRepo.findOne({
-        order: { createdAt: 'DESC' },
+      const customers = await customersRepo.find({
+        order: { createdAt: 'ASC' },
       });
-      if (customer) {
+      if (customers.length > 0) {
         const jobsToInsert = [
           jobsRepo.create({
-            customer,
-            customerId: customer.id,
-            systemType: 'both',
-            projectPrice: '18500.00',
-            contractSigned: true,
-            depositAmount: '3000.00',
+            customer: customers[0],
+            customerId: customers[0].id,
+            systemType: JobSystemType.SOLAR,
+            jobStatus: JobPipelineStage.LEAD,
+            systemSizeKw: '5.00',
+            batterySizeKwh: null,
+            projectPrice: '9500.00',
+            contractSigned: false,
+            depositAmount: '0.00',
             depositPaid: false,
             depositDate: null,
+            installDate: null,
           }),
           jobsRepo.create({
-            customer,
-            customerId: customer.id,
-            systemType: 'solar',
+            customer: customers[1] ?? customers[0],
+            customerId: (customers[1] ?? customers[0]).id,
+            systemType: JobSystemType.SOLAR,
+            jobStatus: JobPipelineStage.QUOTED,
+            systemSizeKw: '6.60',
+            batterySizeKwh: null,
             projectPrice: '12000.00',
             contractSigned: false,
             depositAmount: '0.00',
             depositPaid: false,
             depositDate: null,
+            installDate: null,
+          }),
+          jobsRepo.create({
+            customer: customers[2] ?? customers[0],
+            customerId: (customers[2] ?? customers[0]).id,
+            systemType: JobSystemType.BOTH,
+            jobStatus: JobPipelineStage.SCHEDULED,
+            systemSizeKw: '10.00',
+            batterySizeKwh: '13.50',
+            projectPrice: '18500.00',
+            contractSigned: true,
+            depositAmount: '3000.00',
+            depositPaid: true,
+            depositDate: offsetDate(-30),
+            installDate: offsetDate(2),
+          }),
+          jobsRepo.create({
+            customer: customers[0],
+            customerId: customers[0].id,
+            systemType: JobSystemType.BATTERY,
+            jobStatus: JobPipelineStage.PRE_METER_SUBMITTED,
+            systemSizeKw: null,
+            batterySizeKwh: '10.00',
+            projectPrice: '15000.00',
+            contractSigned: true,
+            depositAmount: '2500.00',
+            depositPaid: true,
+            depositDate: offsetDate(-12),
+            installDate: null,
+          }),
+          jobsRepo.create({
+            customer: customers[1] ?? customers[0],
+            customerId: (customers[1] ?? customers[0]).id,
+            systemType: JobSystemType.BOTH,
+            jobStatus: JobPipelineStage.INSTALLED,
+            systemSizeKw: '12.00',
+            batterySizeKwh: '13.50',
+            projectPrice: '28000.00',
+            contractSigned: true,
+            depositAmount: '4000.00',
+            depositPaid: true,
+            depositDate: offsetDate(-45),
+            installDate: offsetDate(-3),
+          }),
+          jobsRepo.create({
+            customer: customers[2] ?? customers[0],
+            customerId: (customers[2] ?? customers[0]).id,
+            systemType: JobSystemType.SOLAR,
+            jobStatus: JobPipelineStage.PAID,
+            systemSizeKw: '8.80',
+            batterySizeKwh: null,
+            projectPrice: '16500.00',
+            contractSigned: true,
+            depositAmount: '2500.00',
+            depositPaid: true,
+            depositDate: offsetDate(-60),
+            installDate: offsetDate(-25),
           }),
         ];
 

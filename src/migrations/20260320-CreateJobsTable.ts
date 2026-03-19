@@ -30,6 +30,27 @@ export class CreateJobsTable20260320 implements MigrationInterface {
             isNullable: false,
           },
           {
+            name: 'jobStatus',
+            type: 'varchar',
+            length: '32',
+            isNullable: false,
+            default: "'lead'",
+          },
+          {
+            name: 'systemSizeKw',
+            type: 'numeric',
+            precision: 12,
+            scale: 2,
+            isNullable: true,
+          },
+          {
+            name: 'batterySizeKwh',
+            type: 'numeric',
+            precision: 12,
+            scale: 2,
+            isNullable: true,
+          },
+          {
             name: 'projectPrice',
             type: 'numeric',
             precision: 12,
@@ -58,6 +79,11 @@ export class CreateJobsTable20260320 implements MigrationInterface {
           },
           {
             name: 'depositDate',
+            type: 'date',
+            isNullable: true,
+          },
+          {
+            name: 'installDate',
             type: 'date',
             isNullable: true,
           },

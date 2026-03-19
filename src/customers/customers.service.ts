@@ -83,21 +83,7 @@ export class CustomersService {
             .orWhere('LOWER(customer.phone) LIKE :term', { term });
         }),
       )
-      .addSelect(
-        `
-          CASE
-            WHEN LOWER(customer.firstName) LIKE :term THEN 0
-            WHEN LOWER(customer.lastName) LIKE :term THEN 0
-            WHEN LOWER(customer.firstName || ' ' || customer.lastName) LIKE :term THEN 0
-            WHEN LOWER(customer.email) LIKE :term THEN 1
-            WHEN LOWER(customer.phone) LIKE :term THEN 2
-            ELSE 3
-          END
-        `,
-        'matchPriority',
-      )
-      .orderBy('matchPriority', 'ASC')
-      .addOrderBy('customer.createdAt', 'DESC')
+      .orderBy('customer.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
 
