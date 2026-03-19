@@ -1,0 +1,533 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, In, Repository } from 'typeorm';
+import { Customer } from '../customers/entities/customer.entity';
+import { UserRole } from '../users/entities/user-role.enum';
+import { User } from '../users/entities/user.entity';
+import { CreateJobDto } from './dto/create-job.dto';
+import { UpdateJobDto } from './dto/update-job.dto';
+import { JobAuditAction } from './enums/job-audit-action.enum';
+import { JobAuditLog } from './entities/job-audit-log.entity';
+import { Job } from './entities/job.entity';
+import { JobMeterStatus, JobStatus } from './enums/job.enums';
+import { JobAuditValue } from './types/job-audit-value.type';
+
+type FindJobsInput = {
+  page: number;
+  limit: number;
+  managerId?: string;
+  installerId?: string;
+  includeDeleted: boolean;
+};
+
+type PaginatedJobs = {
+  items: Job[];
+  page: number;
+  limit: number;
+  total: number;
+};
+
+type PaginatedJobAuditLogs = {
+  items: JobAuditLog[];
+  page: number;
+  limit: number;
+  total: number;
+};
+
+type JobAuditLogInput = {
+  action: JobAuditAction;
+  field?: string;
+  oldValue?: JobAuditValue;
+  newValue?: JobAuditValue;
+  metadata?: Record<string, JobAuditValue>;
+};
+
+@Injectable()
+export class JobsService {
+  constructor(
+    @InjectRepository(Job)
+    private readonly jobsRepository: Repository<Job>,
+    @InjectRepository(JobAuditLog)
+    private readonly jobAuditLogsRepository: Repository<JobAuditLog>,
+    private readonly dataSource: DataSource,
+  ) {}
+
+  async create(dto: CreateJobDto, performedById: string | null): Promise<Job> {
+    const createdJobId = await this.dataSource.transaction(async (manager) => {
+      await this.assertCustomerExists(dto.customerId, manager);
+      const assignedManager = await this.assertManagerExists(
+        dto.managerId,
+        manager,
+      );
+
+      const installerIds = dto.installerIds ?? [];
+      const installers = await this.assertInstallersExist(
+        installerIds,
+        manager,
+      );
+
+      const jobsRepository = manager.getRepository(Job);
+      const jobAuditLogsRepository = manager.getRepository(JobAuditLog);
+
+      const job = jobsRepository.create({
+        customerId: dto.customerId,
+        managerId: assignedManager.id,
+        manager: assignedManager,
+        installers,
+        systemType: dto.systemType,
+        contractSigned: dto.contractSigned ?? false,
+        depositPaid: dto.depositPaid ?? false,
+        installDate: dto.installDate ?? null,
+        preMeterStatus: dto.preMeterStatus ?? JobMeterStatus.NOT_STARTED,
+        postMeterStatus: dto.postMeterStatus ?? JobMeterStatus.NOT_STARTED,
+        jobStatus: dto.jobStatus ?? JobStatus.LEAD,
+        notes: dto.notes ?? null,
+        internalComments: dto.internalComments ?? null,
+      });
+
+      const savedJob = await jobsRepository.save(job);
+
+      const logEntries: JobAuditLogInput[] = [
+        {
+          action: JobAuditAction.JOB_CREATED,
+          newValue: {
+            jobId: savedJob.id,
+            customerId: savedJob.customerId,
+            managerId: savedJob.managerId,
+          },
+        },
+      ];
+
+      for (const installer of installers) {
+        logEntries.push({
+          action: JobAuditAction.INSTALLER_ASSIGNED,
+          field: 'installerId',
+          oldValue: null,
+          newValue: installer.id,
+        });
+      }
+
+      await this.writeAuditLogs(
+        jobAuditLogsRepository,
+        savedJob.id,
+        performedById,
+        logEntries,
+      );
+
+      return savedJob.id;
+    });
+
+    return this.findOne(createdJobId);
+  }
+
+  async findAll(input: FindJobsInput): Promise<PaginatedJobs> {
+    const queryBuilder = this.jobsRepository
+      .createQueryBuilder('job')
+      .leftJoinAndSelect('job.customer', 'customer')
+      .leftJoinAndSelect('job.manager', 'manager')
+      .leftJoinAndSelect('job.installers', 'installer')
+      .orderBy('job.createdAt', 'DESC')
+      .distinct(true)
+      .skip((input.page - 1) * input.limit)
+      .take(input.limit);
+
+    if (input.includeDeleted) {
+      queryBuilder.withDeleted();
+    }
+
+    if (input.managerId) {
+      queryBuilder.andWhere('job.managerId = :managerId', {
+        managerId: input.managerId,
+      });
+    }
+
+    if (input.installerId) {
+      queryBuilder
+        .innerJoin('job.installers', 'installerFilter')
+        .andWhere('installerFilter.id = :installerId', {
+          installerId: input.installerId,
+        });
+    }
+
+    const [items, total] = await queryBuilder.getManyAndCount();
+
+    return {
+      items,
+      page: input.page,
+      limit: input.limit,
+      total,
+    };
+  }
+
+  async findOne(id: string, includeDeleted = false): Promise<Job> {
+    const queryBuilder = this.jobsRepository
+      .createQueryBuilder('job')
+      .leftJoinAndSelect('job.customer', 'customer')
+      .leftJoinAndSelect('job.manager', 'manager')
+      .leftJoinAndSelect('job.installers', 'installer')
+      .where('job.id = :id', { id });
+
+    if (includeDeleted) {
+      queryBuilder.withDeleted();
+    }
+
+    const job = await queryBuilder.getOne();
+
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    return job;
+  }
+
+  async update(
+    id: string,
+    dto: UpdateJobDto,
+    performedById: string | null,
+  ): Promise<Job> {
+    const updatedJobId = await this.dataSource.transaction(async (manager) => {
+      const jobsRepository = manager.getRepository(Job);
+      const jobAuditLogsRepository = manager.getRepository(JobAuditLog);
+
+      const job = await jobsRepository.findOne({
+        where: { id },
+        relations: {
+          customer: true,
+          manager: true,
+          installers: true,
+        },
+      });
+
+      if (!job) {
+        throw new NotFoundException('Job not found');
+      }
+
+      const auditEntries: JobAuditLogInput[] = [];
+
+      if (dto.customerId && dto.customerId !== job.customerId) {
+        await this.assertCustomerExists(dto.customerId, manager);
+        job.customerId = dto.customerId;
+      }
+
+      if (dto.managerId && dto.managerId !== job.managerId) {
+        const nextManager = await this.assertManagerExists(
+          dto.managerId,
+          manager,
+        );
+        auditEntries.push({
+          action: JobAuditAction.MANAGER_ASSIGNMENT_CHANGED,
+          field: 'managerId',
+          oldValue: job.managerId,
+          newValue: nextManager.id,
+        });
+        job.managerId = nextManager.id;
+        job.manager = nextManager;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(dto, 'installerIds')) {
+        const nextInstallerIds = dto.installerIds ?? [];
+        const nextInstallers = await this.assertInstallersExist(
+          nextInstallerIds,
+          manager,
+        );
+
+        const currentInstallerIdSet = new Set(job.installers.map((u) => u.id));
+        const nextInstallerIdSet = new Set(nextInstallers.map((u) => u.id));
+
+        for (const installerId of nextInstallerIdSet) {
+          if (!currentInstallerIdSet.has(installerId)) {
+            auditEntries.push({
+              action: JobAuditAction.INSTALLER_ASSIGNED,
+              field: 'installerId',
+              oldValue: null,
+              newValue: installerId,
+            });
+          }
+        }
+
+        for (const installerId of currentInstallerIdSet) {
+          if (!nextInstallerIdSet.has(installerId)) {
+            auditEntries.push({
+              action: JobAuditAction.INSTALLER_REMOVED,
+              field: 'installerId',
+              oldValue: installerId,
+              newValue: null,
+            });
+          }
+        }
+
+        job.installers = nextInstallers;
+      }
+
+      if (dto.systemType) {
+        job.systemType = dto.systemType;
+      }
+
+      if (
+        typeof dto.contractSigned === 'boolean' &&
+        dto.contractSigned !== job.contractSigned
+      ) {
+        auditEntries.push({
+          action: JobAuditAction.CONTRACT_SIGNED_CHANGED,
+          field: 'contractSigned',
+          oldValue: job.contractSigned,
+          newValue: dto.contractSigned,
+        });
+        job.contractSigned = dto.contractSigned;
+      }
+
+      if (
+        typeof dto.depositPaid === 'boolean' &&
+        dto.depositPaid !== job.depositPaid
+      ) {
+        auditEntries.push({
+          action: JobAuditAction.DEPOSIT_PAID_CHANGED,
+          field: 'depositPaid',
+          oldValue: job.depositPaid,
+          newValue: dto.depositPaid,
+        });
+        job.depositPaid = dto.depositPaid;
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(dto, 'installDate') &&
+        (dto.installDate ?? null) !== job.installDate
+      ) {
+        auditEntries.push({
+          action: JobAuditAction.INSTALL_DATE_CHANGED,
+          field: 'installDate',
+          oldValue: job.installDate,
+          newValue: dto.installDate ?? null,
+        });
+        job.installDate = dto.installDate ?? null;
+      }
+
+      if (dto.preMeterStatus && dto.preMeterStatus !== job.preMeterStatus) {
+        auditEntries.push({
+          action: JobAuditAction.PRE_METER_STATUS_CHANGED,
+          field: 'preMeterStatus',
+          oldValue: job.preMeterStatus,
+          newValue: dto.preMeterStatus,
+        });
+        job.preMeterStatus = dto.preMeterStatus;
+      }
+
+      if (dto.postMeterStatus && dto.postMeterStatus !== job.postMeterStatus) {
+        auditEntries.push({
+          action: JobAuditAction.POST_METER_STATUS_CHANGED,
+          field: 'postMeterStatus',
+          oldValue: job.postMeterStatus,
+          newValue: dto.postMeterStatus,
+        });
+        job.postMeterStatus = dto.postMeterStatus;
+      }
+
+      if (dto.jobStatus && dto.jobStatus !== job.jobStatus) {
+        auditEntries.push({
+          action: JobAuditAction.JOB_STATUS_CHANGED,
+          field: 'jobStatus',
+          oldValue: job.jobStatus,
+          newValue: dto.jobStatus,
+        });
+        job.jobStatus = dto.jobStatus;
+      }
+
+      // Notes and internal comments are intentionally excluded from audit logging.
+      if (Object.prototype.hasOwnProperty.call(dto, 'notes')) {
+        job.notes = dto.notes ?? null;
+      }
+
+      // Internal comments are intentionally excluded from audit logging.
+      if (Object.prototype.hasOwnProperty.call(dto, 'internalComments')) {
+        job.internalComments = dto.internalComments ?? null;
+      }
+
+      await jobsRepository.save(job);
+
+      await this.writeAuditLogs(
+        jobAuditLogsRepository,
+        job.id,
+        performedById,
+        auditEntries,
+      );
+
+      return job.id;
+    });
+
+    return this.findOne(updatedJobId);
+  }
+
+  async softDelete(
+    id: string,
+    performedById: string | null,
+  ): Promise<{ id: string }> {
+    await this.dataSource.transaction(async (manager) => {
+      const jobsRepository = manager.getRepository(Job);
+      const jobAuditLogsRepository = manager.getRepository(JobAuditLog);
+
+      const job = await jobsRepository.findOne({ where: { id } });
+
+      if (!job) {
+        throw new NotFoundException('Job not found');
+      }
+
+      await jobsRepository.softDelete(id);
+
+      await this.writeAuditLogs(jobAuditLogsRepository, id, performedById, [
+        {
+          action: JobAuditAction.JOB_SOFT_DELETED,
+          newValue: { deleted: true },
+        },
+      ]);
+    });
+
+    return { id };
+  }
+
+  async restore(id: string, performedById: string | null): Promise<Job> {
+    await this.dataSource.transaction(async (manager) => {
+      const jobsRepository = manager.getRepository(Job);
+      const jobAuditLogsRepository = manager.getRepository(JobAuditLog);
+
+      const job = await jobsRepository.findOne({
+        where: { id },
+        withDeleted: true,
+      });
+
+      if (!job || !job.deletedAt) {
+        throw new NotFoundException('Job not found');
+      }
+
+      await jobsRepository.restore(id);
+
+      await this.writeAuditLogs(jobAuditLogsRepository, id, performedById, [
+        {
+          action: JobAuditAction.JOB_RESTORED,
+          newValue: { deleted: false },
+        },
+      ]);
+    });
+
+    return this.findOne(id);
+  }
+
+  async findAuditLogs(
+    jobId: string,
+    page = 1,
+    limit = 20,
+  ): Promise<PaginatedJobAuditLogs> {
+    await this.findOne(jobId, true);
+
+    const [items, total] = await this.jobAuditLogsRepository.findAndCount({
+      where: { jobId },
+      relations: { performedBy: true },
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    return {
+      items,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  private async assertCustomerExists(
+    customerId: string,
+    manager: DataSource['manager'],
+  ): Promise<void> {
+    const customersRepository = manager.getRepository(Customer);
+    const customer = await customersRepository.findOne({
+      where: { id: customerId },
+    });
+
+    if (!customer) {
+      throw new BadRequestException('Customer not found');
+    }
+  }
+
+  private async assertManagerExists(
+    managerId: string,
+    manager: DataSource['manager'],
+  ): Promise<User> {
+    const usersRepository = manager.getRepository(User);
+    const assignedManager = await usersRepository.findOne({
+      where: { id: managerId, role: UserRole.MANAGER },
+    });
+
+    if (!assignedManager) {
+      throw new BadRequestException('Manager not found');
+    }
+
+    return assignedManager;
+  }
+
+  private async assertInstallersExist(
+    installerIds: string[],
+    manager: DataSource['manager'],
+  ): Promise<User[]> {
+    if (installerIds.length === 0) {
+      return [];
+    }
+
+    const uniqueInstallerIds = [...new Set(installerIds)];
+    if (uniqueInstallerIds.length !== installerIds.length) {
+      throw new BadRequestException('installerIds must be unique');
+    }
+
+    const usersRepository = manager.getRepository(User);
+    const installers = await usersRepository.find({
+      where: {
+        id: In(uniqueInstallerIds),
+        role: UserRole.INSTALLER,
+      },
+    });
+
+    if (installers.length !== uniqueInstallerIds.length) {
+      throw new BadRequestException('One or more installers were not found');
+    }
+
+    const installersById = new Map(
+      installers.map((installer) => [installer.id, installer]),
+    );
+
+    return uniqueInstallerIds.map((installerId) => {
+      const installer = installersById.get(installerId);
+      if (!installer) {
+        throw new BadRequestException('One or more installers were not found');
+      }
+      return installer;
+    });
+  }
+
+  private async writeAuditLogs(
+    jobAuditLogsRepository: Repository<JobAuditLog>,
+    jobId: string,
+    performedById: string | null,
+    entries: JobAuditLogInput[],
+  ): Promise<void> {
+    if (entries.length === 0) {
+      return;
+    }
+
+    await jobAuditLogsRepository.save(
+      entries.map((entry) =>
+        jobAuditLogsRepository.create({
+          jobId,
+          performedById,
+          action: entry.action,
+          field: entry.field ?? null,
+          oldValue: entry.oldValue ?? null,
+          newValue: entry.newValue ?? null,
+          metadata: entry.metadata ?? null,
+        }),
+      ),
+    );
+  }
+}

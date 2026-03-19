@@ -7,8 +7,12 @@ import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { SuccessResponseInterceptor } from '../src/common/interceptors/success-response.interceptor';
+import { UserCredential } from '../src/auth/entities/user-credential.entity';
 import { CustomersModule } from '../src/customers/customers.module';
 import { Customer } from '../src/customers/entities/customer.entity';
+import { JobAuditLog } from '../src/jobs/entities/job-audit-log.entity';
+import { Job } from '../src/jobs/entities/job.entity';
+import { User } from '../src/users/entities/user.entity';
 
 type SuccessBody<T> = {
   success: boolean;
@@ -27,7 +31,7 @@ describe('Customers (e2e)', () => {
           type: 'sqljs',
           autoSave: false,
           synchronize: true,
-          entities: [Customer],
+          entities: [Customer, Job, JobAuditLog, User, UserCredential],
         }),
         CustomersModule,
       ],
