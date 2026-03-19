@@ -8,6 +8,10 @@ import { CustomersModule } from './customers/customers.module';
 import { Customer } from './customers/entities/customer.entity';
 import { User } from './users/entities/user.entity';
 import { InstallerModule } from './installer/installer.module';
+import { Invoice } from './invoices/entities/invoice.entity';
+import { InvoiceItem } from './invoices/entities/invoice-item.entity';
+import { InvoicePayment } from './invoices/entities/invoice-payment.entity';
+import { InvoicesModule } from './invoices/invoices.module';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -72,12 +76,13 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
       ...(DB_SOCKET_PATH && (DIALECT === 'mysql' || DIALECT === 'mariadb')
         ? { extra: { socketPath: DB_SOCKET_PATH } }
         : {}),
-      entities: [User, UserCredential, Customer],
+      entities: [User, UserCredential, Customer, Invoice, InvoiceItem, InvoicePayment],
       synchronize: SYNCHRONIZE,
     }),
     AuthModule,
     CustomersModule,
     InstallerModule,
+    InvoicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
