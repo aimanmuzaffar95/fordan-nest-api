@@ -81,7 +81,7 @@ export class JobsController {
 
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.jobsService.findOne(id);
+    return this.jobsService.findDetail(id);
   }
 
   @Get(':id/audit-logs')

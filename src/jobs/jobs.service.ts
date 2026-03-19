@@ -12,6 +12,7 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { User } from '../users/entities/user.entity';
 import { CreateJobForCustomerDto } from './dto/create-job-for-customer.dto';
 import { CreateJobDto } from './dto/create-job.dto';
+import { JobDetailResponseDto } from './dto/job-detail-response.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { JobAuditLog } from './entities/job-audit-log.entity';
 import { Job } from './entities/job.entity';
@@ -296,6 +297,65 @@ export class JobsService {
     }
 
     return job;
+  }
+
+  async findDetail(
+    id: string,
+    includeDeleted = false,
+  ): Promise<JobDetailResponseDto> {
+    const job = await this.findOne(id, includeDeleted);
+    const timeline = await this.jobAuditLogsRepository.find({
+      where: { jobId: id },
+      relations: { performedBy: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      job: {
+        id: job.id,
+        customerId: job.customerId,
+        systemType: job.systemType,
+        jobStatus: job.jobStatus,
+        systemSizeKw: job.systemSizeKw,
+        batterySizeKwh: job.batterySizeKwh,
+        projectPrice: job.projectPrice,
+        contractSigned: job.contractSigned,
+        depositAmount: job.depositAmount,
+        depositPaid: job.depositPaid,
+        depositDate: job.depositDate,
+        installDate: job.installDate,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+      },
+      customer: job.customer
+        ? {
+            id: job.customer.id,
+            firstName: job.customer.firstName,
+            lastName: job.customer.lastName,
+            email: job.customer.email,
+            phone: job.customer.phone,
+            address: job.customer.address,
+          }
+        : null,
+      timeline: timeline.map((entry) => ({
+        id: entry.id,
+        action: entry.action,
+        field: entry.field,
+        oldValue: entry.oldValue,
+        newValue: entry.newValue,
+        metadata: entry.metadata,
+        createdAt: entry.createdAt,
+        performedBy: entry.performedBy
+          ? {
+              id: entry.performedBy.id,
+              firstName: entry.performedBy.firstName,
+              lastName: entry.performedBy.lastName,
+              role: entry.performedBy.role,
+            }
+          : null,
+        description: this.describeAuditLog(entry),
+      })),
+    };
   }
 
   async update(
@@ -794,5 +854,91 @@ export class JobsService {
         }),
       ),
     );
+  }
+
+  private describeAuditLog(entry: JobAuditLog): string {
+    switch (entry.action) {
+      case JobAuditAction.JOB_CREATED:
+        return 'Job created';
+      case JobAuditAction.JOB_SOFT_DELETED:
+        return 'Job deleted';
+      case JobAuditAction.JOB_RESTORED:
+        return 'Job restored';
+      case JobAuditAction.JOB_STATUS_CHANGED:
+        return this.describeValueChange(
+          'Stage',
+          entry.oldValue,
+          entry.newValue,
+        );
+      case JobAuditAction.PRE_METER_STATUS_CHANGED:
+        return this.describeValueChange(
+          'Pre-meter status',
+          entry.oldValue,
+          entry.newValue,
+        );
+      case JobAuditAction.POST_METER_STATUS_CHANGED:
+        return this.describeValueChange(
+          'Post-meter status',
+          entry.oldValue,
+          entry.newValue,
+        );
+      case JobAuditAction.MANAGER_ASSIGNMENT_CHANGED:
+        return 'Manager assignment changed';
+      case JobAuditAction.INSTALLER_ASSIGNED:
+        return 'Installer assigned';
+      case JobAuditAction.INSTALLER_REMOVED:
+        return 'Installer removed';
+      case JobAuditAction.CONTRACT_SIGNED_CHANGED:
+        return entry.newValue === true
+          ? 'Contract marked signed'
+          : 'Contract marked unsigned';
+      case JobAuditAction.DEPOSIT_PAID_CHANGED:
+        return entry.newValue === true
+          ? 'Deposit marked paid'
+          : 'Deposit marked unpaid';
+      case JobAuditAction.INSTALL_DATE_CHANGED:
+        return this.describeValueChange(
+          'Install date',
+          entry.oldValue,
+          entry.newValue,
+        );
+      default:
+        return 'Job updated';
+    }
+  }
+
+  private describeValueChange(
+    label: string,
+    oldValue: JobAuditValue | null | undefined,
+    newValue: JobAuditValue | null | undefined,
+  ): string {
+    return `${label} changed from ${this.formatAuditValue(oldValue)} to ${this.formatAuditValue(newValue)}`;
+  }
+
+  private formatAuditValue(value: JobAuditValue | null | undefined): string {
+    if (value === null || value === undefined || value === '') {
+      return 'Not set';
+    }
+
+    if (typeof value === 'string') {
+      return value
+        .split('_')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+    }
+
+    if (typeof value === 'boolean') {
+      return value ? 'Yes' : 'No';
+    }
+
+    if (typeof value === 'number') {
+      return String(value);
+    }
+
+    if (Array.isArray(value)) {
+      return `${value.length} item${value.length === 1 ? '' : 's'}`;
+    }
+
+    return 'Updated value';
   }
 }
