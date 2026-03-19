@@ -6,8 +6,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { hash } from 'bcryptjs';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { UserCredential } from '../auth/entities/user-credential.entity';
+import { AssignableUserRole } from './dto/find-users-query.dto';
+import { UserSummaryDto } from './dto/user-summary.dto';
 import { User } from './entities/user.entity';
 import { UserRole } from './entities/user-role.enum';
 
@@ -16,6 +18,10 @@ type HashPasswordFn = (
   saltOrRounds: string | number,
 ) => Promise<string>;
 const hashPassword = hash as unknown as HashPasswordFn;
+const DEFAULT_DIRECTORY_ROLES: AssignableUserRole[] = [
+  UserRole.MANAGER,
+  UserRole.INSTALLER,
+];
 
 export type CreateUserWithCredentialInput = {
   firstName: string;
@@ -114,6 +120,25 @@ export class UsersService {
     return user;
   }
 
+  async findDirectoryUsers(
+    roles?: AssignableUserRole[],
+  ): Promise<UserSummaryDto[]> {
+    const rolesToUse =
+      roles && roles.length > 0 ? roles : DEFAULT_DIRECTORY_ROLES;
+
+    const users = await this.usersRepository.find({
+      where: {
+        role: In(rolesToUse),
+      },
+      order: {
+        firstName: 'ASC',
+        lastName: 'ASC',
+      },
+    });
+
+    return users.map((user) => this.mapToUserSummary(user));
+  }
+
   async createUserWithCredentials(
     input: CreateUserWithCredentialInput,
   ): Promise<{ id: string; username: string; role: UserRole }> {
@@ -167,5 +192,16 @@ export class UsersService {
         role: user.role,
       };
     });
+  }
+
+  private mapToUserSummary(user: User): UserSummaryDto {
+    return {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      emailAddress: user.emailAddress,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+    };
   }
 }

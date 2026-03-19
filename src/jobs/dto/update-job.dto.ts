@@ -19,7 +19,7 @@ export class UpdateJobDto {
 
   @IsUUID()
   @IsOptional()
-  managerId?: string;
+  managerId?: string | null;
 
   @IsArray()
   @ArrayUnique()

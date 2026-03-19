@@ -119,6 +119,9 @@ export class JobsService {
           field: 'installerId',
           oldValue: null,
           newValue: installer.id,
+          metadata: {
+            installerName: this.formatUserFullName(installer),
+          },
         });
       }
 
@@ -337,6 +340,18 @@ export class JobsService {
             address: job.customer.address,
           }
         : null,
+      manager: this.mapUserSummary(job.manager),
+      installers: [...job.installers]
+        .sort((left, right) =>
+          (this.formatUserFullName(left) ?? '').localeCompare(
+            this.formatUserFullName(right) ?? '',
+          ),
+        )
+        .map((installer) => this.mapUserSummary(installer))
+        .filter(
+          (installer): installer is NonNullable<typeof installer> =>
+            installer !== null,
+        ),
       timeline: timeline.map((entry) => ({
         id: entry.id,
         action: entry.action,
@@ -362,6 +377,7 @@ export class JobsService {
     id: string,
     dto: UpdateJobDto,
     performedById: string | null,
+    performedByRole: UserRole | null,
   ): Promise<Job> {
     const updatedJobId = await this.dataSource.transaction(async (manager) => {
       const jobsRepository = manager.getRepository(Job);
@@ -381,25 +397,39 @@ export class JobsService {
       }
 
       const auditEntries: JobAuditLogInput[] = [];
+      const hasManagerIdInput = 'managerId' in dto;
 
       if (dto.customerId && dto.customerId !== job.customerId) {
         await this.assertCustomerExists(dto.customerId, manager);
         job.customerId = dto.customerId;
       }
 
-      if (dto.managerId && dto.managerId !== job.managerId) {
-        const nextManager = await this.assertManagerExists(
-          dto.managerId,
-          manager,
-        );
-        auditEntries.push({
-          action: JobAuditAction.MANAGER_ASSIGNMENT_CHANGED,
-          field: 'managerId',
-          oldValue: job.managerId,
-          newValue: nextManager.id,
-        });
-        job.managerId = nextManager.id;
-        job.manager = nextManager;
+      if (hasManagerIdInput) {
+        if (performedByRole === UserRole.MANAGER) {
+          throw new ForbiddenException(
+            'Managers cannot change job manager assignment.',
+          );
+        }
+
+        const nextManager =
+          dto.managerId === null
+            ? null
+            : await this.assertManagerExists(dto.managerId!, manager);
+
+        if ((nextManager?.id ?? null) !== job.managerId) {
+          auditEntries.push({
+            action: JobAuditAction.MANAGER_ASSIGNMENT_CHANGED,
+            field: 'managerId',
+            oldValue: job.managerId,
+            newValue: nextManager?.id ?? null,
+            metadata: {
+              previousManagerName: this.formatUserFullName(job.manager),
+              nextManagerName: this.formatUserFullName(nextManager),
+            },
+          });
+          job.managerId = nextManager?.id ?? null;
+          job.manager = nextManager;
+        }
       }
 
       if (Object.prototype.hasOwnProperty.call(dto, 'installerIds')) {
@@ -414,22 +444,32 @@ export class JobsService {
 
         for (const installerId of nextInstallerIdSet) {
           if (!currentInstallerIdSet.has(installerId)) {
+            const installer =
+              nextInstallers.find((user) => user.id === installerId) ?? null;
             auditEntries.push({
               action: JobAuditAction.INSTALLER_ASSIGNED,
               field: 'installerId',
               oldValue: null,
               newValue: installerId,
+              metadata: {
+                installerName: this.formatUserFullName(installer),
+              },
             });
           }
         }
 
         for (const installerId of currentInstallerIdSet) {
           if (!nextInstallerIdSet.has(installerId)) {
+            const installer =
+              job.installers.find((user) => user.id === installerId) ?? null;
             auditEntries.push({
               action: JobAuditAction.INSTALLER_REMOVED,
               field: 'installerId',
               oldValue: installerId,
               newValue: null,
+              metadata: {
+                installerName: this.formatUserFullName(installer),
+              },
             });
           }
         }
@@ -883,11 +923,11 @@ export class JobsService {
           entry.newValue,
         );
       case JobAuditAction.MANAGER_ASSIGNMENT_CHANGED:
-        return 'Manager assignment changed';
+        return this.describeManagerAssignment(entry);
       case JobAuditAction.INSTALLER_ASSIGNED:
-        return 'Installer assigned';
+        return this.describeInstallerAssignment(entry, 'assigned');
       case JobAuditAction.INSTALLER_REMOVED:
-        return 'Installer removed';
+        return this.describeInstallerAssignment(entry, 'removed');
       case JobAuditAction.CONTRACT_SIGNED_CHANGED:
         return entry.newValue === true
           ? 'Contract marked signed'
@@ -940,5 +980,82 @@ export class JobsService {
     }
 
     return 'Updated value';
+  }
+
+  private mapUserSummary(user: User | null): {
+    id: string;
+    firstName: string;
+    lastName: string;
+    emailAddress: string;
+    phoneNumber: string;
+    role: UserRole;
+  } | null {
+    if (!user) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      emailAddress: user.emailAddress,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+    };
+  }
+
+  private formatUserFullName(user: User | null): string | null {
+    if (!user) {
+      return null;
+    }
+
+    const fullName = `${user.firstName} ${user.lastName}`.trim();
+    return fullName || null;
+  }
+
+  private describeManagerAssignment(entry: JobAuditLog): string {
+    const previousManagerName = this.getAuditMetadataString(
+      entry,
+      'previousManagerName',
+    );
+    const nextManagerName = this.getAuditMetadataString(
+      entry,
+      'nextManagerName',
+    );
+
+    if (previousManagerName && nextManagerName) {
+      return `Manager changed from ${previousManagerName} to ${nextManagerName}`;
+    }
+
+    if (!previousManagerName && nextManagerName) {
+      return `Manager assigned to ${nextManagerName}`;
+    }
+
+    if (previousManagerName && !nextManagerName) {
+      return `Manager cleared from ${previousManagerName}`;
+    }
+
+    return 'Manager assignment changed';
+  }
+
+  private describeInstallerAssignment(
+    entry: JobAuditLog,
+    action: 'assigned' | 'removed',
+  ): string {
+    const installerName = this.getAuditMetadataString(entry, 'installerName');
+
+    if (installerName) {
+      return `Installer ${action}: ${installerName}`;
+    }
+
+    return action === 'assigned' ? 'Installer assigned' : 'Installer removed';
+  }
+
+  private getAuditMetadataString(
+    entry: JobAuditLog,
+    key: string,
+  ): string | null {
+    const value = entry.metadata?.[key];
+    return typeof value === 'string' && value.trim() ? value : null;
   }
 }

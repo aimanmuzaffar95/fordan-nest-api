@@ -1,4 +1,5 @@
 import { UserRole } from '../../users/entities/user-role.enum';
+import { UserSummaryDto } from '../../users/dto/user-summary.dto';
 import { JobAuditAction } from '../enums/job-audit-action.enum';
 import { JobSystemType } from '../enums/job.enums';
 import { JobAuditValue } from '../types/job-audit-value.type';
@@ -51,5 +52,7 @@ export type JobDetailTimelineItemDto = {
 export type JobDetailResponseDto = {
   job: JobDetailJobDto;
   customer: JobDetailCustomerDto | null;
+  manager: UserSummaryDto | null;
+  installers: UserSummaryDto[];
   timeline: JobDetailTimelineItemDto[];
 };

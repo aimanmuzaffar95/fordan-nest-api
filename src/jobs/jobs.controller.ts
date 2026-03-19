@@ -101,7 +101,12 @@ export class JobsController {
     @Body() dto: UpdateJobDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.jobsService.update(id, dto, req.user?.sub ?? null);
+    return this.jobsService.update(
+      id,
+      dto,
+      req.user?.sub ?? null,
+      req.user?.role ?? null,
+    );
   }
 
   @Delete(':id')
