@@ -1,9 +1,4 @@
-import {
-  Column,
-  Entity,
-  ManyToOne,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { Invoice } from './invoice.entity';
 
 @Entity('invoice_items')
@@ -44,4 +39,3 @@ export class InvoiceItem {
   @Column({ type: 'int', default: 0 })
   position: number;
 }
-

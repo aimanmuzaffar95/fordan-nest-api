@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   Param,
-  Patch,
   Post,
   Query,
   UseGuards,
@@ -59,4 +58,3 @@ export class InvoicesController {
     return this.invoices.cancel(id, dto);
   }
 }
-

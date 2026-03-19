@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Customer } from '../../customers/entities/customer.entity';
+import { Job } from '../../jobs/entities/job.entity';
 import { InvoiceItem } from './invoice-item.entity';
 import { InvoicePayment } from './invoice-payment.entity';
 import { InvoiceStatus } from './invoice-status.enum';
@@ -25,6 +26,13 @@ export class Invoice {
 
   @Column({ type: 'uuid' })
   customerId: string;
+
+  // v0.3+: invoices can be linked to an order/job (nullable for backwards compatibility).
+  @ManyToOne(() => Job, { nullable: true })
+  job?: Job | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  jobId: string | null;
 
   @Column({ type: 'varchar', length: 10, default: 'USD' })
   currency: string;
@@ -85,4 +93,3 @@ export class Invoice {
   @UpdateDateColumn()
   updatedAt: Date;
 }
-

@@ -6,4 +6,3 @@ export class CancelInvoiceDto {
   @MaxLength(500)
   reason: string;
 }
-

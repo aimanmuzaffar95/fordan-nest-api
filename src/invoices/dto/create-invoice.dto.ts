@@ -1,7 +1,6 @@
 import {
   IsArray,
   IsDateString,
-  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -29,8 +28,14 @@ class CreateInvoiceItemDto {
 }
 
 export class CreateInvoiceDto {
+  // Either `customerId` (legacy) OR `jobId` (order/job-based) must be provided.
   @IsUUID()
-  customerId: string;
+  @IsOptional()
+  customerId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  jobId?: string;
 
   @IsString()
   @Length(3, 10)
@@ -55,4 +60,3 @@ export class CreateInvoiceDto {
   @IsOptional()
   terms?: string;
 }
-

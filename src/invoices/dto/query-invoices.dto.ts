@@ -45,4 +45,3 @@ export class QueryInvoicesDto {
   @Max(100)
   pageSize?: number = 20;
 }
-

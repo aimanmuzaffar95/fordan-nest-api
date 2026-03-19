@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  Optional,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -18,7 +19,7 @@ type AuthenticatedRequest = Request & { user?: JwtPayload };
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(@Optional() private readonly jwtService?: JwtService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -29,12 +30,13 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const token = authHeader.slice('Bearer '.length);
-    const secret = process.env.JWT_SECRET ?? 'development-secret';
+    const secret = (
+      process.env.JWT_SECRET?.trim() || 'development-secret'
+    ).toString();
+    const jwt = this.jwtService ?? new JwtService({ secret });
 
     try {
-      const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
-        secret,
-      });
+      const payload = await jwt.verifyAsync<JwtPayload>(token, { secret });
 
       if (!payload.sub || !payload.role) {
         throw new UnauthorizedException('Invalid token');

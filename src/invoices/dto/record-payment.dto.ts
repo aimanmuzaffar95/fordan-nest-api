@@ -1,4 +1,9 @@
-import { IsDateString, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsDateString,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { IsPositiveDecimalString } from '../validators/is-positive-decimal-string';
 
 export class RecordPaymentDto {
@@ -20,4 +25,3 @@ export class RecordPaymentDto {
   @IsOptional()
   notes?: string;
 }
-

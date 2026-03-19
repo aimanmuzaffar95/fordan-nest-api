@@ -1,8 +1,10 @@
 import { AppDataSource } from './data-source';
+import { Customer } from '../customers/entities/customer.entity';
 import { User } from '../users/entities/user.entity';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { hash } from 'bcryptjs';
+import { Job } from '../jobs/entities/job.entity';
 
 type SeedUser = {
   username: string;
@@ -54,6 +56,8 @@ async function main(): Promise<void> {
   try {
     const usersRepo = AppDataSource.getRepository(User);
     const credRepo = AppDataSource.getRepository(UserCredential);
+    const customersRepo = AppDataSource.getRepository(Customer);
+    const jobsRepo = AppDataSource.getRepository(Job);
 
     for (const u of seedUsers()) {
       let user = await usersRepo.findOne({
@@ -82,6 +86,39 @@ async function main(): Promise<void> {
           user,
         }),
       );
+    }
+
+    // Minimal jobs seed so the invoice/order flow has records to link against.
+    if ((await jobsRepo.count()) === 0) {
+      const customer = await customersRepo.findOne({
+        order: { createdAt: 'DESC' },
+      });
+      if (customer) {
+        const jobsToInsert = [
+          jobsRepo.create({
+            customer,
+            customerId: customer.id,
+            systemType: 'both',
+            projectPrice: '18500.00',
+            contractSigned: true,
+            depositAmount: '3000.00',
+            depositPaid: false,
+            depositDate: null,
+          }),
+          jobsRepo.create({
+            customer,
+            customerId: customer.id,
+            systemType: 'solar',
+            projectPrice: '12000.00',
+            contractSigned: false,
+            depositAmount: '0.00',
+            depositPaid: false,
+            depositDate: null,
+          }),
+        ];
+
+        await jobsRepo.save(jobsToInsert);
+      }
     }
   } finally {
     await AppDataSource.destroy().catch(() => {

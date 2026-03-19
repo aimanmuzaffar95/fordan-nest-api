@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Customer } from '../customers/entities/customer.entity';
+import { Job } from '../jobs/entities/job.entity';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { InvoicePayment } from './entities/invoice-payment.entity';
@@ -26,6 +27,8 @@ export class InvoicesService {
     private readonly paymentsRepo: Repository<InvoicePayment>,
     @InjectRepository(Customer)
     private readonly customersRepo: Repository<Customer>,
+    @InjectRepository(Job)
+    private readonly jobsRepo: Repository<Job>,
   ) {}
 
   async list(query: QueryInvoicesDto) {
@@ -90,8 +93,27 @@ export class InvoicesService {
   }
 
   async create(dto: CreateInvoiceDto): Promise<Invoice> {
+    // v0.3+: invoices can be linked to an order/job. If `jobId` is provided,
+    // we derive `customerId` from the job to keep backend source-of-truth.
+    let derivedCustomerId: string | undefined = dto.customerId;
+    let derivedJobId: string | null = null;
+
+    if (dto.jobId) {
+      const job = await this.jobsRepo.findOne({ where: { id: dto.jobId } });
+      if (!job) {
+        throw new BadRequestException('Job not found');
+      }
+
+      derivedCustomerId = job.customerId;
+      derivedJobId = job.id;
+    }
+
+    if (!derivedCustomerId) {
+      throw new BadRequestException('customerId or jobId must be provided');
+    }
+
     const customer = await this.customersRepo.findOne({
-      where: { id: dto.customerId },
+      where: { id: derivedCustomerId },
     });
     if (!customer) {
       throw new BadRequestException('Customer not found');
@@ -103,6 +125,7 @@ export class InvoicesService {
     const invoice = new Invoice();
     invoice.customer = customer;
     invoice.customerId = customer.id;
+    invoice.jobId = derivedJobId;
     invoice.currency = dto.currency;
     invoice.issueDate = dto.issueDate;
     invoice.dueDate = dto.dueDate;
@@ -149,15 +172,17 @@ export class InvoicesService {
   }
 
   async recordPayment(id: string, dto: RecordPaymentDto): Promise<Invoice> {
-    const invoice = await this.invoicesRepo.findOne({
-      where: { id },
-      relations: ['payments'],
-    });
+    // Load only what we need to update invoice totals.
+    // Avoid re-saving the whole entity graph (relations) since that can trigger
+    // TypeORM cascade/serialization edge cases.
+    const invoice = await this.invoicesRepo.findOne({ where: { id } });
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
     }
     if (invoice.status === InvoiceStatus.CANCELLED) {
-      throw new BadRequestException('Cannot record payment on cancelled invoice');
+      throw new BadRequestException(
+        'Cannot record payment on cancelled invoice',
+      );
     }
 
     const amount = parseFloat(dto.amount);
@@ -180,13 +205,19 @@ export class InvoicesService {
 
     await this.paymentsRepo.save(payment);
 
-    invoice.amountPaid = newPaid.toFixed(2);
-    invoice.status =
+    const updatedAmountPaid = newPaid.toFixed(2);
+    const updatedStatus =
       Math.abs(newPaid - total) < 0.0001
         ? InvoiceStatus.PAID
         : InvoiceStatus.PARTIALLY_PAID;
 
-    return this.invoicesRepo.save(invoice);
+    await this.invoicesRepo.update(id, {
+      amountPaid: updatedAmountPaid,
+      status: updatedStatus,
+    });
+
+    // Re-fetch the full graph so the UI always gets items/payments/customer.
+    return this.getOne(id);
   }
 
   async send(id: string): Promise<Invoice> {
@@ -225,10 +256,7 @@ export class InvoicesService {
 
   private async generateInvoiceNumber(): Promise<string> {
     // Simple sequential pattern: INV-YYYYMMDD-XXXX
-    const datePart = new Date()
-      .toISOString()
-      .slice(0, 10)
-      .replace(/-/g, '');
+    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
     for (let i = 0; i < 5; i += 1) {
       const randomPart = Math.floor(Math.random() * 10000)
@@ -244,4 +272,3 @@ export class InvoicesService {
     throw new Error('Failed to generate unique invoice number');
   }
 }
-
