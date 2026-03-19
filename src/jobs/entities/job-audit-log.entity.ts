@@ -33,7 +33,7 @@ export class JobAuditLog {
   @JoinColumn({ name: 'performedById' })
   performedBy: User | null;
 
-  @Column({ type: 'enum', enum: JobAuditAction })
+  @Column({ type: 'simple-enum', enum: JobAuditAction })
   action: JobAuditAction;
 
   @Column({ type: 'varchar', length: 100, nullable: true })

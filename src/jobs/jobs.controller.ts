@@ -85,13 +85,19 @@ export class JobsController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  remove(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthenticatedRequest) {
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.jobsService.softDelete(id, req.user?.sub ?? null);
   }
 
   @Patch(':id/restore')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  restore(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthenticatedRequest) {
+  restore(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.jobsService.restore(id, req.user?.sub ?? null);
   }
 }

@@ -1,5 +1,12 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class FindJobsQueryDto {
   @IsOptional()
@@ -27,7 +34,15 @@ export class FindJobsQueryDto {
 
   @Transform(({ value }: { value: unknown }) => {
     if (typeof value === 'undefined') return undefined;
-    const normalized = String(value).trim().toLowerCase();
+    if (
+      typeof value !== 'string' &&
+      typeof value !== 'number' &&
+      typeof value !== 'boolean' &&
+      typeof value !== 'bigint'
+    ) {
+      return false;
+    }
+    const normalized = `${value}`.trim().toLowerCase();
     return ['true', '1', 'yes', 'y', 'on'].includes(normalized);
   })
   @IsBoolean()

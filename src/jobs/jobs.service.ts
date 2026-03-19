@@ -59,10 +59,16 @@ export class JobsService {
   async create(dto: CreateJobDto, performedById: string | null): Promise<Job> {
     const createdJobId = await this.dataSource.transaction(async (manager) => {
       await this.assertCustomerExists(dto.customerId, manager);
-      const assignedManager = await this.assertManagerExists(dto.managerId, manager);
+      const assignedManager = await this.assertManagerExists(
+        dto.managerId,
+        manager,
+      );
 
       const installerIds = dto.installerIds ?? [];
-      const installers = await this.assertInstallersExist(installerIds, manager);
+      const installers = await this.assertInstallersExist(
+        installerIds,
+        manager,
+      );
 
       const jobsRepository = manager.getRepository(Job);
       const jobAuditLogsRepository = manager.getRepository(JobAuditLog);
@@ -208,7 +214,10 @@ export class JobsService {
       }
 
       if (dto.managerId && dto.managerId !== job.managerId) {
-        const nextManager = await this.assertManagerExists(dto.managerId, manager);
+        const nextManager = await this.assertManagerExists(
+          dto.managerId,
+          manager,
+        );
         auditEntries.push({
           action: JobAuditAction.MANAGER_ASSIGNMENT_CHANGED,
           field: 'managerId',
@@ -271,7 +280,10 @@ export class JobsService {
         job.contractSigned = dto.contractSigned;
       }
 
-      if (typeof dto.depositPaid === 'boolean' && dto.depositPaid !== job.depositPaid) {
+      if (
+        typeof dto.depositPaid === 'boolean' &&
+        dto.depositPaid !== job.depositPaid
+      ) {
         auditEntries.push({
           action: JobAuditAction.DEPOSIT_PAID_CHANGED,
           field: 'depositPaid',
@@ -336,7 +348,12 @@ export class JobsService {
 
       await jobsRepository.save(job);
 
-      await this.writeAuditLogs(jobAuditLogsRepository, job.id, performedById, auditEntries);
+      await this.writeAuditLogs(
+        jobAuditLogsRepository,
+        job.id,
+        performedById,
+        auditEntries,
+      );
 
       return job.id;
     });
@@ -344,7 +361,10 @@ export class JobsService {
     return this.findOne(updatedJobId);
   }
 
-  async softDelete(id: string, performedById: string | null): Promise<{ id: string }> {
+  async softDelete(
+    id: string,
+    performedById: string | null,
+  ): Promise<{ id: string }> {
     await this.dataSource.transaction(async (manager) => {
       const jobsRepository = manager.getRepository(Job);
       const jobAuditLogsRepository = manager.getRepository(JobAuditLog);
@@ -423,7 +443,9 @@ export class JobsService {
     manager: DataSource['manager'],
   ): Promise<void> {
     const customersRepository = manager.getRepository(Customer);
-    const customer = await customersRepository.findOne({ where: { id: customerId } });
+    const customer = await customersRepository.findOne({
+      where: { id: customerId },
+    });
 
     if (!customer) {
       throw new BadRequestException('Customer not found');
@@ -471,7 +493,9 @@ export class JobsService {
       throw new BadRequestException('One or more installers were not found');
     }
 
-    const installersById = new Map(installers.map((installer) => [installer.id, installer]));
+    const installersById = new Map(
+      installers.map((installer) => [installer.id, installer]),
+    );
 
     return uniqueInstallerIds.map((installerId) => {
       const installer = installersById.get(installerId);

@@ -6,7 +6,11 @@ import {
   TableIndex,
 } from 'typeorm';
 import { JobAuditAction } from '../jobs/enums/job-audit-action.enum';
-import { JobMeterStatus, JobStatus, JobSystemType } from '../jobs/enums/job.enums';
+import {
+  JobMeterStatus,
+  JobStatus,
+  JobSystemType,
+} from '../jobs/enums/job.enums';
 
 export class CreateJobsAndAuditLog1760000000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -19,7 +23,10 @@ export class CreateJobsAndAuditLog1760000000000 implements MigrationInterface {
             type: 'uuid',
             isPrimary: true,
             generationStrategy: 'uuid',
-            default: queryRunner.connection.options.type === 'postgres' ? 'gen_random_uuid()' : undefined,
+            default:
+              queryRunner.connection.options.type === 'postgres'
+                ? 'gen_random_uuid()'
+                : undefined,
           },
           {
             name: 'customerId',
@@ -91,18 +98,36 @@ export class CreateJobsAndAuditLog1760000000000 implements MigrationInterface {
           },
           {
             name: 'createdAt',
-            type: queryRunner.connection.options.type === 'postgres' ? 'timestamp' : 'datetime',
-            default: queryRunner.connection.options.type === 'postgres' ? 'now()' : 'CURRENT_TIMESTAMP',
+            type:
+              queryRunner.connection.options.type === 'postgres'
+                ? 'timestamp'
+                : 'datetime',
+            default:
+              queryRunner.connection.options.type === 'postgres'
+                ? 'now()'
+                : 'CURRENT_TIMESTAMP',
           },
           {
             name: 'updatedAt',
-            type: queryRunner.connection.options.type === 'postgres' ? 'timestamp' : 'datetime',
-            default: queryRunner.connection.options.type === 'postgres' ? 'now()' : 'CURRENT_TIMESTAMP',
-            onUpdate: queryRunner.connection.options.type === 'postgres' ? undefined : 'CURRENT_TIMESTAMP',
+            type:
+              queryRunner.connection.options.type === 'postgres'
+                ? 'timestamp'
+                : 'datetime',
+            default:
+              queryRunner.connection.options.type === 'postgres'
+                ? 'now()'
+                : 'CURRENT_TIMESTAMP',
+            onUpdate:
+              queryRunner.connection.options.type === 'postgres'
+                ? undefined
+                : 'CURRENT_TIMESTAMP',
           },
           {
             name: 'deletedAt',
-            type: queryRunner.connection.options.type === 'postgres' ? 'timestamp' : 'datetime',
+            type:
+              queryRunner.connection.options.type === 'postgres'
+                ? 'timestamp'
+                : 'datetime',
             isNullable: true,
           },
         ],
@@ -212,7 +237,10 @@ export class CreateJobsAndAuditLog1760000000000 implements MigrationInterface {
             type: 'uuid',
             isPrimary: true,
             generationStrategy: 'uuid',
-            default: queryRunner.connection.options.type === 'postgres' ? 'gen_random_uuid()' : undefined,
+            default:
+              queryRunner.connection.options.type === 'postgres'
+                ? 'gen_random_uuid()'
+                : undefined,
           },
           {
             name: 'jobId',
@@ -254,8 +282,14 @@ export class CreateJobsAndAuditLog1760000000000 implements MigrationInterface {
           },
           {
             name: 'createdAt',
-            type: queryRunner.connection.options.type === 'postgres' ? 'timestamp' : 'datetime',
-            default: queryRunner.connection.options.type === 'postgres' ? 'now()' : 'CURRENT_TIMESTAMP',
+            type:
+              queryRunner.connection.options.type === 'postgres'
+                ? 'timestamp'
+                : 'datetime',
+            default:
+              queryRunner.connection.options.type === 'postgres'
+                ? 'now()'
+                : 'CURRENT_TIMESTAMP',
           },
         ],
       }),
@@ -310,12 +344,21 @@ export class CreateJobsAndAuditLog1760000000000 implements MigrationInterface {
       'job_audit_logs',
       'fk_job_audit_logs_performed_by_id',
     );
-    await queryRunner.dropForeignKey('job_audit_logs', 'fk_job_audit_logs_job_id');
+    await queryRunner.dropForeignKey(
+      'job_audit_logs',
+      'fk_job_audit_logs_job_id',
+    );
     await queryRunner.dropTable('job_audit_logs');
 
     await queryRunner.dropIndex('job_installers', 'idx_job_installers_user_id');
-    await queryRunner.dropForeignKey('job_installers', 'fk_job_installers_user_id');
-    await queryRunner.dropForeignKey('job_installers', 'fk_job_installers_job_id');
+    await queryRunner.dropForeignKey(
+      'job_installers',
+      'fk_job_installers_user_id',
+    );
+    await queryRunner.dropForeignKey(
+      'job_installers',
+      'fk_job_installers_job_id',
+    );
     await queryRunner.dropTable('job_installers');
 
     await queryRunner.dropIndex('jobs', 'idx_jobs_deleted_at');

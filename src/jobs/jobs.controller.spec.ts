@@ -33,12 +33,9 @@ describe('JobsController', () => {
   });
 
   it('allows admin to fetch with optional manager filter', () => {
-    void controller.findAll(
-      { page: 1, limit: 20, managerId: 'manager-x' },
-      {
-        user: { sub: 'admin-1', role: UserRole.ADMIN },
-      } as never,
-    );
+    void controller.findAll({ page: 1, limit: 20, managerId: 'manager-x' }, {
+      user: { sub: 'admin-1', role: UserRole.ADMIN },
+    } as never);
 
     expect(jobsService.findAll).toHaveBeenCalledWith({
       page: 1,

@@ -48,7 +48,7 @@ export class Job {
   installers: User[];
 
   @Column({
-    type: 'enum',
+    type: 'simple-enum',
     enum: JobSystemType,
   })
   systemType: JobSystemType;
@@ -63,21 +63,21 @@ export class Job {
   installDate: string | null;
 
   @Column({
-    type: 'enum',
+    type: 'simple-enum',
     enum: JobMeterStatus,
     default: JobMeterStatus.NOT_STARTED,
   })
   preMeterStatus: JobMeterStatus;
 
   @Column({
-    type: 'enum',
+    type: 'simple-enum',
     enum: JobMeterStatus,
     default: JobMeterStatus.NOT_STARTED,
   })
   postMeterStatus: JobMeterStatus;
 
   @Column({
-    type: 'enum',
+    type: 'simple-enum',
     enum: JobStatus,
     default: JobStatus.LEAD,
   })

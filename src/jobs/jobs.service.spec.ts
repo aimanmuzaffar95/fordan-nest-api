@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Customer } from '../customers/entities/customer.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { User } from '../users/entities/user.entity';
@@ -14,7 +14,7 @@ describe('JobsService', () => {
   let service: JobsService;
   let dataSource: { transaction: jest.Mock };
 
-  const createRepositoryMock = () =>
+  const createRepositoryMock = <T>() =>
     ({
       findOne: jest.fn(),
       find: jest.fn(),
@@ -24,7 +24,7 @@ describe('JobsService', () => {
       softDelete: jest.fn(),
       restore: jest.fn(),
       findAndCount: jest.fn(),
-    }) as unknown as jest.Mocked<Repository<Job>>;
+    }) as Partial<jest.Mocked<Repository<T>>>;
 
   beforeEach(async () => {
     dataSource = {
@@ -36,19 +36,19 @@ describe('JobsService', () => {
         JobsService,
         {
           provide: getRepositoryToken(Job),
-          useValue: createRepositoryMock(),
+          useValue: createRepositoryMock<Job>(),
         },
         {
           provide: getRepositoryToken(JobAuditLog),
-          useValue: createRepositoryMock(),
+          useValue: createRepositoryMock<JobAuditLog>(),
         },
         {
           provide: getRepositoryToken(User),
-          useValue: createRepositoryMock(),
+          useValue: createRepositoryMock<User>(),
         },
         {
           provide: getRepositoryToken(Customer),
-          useValue: createRepositoryMock(),
+          useValue: createRepositoryMock<Customer>(),
         },
         {
           provide: DataSource,
@@ -101,8 +101,8 @@ describe('JobsService', () => {
       }),
     };
 
-    dataSource.transaction.mockImplementation(async (cb: (m: unknown) => unknown) =>
-      cb(txEntityManager),
+    dataSource.transaction.mockImplementation((cb: (m: unknown) => unknown) =>
+      Promise.resolve(cb(txEntityManager)),
     );
 
     jest.spyOn(service, 'findOne').mockResolvedValue({ id: 'job-1' } as Job);
@@ -117,13 +117,7 @@ describe('JobsService', () => {
 
     expect(txAuditRepository.save).toHaveBeenCalledTimes(1);
 
-    const savedLogs = txAuditRepository.save.mock.calls[0]?.[0] as Array<{
-      action: JobAuditAction;
-      oldValue: string | null;
-      newValue: string | null;
-    }>;
-
-    expect(savedLogs).toEqual(
+    expect(txAuditRepository.save).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
           action: JobAuditAction.INSTALLER_ASSIGNED,
@@ -172,8 +166,8 @@ describe('JobsService', () => {
       }),
     };
 
-    dataSource.transaction.mockImplementation(async (cb: (m: unknown) => unknown) =>
-      cb(txEntityManager),
+    dataSource.transaction.mockImplementation((cb: (m: unknown) => unknown) =>
+      Promise.resolve(cb(txEntityManager)),
     );
 
     jest.spyOn(service, 'findOne').mockResolvedValue({ id: 'job-1' } as Job);
