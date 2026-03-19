@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
-import { compare } from 'bcrypt';
+import { compare } from 'bcryptjs';
 import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
@@ -26,7 +26,14 @@ export class AuthService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.usersService.seedDefaultUsers();
+    const nodeEnv = (process.env.NODE_ENV ?? 'development').toLowerCase();
+    const seedFlag =
+      process.env.SEED_DEFAULT_USERS ??
+      (nodeEnv === 'production' ? 'false' : 'true');
+    const shouldSeed = seedFlag.toLowerCase() === 'true';
+    if (shouldSeed) {
+      await this.usersService.seedDefaultUsers();
+    }
   }
 
   async login(
