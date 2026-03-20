@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
 import { Repository } from 'typeorm';
+import { StaffService } from '../staff/staff.service';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { UserCredential } from './entities/user-credential.entity';
@@ -22,6 +23,7 @@ export class AuthService implements OnModuleInit {
     @InjectRepository(UserCredential)
     private readonly credentialsRepository: Repository<UserCredential>,
     private readonly usersService: UsersService,
+    private readonly staffService: StaffService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -33,6 +35,7 @@ export class AuthService implements OnModuleInit {
     const shouldSeed = seedFlag.toLowerCase() === 'true';
     if (shouldSeed) {
       await this.usersService.seedDefaultUsers();
+      await this.staffService.seedDefaultStaffRoles();
     }
   }
 
@@ -44,6 +47,10 @@ export class AuthService implements OnModuleInit {
     });
 
     if (!credential) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (credential.user.deletedAt) {
       throw new UnauthorizedException('Invalid credentials');
     }
 

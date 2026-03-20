@@ -11,6 +11,8 @@ import { JobAuditLog } from './jobs/entities/job-audit-log.entity';
 import { Job } from './jobs/entities/job.entity';
 import { JobsModule } from './jobs/jobs.module';
 import { User } from './users/entities/user.entity';
+import { StaffRole } from './staff/entities/staff-role.entity';
+import { StaffModule } from './staff/staff.module';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -75,13 +77,21 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
       ...(DB_SOCKET_PATH && (DIALECT === 'mysql' || DIALECT === 'mariadb')
         ? { extra: { socketPath: DB_SOCKET_PATH } }
         : {}),
-      entities: [User, UserCredential, Customer, Job, JobAuditLog],
+      entities: [
+        User,
+        UserCredential,
+        Customer,
+        Job,
+        JobAuditLog,
+        StaffRole,
+      ],
       synchronize: SYNCHRONIZE,
     }),
     AuthModule,
     CustomersModule,
-    JobsModule,
     InstallerModule,
+    JobsModule,
+    StaffModule,
   ],
   controllers: [AppController],
   providers: [AppService],
