@@ -65,14 +65,7 @@ export const AppDataSource = new DataSource({
   ...(DB_SOCKET_PATH && (DIALECT === 'mysql' || DIALECT === 'mariadb')
     ? { extra: { socketPath: DB_SOCKET_PATH } }
     : {}),
-  entities: [
-    User,
-    UserCredential,
-    Customer,
-    Job,
-    JobAuditLog,
-    StaffRole,
-  ],
+  entities: [User, UserCredential, Customer, Job, JobAuditLog, StaffRole],
   migrations: ['dist/migrations/*.js'],
   synchronize: SYNCHRONIZE,
   migrationsRun: false,

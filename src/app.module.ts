@@ -77,14 +77,7 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
       ...(DB_SOCKET_PATH && (DIALECT === 'mysql' || DIALECT === 'mariadb')
         ? { extra: { socketPath: DB_SOCKET_PATH } }
         : {}),
-      entities: [
-        User,
-        UserCredential,
-        Customer,
-        Job,
-        JobAuditLog,
-        StaffRole,
-      ],
+      entities: [User, UserCredential, Customer, Job, JobAuditLog, StaffRole],
       synchronize: SYNCHRONIZE,
     }),
     AuthModule,
