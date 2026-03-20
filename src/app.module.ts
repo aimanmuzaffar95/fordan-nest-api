@@ -15,6 +15,8 @@ import { Invoice } from './invoices/entities/invoice.entity';
 import { InvoiceItem } from './invoices/entities/invoice-item.entity';
 import { InvoicePayment } from './invoices/entities/invoice-payment.entity';
 import { InvoicesModule } from './invoices/invoices.module';
+import { StaffRole } from './staff/entities/staff-role.entity';
+import { StaffModule } from './staff/staff.module';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -88,6 +90,7 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
         Invoice,
         InvoiceItem,
         InvoicePayment,
+        StaffRole,
       ],
       synchronize: SYNCHRONIZE,
     }),
@@ -96,6 +99,7 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
     InstallerModule,
     InvoicesModule,
     JobsModule,
+    StaffModule,
   ],
   controllers: [AppController],
   providers: [AppService],

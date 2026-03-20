@@ -7,6 +7,7 @@ import { Invoice } from '../invoices/entities/invoice.entity';
 import { InvoiceItem } from '../invoices/entities/invoice-item.entity';
 import { InvoicePayment } from '../invoices/entities/invoice-payment.entity';
 import { Job } from '../jobs/entities/job.entity';
+import { StaffRole } from '../staff/entities/staff-role.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -74,6 +75,7 @@ export const AppDataSource = new DataSource({
     Invoice,
     InvoiceItem,
     InvoicePayment,
+    StaffRole,
   ],
   migrations: ['dist/migrations/*.js'],
   synchronize: SYNCHRONIZE,

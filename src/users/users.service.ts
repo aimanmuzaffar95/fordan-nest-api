@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { hash } from 'bcryptjs';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { User } from './entities/user.entity';
 import { UserRole } from './entities/user-role.enum';
@@ -79,7 +79,11 @@ export class UsersService {
           lastName: defaultUser.lastName,
           emailAddress: defaultUser.emailAddress,
           phoneNumber: defaultUser.phoneNumber,
+          address: null,
+          identificationNumber: null,
           role: defaultUser.role,
+          staffRoleId: null,
+          deletedAt: null,
         });
         user = await this.usersRepository.save(user);
       } else if (user.role !== defaultUser.role) {
@@ -87,6 +91,7 @@ export class UsersService {
         user.firstName = defaultUser.firstName;
         user.lastName = defaultUser.lastName;
         user.phoneNumber = defaultUser.phoneNumber;
+        user.deletedAt = null;
         user = await this.usersRepository.save(user);
       }
 
@@ -109,7 +114,9 @@ export class UsersService {
   }
 
   async findById(id: string): Promise<User> {
-    const user = await this.usersRepository.findOne({ where: { id } });
+    const user = await this.usersRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
@@ -149,7 +156,11 @@ export class UsersService {
           lastName: input.lastName,
           emailAddress: input.emailAddress,
           phoneNumber: input.phoneNumber,
+          address: null,
+          identificationNumber: null,
           role: input.role,
+          staffRoleId: null,
+          deletedAt: null,
         }),
       );
 

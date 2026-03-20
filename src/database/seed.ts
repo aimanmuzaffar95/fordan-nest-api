@@ -7,6 +7,7 @@ import { hash } from 'bcryptjs';
 import { Job } from '../jobs/entities/job.entity';
 import { JobPipelineStage } from '../jobs/job-pipeline-stage.enum';
 import { JobSystemType } from '../jobs/job-system-type.enum';
+import { StaffRole } from '../staff/entities/staff-role.entity';
 
 type SeedUser = {
   username: string;
@@ -68,6 +69,25 @@ async function main(): Promise<void> {
     const credRepo = AppDataSource.getRepository(UserCredential);
     const customersRepo = AppDataSource.getRepository(Customer);
     const jobsRepo = AppDataSource.getRepository(Job);
+    const staffRolesRepo = AppDataSource.getRepository(StaffRole);
+
+    const defaultStaffRoles = [
+      {
+        name: 'Electrician',
+        description:
+          'Licensed electrician for wiring and electrical connections',
+      },
+      {
+        name: 'Solar Panel Installer',
+        description:
+          'Handles mounting and installation of solar panels on rooftops',
+      },
+      {
+        name: 'Inverter Technician',
+        description:
+          'Specialises in inverter setup, configuration and troubleshooting',
+      },
+    ] as const;
 
     for (const u of seedUsers()) {
       let user = await usersRepo.findOne({
@@ -79,7 +99,11 @@ async function main(): Promise<void> {
           lastName: u.lastName,
           emailAddress: u.emailAddress,
           phoneNumber: u.phoneNumber,
+          address: null,
+          identificationNumber: null,
           role: u.role,
+          staffRoleId: null,
+          deletedAt: null,
         });
         user = await usersRepo.save(user);
       }
@@ -96,6 +120,19 @@ async function main(): Promise<void> {
           user,
         }),
       );
+    }
+
+    for (const role of defaultStaffRoles) {
+      const existingRole = await staffRolesRepo
+        .createQueryBuilder('role')
+        .where('LOWER(role.name) = LOWER(:name)', { name: role.name })
+        .getOne();
+
+      if (existingRole) {
+        continue;
+      }
+
+      await staffRolesRepo.save(staffRolesRepo.create(role));
     }
 
     if ((await customersRepo.count()) === 0) {
