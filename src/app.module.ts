@@ -22,6 +22,11 @@ import { Alert } from './alerts/entities/alert.entity';
 import { File as FileEntity } from './files/entities/file.entity';
 import { Note } from './notes/entities/note.entity';
 import { TimelineEvent } from './timeline/entities/timeline-event.entity';
+import { TeamsModule } from './teams/teams.module';
+import { AssignmentsModule } from './assignments/assignments.module';
+import { ScheduleModule } from './schedule/schedule.module';
+import { MeteringModule } from './metering/metering.module';
+import { RuntimeSettingsModule } from './runtime-settings/runtime-settings.module';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -109,6 +114,11 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
     InstallerModule,
     InvoicesModule,
     JobsModule,
+    TeamsModule,
+    AssignmentsModule,
+    ScheduleModule,
+    MeteringModule,
+    RuntimeSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

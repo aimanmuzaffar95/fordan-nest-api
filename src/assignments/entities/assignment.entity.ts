@@ -12,6 +12,20 @@ import { Job } from '../../jobs/entities/job.entity';
 import { Team } from '../../teams/entities/team.entity';
 import { User } from '../../users/entities/user.entity';
 
+// TypeORM compatibility:
+// - sqljs doesn't support `timestamp` (used in earlier failures).
+// - Postgres doesn't support `datetime` in TypeORM's validator.
+// Use a dialect-aware mapping at runtime.
+const lockedAtColumnType = (() => {
+  const raw =
+    process.env.DB_DIALECT ??
+    process.env.DATABASE_DIALECT ??
+    process.env.TYPEORM_CONNECTION ??
+    '';
+  const v = raw.trim().toLowerCase();
+  return v.includes('postgres') ? 'timestamp' : 'datetime';
+})();
+
 @Entity('assignments')
 @Index(
   'IDX_assignments_staff_scheduled_slot_unique',
@@ -52,7 +66,7 @@ export class Assignment {
   @Column({ type: 'boolean', default: false })
   locked: boolean;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: lockedAtColumnType, nullable: true })
   lockedAt: Date | null;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })

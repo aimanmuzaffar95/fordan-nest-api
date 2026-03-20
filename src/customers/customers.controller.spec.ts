@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { JobsService } from '../jobs/jobs.service';
 import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
 
@@ -11,6 +12,9 @@ describe('CustomersController', () => {
     findOne: jest.fn(),
     update: jest.fn(),
   };
+  const jobsService = {
+    createJob: jest.fn(),
+  };
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -19,6 +23,10 @@ describe('CustomersController', () => {
         {
           provide: CustomersService,
           useValue: customersService,
+        },
+        {
+          provide: JobsService,
+          useValue: jobsService,
         },
       ],
     }).compile();

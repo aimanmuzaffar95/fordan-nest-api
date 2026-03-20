@@ -12,6 +12,8 @@ interface StandardErrorResponse {
   statusCode: number;
   message: string;
   errors?: string | string[];
+  /** Machine-readable code when provided (e.g. `PRECONDITION_FAILED`). */
+  code?: string;
   timestamp: string;
   path: string;
 }
@@ -26,6 +28,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
     let errors: string | string[] | undefined;
+    let code: string | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -37,7 +40,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
         const typedResponse = exceptionResponse as {
           message?: string | string[];
           error?: string;
+          code?: string;
         };
+
+        if (typeof typedResponse.code === 'string') {
+          code = typedResponse.code;
+        }
 
         const exceptionMessage = typedResponse.message;
         if (Array.isArray(exceptionMessage)) {
@@ -58,6 +66,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       statusCode: status,
       message,
       errors,
+      ...(code ? { code } : {}),
       timestamp: new Date().toISOString(),
       path: request.url,
     };

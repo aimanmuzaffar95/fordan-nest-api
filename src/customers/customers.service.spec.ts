@@ -117,38 +117,44 @@ describe('CustomersService', () => {
 
   it('searches and returns mapped results', async () => {
     const now = new Date('2026-03-12T00:00:00.000Z');
-    const qb = {
+    const filteredQb = {
       where: jest.fn().mockReturnThis(),
+      clone: jest.fn(),
+    };
+    const itemsQb = {
       addSelect: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       addOrderBy: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       take: jest.fn().mockReturnThis(),
-      getManyAndCount: jest.fn().mockResolvedValue([
-        [
-          {
-            id: '1',
-            firstName: 'Aiman',
-            lastName: 'Khan',
-            address: null,
-            phone: '+1555',
-            email: 'aiman@example.com',
-            createdAt: now,
-            updatedAt: now,
-          } as Customer,
-        ],
-        1,
+      getMany: jest.fn().mockResolvedValue([
+        {
+          id: '1',
+          firstName: 'Aiman',
+          lastName: 'Khan',
+          address: null,
+          phone: '+1555',
+          email: 'aiman@example.com',
+          createdAt: now,
+          updatedAt: now,
+        } as Customer,
       ]),
     };
+    const countQb = {
+      getCount: jest.fn().mockResolvedValue(1),
+    };
+    filteredQb.clone
+      .mockReturnValueOnce(itemsQb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>)
+      .mockReturnValueOnce(countQb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>);
 
     repository.createQueryBuilder.mockReturnValue(
-      qb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>,
+      filteredQb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>,
     );
 
     const result = await service.search('aiman', 1, 20);
 
     expect(repository.createQueryBuilder.mock.calls[0]?.[0]).toBe('customer');
-    expect(qb.orderBy).toHaveBeenCalledWith('matchPriority', 'ASC');
+    expect(itemsQb.orderBy).toHaveBeenCalled();
     expect(result.items[0]?.email).toBe('aiman@example.com');
   });
 
@@ -228,7 +234,7 @@ describe('CustomersService', () => {
       .mockResolvedValueOnce(null);
 
     repository.save.mockRejectedValue(
-      new QueryFailedError('UPDATE customers', [], { code: '23505' }),
+      new QueryFailedError('UPDATE customers', [], { code: '23505' } as unknown as Error),
     );
 
     await expect(

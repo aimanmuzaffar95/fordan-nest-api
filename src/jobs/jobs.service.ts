@@ -1,18 +1,21 @@
 import {
-  ForbiddenException,
   Injectable,
   NotFoundException,
+  PreconditionFailedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { Brackets, DataSource, Repository } from 'typeorm';
 import { Job } from './entities/job.entity';
 import { Customer } from '../customers/entities/customer.entity';
+import { User } from '../users/entities/user.entity';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
 import { MeterApplication } from '../metering/entities/meter-application.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
 import { CreateJobDto } from './dto/create-job.dto';
+
+export type JobListViewer = { userId: string; role: UserRole };
 
 @Injectable()
 export class JobsService {
@@ -23,10 +26,12 @@ export class JobsService {
     private readonly meterApplicationsRepo: Repository<MeterApplication>,
     @InjectRepository(Customer)
     private readonly customersRepo: Repository<Customer>,
+    @InjectRepository(User)
+    private readonly usersRepo: Repository<User>,
     private readonly dataSource: DataSource,
   ) {}
 
-  async list(query: FindJobsQueryDto) {
+  async list(query: FindJobsQueryDto, viewer?: JobListViewer) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
@@ -35,6 +40,26 @@ export class JobsService {
       .orderBy('job.pipelineStage', 'ASC')
       .addOrderBy('job.pipelinePosition', 'ASC')
       .addOrderBy('job.createdAt', 'DESC');
+
+    if (viewer?.role === UserRole.INSTALLER) {
+      const user = await this.usersRepo.findOne({
+        where: { id: viewer.userId },
+        select: ['id', 'teamId'],
+      });
+      const teamId = user?.teamId ?? null;
+      qb.andWhere(
+        new Brackets((sub) => {
+          sub.where('job.assignedStaffUserId = :installerUserId', {
+            installerUserId: viewer.userId,
+          });
+          if (teamId) {
+            sub.orWhere('job.assignedTeamId = :installerTeamId', {
+              installerTeamId: teamId,
+            });
+          }
+        }),
+      );
+    }
 
     if (query.customerId) {
       qb.andWhere('job.customerId = :customerId', {
@@ -54,7 +79,7 @@ export class JobsService {
     return { items, total, page, pageSize };
   }
 
-  async getOne(id: string) {
+  async getOne(id: string, viewer?: JobListViewer) {
     const job = await this.jobsRepo.findOne({
       where: { id },
     });
@@ -63,7 +88,30 @@ export class JobsService {
       throw new NotFoundException('Job not found');
     }
 
+    if (viewer?.role === UserRole.INSTALLER) {
+      await this.assertInstallerJobAccess(job, viewer.userId);
+    }
+
     return job;
+  }
+
+  /** Direct assignment or same team as `assignedTeamId` on the job. */
+  private async assertInstallerJobAccess(job: Job, userId: string) {
+    if (job.assignedStaffUserId === userId) {
+      return;
+    }
+    const user = await this.usersRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'teamId'],
+    });
+    if (
+      user?.teamId &&
+      job.assignedTeamId &&
+      job.assignedTeamId === user.teamId
+    ) {
+      return;
+    }
+    throw new NotFoundException('Job not found');
   }
 
   async updateJobPipeline(
@@ -88,9 +136,11 @@ export class JobsService {
       });
 
       if (!preMeterApproved) {
-        throw new ForbiddenException(
-          'Cannot move to Installed — pre-meter not approved.',
-        );
+        throw new PreconditionFailedException({
+          message:
+            'Cannot move to Installed — approved pre-meter is required (admin may override).',
+          code: 'PRECONDITION_FAILED',
+        });
       }
     }
 
@@ -219,9 +269,11 @@ export class JobsService {
     // Server-side gating: moving/creating as `installed` requires approved pre-meter (admin override only).
     if (dto.pipelineStage === 'installed' && userRole !== UserRole.ADMIN) {
       if (dto.preMeterStatus !== 'approved') {
-        throw new ForbiddenException(
-          'Cannot create/move job to Installed — pre-meter not approved.',
-        );
+        throw new PreconditionFailedException({
+          message:
+            'Cannot create job at Installed — pre-meter must be approved unless acting as admin.',
+          code: 'PRECONDITION_FAILED',
+        });
       }
     }
 

@@ -7,6 +7,7 @@ import {
   UseGuards,
   ForbiddenException,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AdminOnly } from '../auth/decorators/role-access.decorators';
@@ -15,6 +16,8 @@ import { InstallerService } from './installer.service';
 const isInstallerEnabled = () =>
   (process.env.INSTALLER_ENABLED ?? 'false').toLowerCase() === 'true';
 
+@ApiTags('Setup (admin JWT)')
+@ApiBearerAuth('JWT')
 @Controller('installer')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InstallerController {
@@ -22,7 +25,9 @@ export class InstallerController {
 
   private assertEnabled() {
     if (!isInstallerEnabled()) {
-      throw new ForbiddenException('Installer endpoints are disabled.');
+      throw new ForbiddenException(
+        'Setup endpoints are disabled (INSTALLER_ENABLED).',
+      );
     }
   }
 
