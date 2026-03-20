@@ -12,6 +12,7 @@ import { CustomersModule } from '../src/customers/customers.module';
 import { Customer } from '../src/customers/entities/customer.entity';
 import { JobAuditLog } from '../src/jobs/entities/job-audit-log.entity';
 import { Job } from '../src/jobs/entities/job.entity';
+import { StaffRole } from '../src/staff/entities/staff-role.entity';
 import { User } from '../src/users/entities/user.entity';
 
 type SuccessBody<T> = {
@@ -31,7 +32,14 @@ describe('Customers (e2e)', () => {
           type: 'sqljs',
           autoSave: false,
           synchronize: true,
-          entities: [Customer, Job, JobAuditLog, User, UserCredential],
+          entities: [
+            Customer,
+            Job,
+            JobAuditLog,
+            StaffRole,
+            User,
+            UserCredential,
+          ],
         }),
         CustomersModule,
       ],

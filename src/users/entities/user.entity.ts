@@ -1,5 +1,6 @@
 import {
   Column,
+  DeleteDateColumn,
   Entity,
   JoinColumn,
   ManyToOne,
@@ -43,7 +44,7 @@ export class User {
   @Column({ type: 'uuid', nullable: true })
   staffRoleId: string | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @DeleteDateColumn({ nullable: true })
   deletedAt: Date | null;
 
   @OneToOne(() => UserCredential, (credential) => credential.user)
