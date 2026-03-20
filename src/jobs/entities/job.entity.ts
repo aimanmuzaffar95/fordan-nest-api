@@ -23,6 +23,13 @@ export class Job {
   @Column({ type: 'varchar', length: 10 })
   systemType: string;
 
+  // Baseline requirement: kW size used for capacity + reporting.
+  @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
+  systemSizeKw: string;
+
+  @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
+  batterySizeKwh: string | null;
+
   @Column({ type: 'numeric', precision: 12, scale: 2 })
   projectPrice: string;
 
@@ -38,6 +45,53 @@ export class Job {
 
   @Column({ type: 'date', nullable: true })
   depositDate: string | null;
+
+  // UI seed currently provides etaCompletionDate.
+  @Column({ type: 'date', nullable: true })
+  etaCompletionDate: string | null;
+
+  // Canonical enum keys from apps/web/src/data/models.ts
+  @Column({ type: 'varchar', length: 50, default: 'lead' })
+  pipelineStage: string;
+
+  // UI pipeline ordering within each `pipelineStage` column.
+  // Stored as a stable integer so drag/drop order persists across reloads.
+  @Column({ type: 'int', default: 0 })
+  pipelinePosition: number;
+
+  @Column({ type: 'date', nullable: true })
+  installDate: string | null;
+
+  // Denormalized helpers for the current UI; authoritative schedule may be via `assignments`.
+  @Column({ type: 'uuid', nullable: true })
+  assignedTeamId: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  assignedStaffUserId: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  scheduledDate: string | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  scheduledSlot: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  managerId: string | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  jobStatus: string | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  invoiceStatus: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  invoiceDate: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  invoiceDueDate: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  paidDate: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

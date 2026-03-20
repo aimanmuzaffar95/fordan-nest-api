@@ -15,6 +15,14 @@ import { InvoiceItem } from './invoices/entities/invoice-item.entity';
 import { InvoicePayment } from './invoices/entities/invoice-payment.entity';
 import { InvoicesModule } from './invoices/invoices.module';
 
+import { Team } from './teams/entities/team.entity';
+import { Assignment } from './assignments/entities/assignment.entity';
+import { MeterApplication } from './metering/entities/meter-application.entity';
+import { Alert } from './alerts/entities/alert.entity';
+import { File as FileEntity } from './files/entities/file.entity';
+import { Note } from './notes/entities/note.entity';
+import { TimelineEvent } from './timeline/entities/timeline-event.entity';
+
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
   const s = v.trim().toLowerCase();
@@ -86,6 +94,13 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
         Invoice,
         InvoiceItem,
         InvoicePayment,
+        Team,
+        Assignment,
+        MeterApplication,
+        Alert,
+        FileEntity,
+        Note,
+        TimelineEvent,
       ],
       synchronize: SYNCHRONIZE,
     }),

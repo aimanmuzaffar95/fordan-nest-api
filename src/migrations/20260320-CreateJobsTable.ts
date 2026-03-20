@@ -5,8 +5,21 @@ import {
   TableForeignKey,
 } from 'typeorm';
 
-export class CreateJobsTable20260320 implements MigrationInterface {
+export class CreateJobsTable20260320_1700000000004 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
+    if (await queryRunner.hasTable('jobs')) return;
+
+    const dialect = queryRunner.connection.options.type;
+    const uuidDefault =
+      dialect === 'postgres' ? 'uuid_generate_v4()' : 'UUID()';
+    const boolDefault =
+      dialect === 'mysql' || dialect === 'mariadb' ? '0' : 'false';
+
+    if (dialect === 'postgres') {
+      // Required for uuid_generate_v4().
+      await queryRunner.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";');
+    }
+
     await queryRunner.createTable(
       new Table({
         name: 'jobs',
@@ -16,7 +29,7 @@ export class CreateJobsTable20260320 implements MigrationInterface {
             type: 'uuid',
             isPrimary: true,
             isNullable: false,
-            default: 'uuid_generate_v4()',
+            default: uuidDefault,
           },
           {
             name: 'customerId',
@@ -40,7 +53,7 @@ export class CreateJobsTable20260320 implements MigrationInterface {
             name: 'contractSigned',
             type: 'boolean',
             isNullable: false,
-            default: 'false',
+            default: boolDefault,
           },
           {
             name: 'depositAmount',
@@ -54,7 +67,7 @@ export class CreateJobsTable20260320 implements MigrationInterface {
             name: 'depositPaid',
             type: 'boolean',
             isNullable: false,
-            default: 'false',
+            default: boolDefault,
           },
           {
             name: 'depositDate',
@@ -86,6 +99,8 @@ export class CreateJobsTable20260320 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropTable('jobs');
+    if (await queryRunner.hasTable('jobs')) {
+      await queryRunner.dropTable('jobs');
+    }
   }
 }

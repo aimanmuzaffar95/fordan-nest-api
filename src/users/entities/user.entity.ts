@@ -1,4 +1,11 @@
-import { Column, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  OneToOne,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { UserCredential } from '../../auth/entities/user-credential.entity';
 import { UserRole } from './user-role.enum';
 
@@ -22,6 +29,18 @@ export class User {
   @Column({ type: 'varchar', length: 20, default: UserRole.INSTALLER })
   role: UserRole;
 
+  @Column({ type: 'uuid', nullable: true })
+  teamId: string | null;
+
+  @Column({ type: 'boolean', default: true })
+  active: boolean;
+
   @OneToOne(() => UserCredential, (credential) => credential.user)
   credential: UserCredential;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

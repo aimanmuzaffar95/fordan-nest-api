@@ -68,10 +68,10 @@ export class Invoice {
   @Column({ type: 'text', nullable: true })
   terms: string | null;
 
-  @Column({ type: 'timestamp with time zone', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   sentAt: Date | null;
 
-  @Column({ type: 'timestamp with time zone', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   cancelledAt: Date | null;
 
   @Column({ type: 'text', nullable: true })

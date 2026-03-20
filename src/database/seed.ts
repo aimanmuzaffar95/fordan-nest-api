@@ -5,6 +5,7 @@ import { UserCredential } from '../auth/entities/user-credential.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { hash } from 'bcryptjs';
 import { Job } from '../jobs/entities/job.entity';
+import { Team } from '../teams/entities/team.entity';
 
 type SeedUser = {
   username: string;
@@ -58,6 +59,7 @@ async function main(): Promise<void> {
     const credRepo = AppDataSource.getRepository(UserCredential);
     const customersRepo = AppDataSource.getRepository(Customer);
     const jobsRepo = AppDataSource.getRepository(Job);
+    const teamsRepo = AppDataSource.getRepository(Team);
 
     for (const u of seedUsers()) {
       let user = await usersRepo.findOne({
@@ -88,11 +90,22 @@ async function main(): Promise<void> {
       );
     }
 
+    // Baseline operational setup: teams are required for scheduling/assignment capacity.
+    if ((await teamsRepo.count()) === 0) {
+      const teamsToInsert = teamsRepo.create([
+        { name: 'Team A', dailyCapacityKw: '100.00' },
+        { name: 'Team B', dailyCapacityKw: '100.00' },
+        { name: 'Team C', dailyCapacityKw: '100.00' },
+      ]);
+      await teamsRepo.save(teamsToInsert);
+    }
+
     // Minimal jobs seed so the invoice/order flow has records to link against.
     if ((await jobsRepo.count()) === 0) {
-      const customer = await customersRepo.findOne({
-        order: { createdAt: 'DESC' },
-      });
+      const customer = await customersRepo
+        .createQueryBuilder('customer')
+        .orderBy('customer.createdAt', 'DESC')
+        .getOne();
       if (customer) {
         const jobsToInsert = [
           jobsRepo.create({

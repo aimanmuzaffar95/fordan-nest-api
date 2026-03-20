@@ -7,6 +7,13 @@ import { Invoice } from '../invoices/entities/invoice.entity';
 import { InvoiceItem } from '../invoices/entities/invoice-item.entity';
 import { InvoicePayment } from '../invoices/entities/invoice-payment.entity';
 import { Job } from '../jobs/entities/job.entity';
+import { Team } from '../teams/entities/team.entity';
+import { Assignment } from '../assignments/entities/assignment.entity';
+import { MeterApplication } from '../metering/entities/meter-application.entity';
+import { Alert } from '../alerts/entities/alert.entity';
+import { File as FileEntity } from '../files/entities/file.entity';
+import { Note } from '../notes/entities/note.entity';
+import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -45,6 +52,15 @@ const DB_NAME =
 const DB_SOCKET_PATH = process.env.DATABASE_SOCKET_PATH?.trim() || undefined;
 const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, false);
 
+const argv = process.argv.join(' ').toLowerCase();
+// TypeORM CLI (migration:run/generate/revert) runs under `typeorm-ts-node-*`,
+// so TS migration files can be loaded safely. Other runtime entrypoints
+// (e.g. seed scripts) should not import TS migrations at Node runtime.
+const isMigrationCli =
+  argv.includes('migration:run') ||
+  argv.includes('migration:generate') ||
+  argv.includes('migration:revert');
+
 export const AppDataSource = new DataSource({
   type: DIALECT,
   host: DB_HOST,
@@ -74,8 +90,17 @@ export const AppDataSource = new DataSource({
     Invoice,
     InvoiceItem,
     InvoicePayment,
+    Team,
+    Assignment,
+    MeterApplication,
+    Alert,
+    FileEntity,
+    Note,
+    TimelineEvent,
   ],
-  migrations: ['dist/migrations/*.js'],
+  migrations: isMigrationCli
+    ? ['src/migrations/*.ts']
+    : ['dist/migrations/*.js'],
   synchronize: SYNCHRONIZE,
   migrationsRun: false,
 });
