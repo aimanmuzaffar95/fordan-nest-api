@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { hash } from 'bcryptjs';
 import { Repository } from 'typeorm';
+import { StaffService } from '../staff/staff.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
@@ -38,6 +39,12 @@ describe('AuthService', () => {
           },
         },
         {
+          provide: StaffService,
+          useValue: {
+            seedDefaultStaffRoles: jest.fn(),
+          },
+        },
+        {
           provide: JwtService,
           useValue: {
             signAsync: jest.fn().mockResolvedValue('mock-token'),
@@ -57,6 +64,7 @@ describe('AuthService', () => {
       user: {
         id: 'user-id',
         role: UserRole.ADMIN,
+        deletedAt: null,
       },
     });
 
