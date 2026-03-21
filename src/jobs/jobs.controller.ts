@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
@@ -6,7 +7,9 @@ import {
   Patch,
   Req,
   ParseUUIDPipe,
+  Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -22,6 +25,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/entities/user-role.enum';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
+import { TransitionJobStageDto } from './dto/transition-job-stage.dto';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
 import { JobsService } from './jobs.service';
 
@@ -52,6 +56,22 @@ export class JobsController {
       throw new Error('Missing authenticated user context');
     }
     return this.jobs.list(query, { userId, role });
+  }
+
+  @Post(':id/stage')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  transitionStage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: TransitionJobStageDto,
+    @Req() req: Request & { user?: { sub: string; role: UserRole } },
+  ) {
+    return this.jobs.transitionStage(
+      req.user?.sub ?? null,
+      req.user?.role ?? null,
+      id,
+      dto.toStage,
+      dto.overridePreMeterLock ?? false,
+    );
   }
 
   @Get(':id')

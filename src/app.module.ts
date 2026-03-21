@@ -8,12 +8,15 @@ import { CustomersModule } from './customers/customers.module';
 import { Customer } from './customers/entities/customer.entity';
 import { User } from './users/entities/user.entity';
 import { InstallerModule } from './installer/installer.module';
+import { JobAuditLog } from './jobs/entities/job-audit-log.entity';
 import { JobsModule } from './jobs/jobs.module';
 import { Job } from './jobs/entities/job.entity';
 import { Invoice } from './invoices/entities/invoice.entity';
 import { InvoiceItem } from './invoices/entities/invoice-item.entity';
 import { InvoicePayment } from './invoices/entities/invoice-payment.entity';
 import { InvoicesModule } from './invoices/invoices.module';
+import { StaffRole } from './staff/entities/staff-role.entity';
+import { StaffModule } from './staff/staff.module';
 
 import { Team } from './teams/entities/team.entity';
 import { Assignment } from './assignments/entities/assignment.entity';
@@ -96,9 +99,11 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
         UserCredential,
         Customer,
         Job,
+        JobAuditLog,
         Invoice,
         InvoiceItem,
         InvoicePayment,
+        StaffRole,
         Team,
         Assignment,
         MeterApplication,
@@ -114,6 +119,7 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
     InstallerModule,
     InvoicesModule,
     JobsModule,
+    StaffModule,
     TeamsModule,
     AssignmentsModule,
     ScheduleModule,

@@ -7,6 +7,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Customer } from '../../customers/entities/customer.entity';
+import { JobPipelineStage } from '../job-pipeline-stage.enum';
+import { JobSystemType } from '../job-system-type.enum';
 
 @Entity('jobs')
 export class Job {
@@ -20,8 +22,20 @@ export class Job {
   customerId: string;
 
   // Frontend expects: 'solar' | 'battery' | 'both'
-  @Column({ type: 'varchar', length: 10 })
-  systemType: string;
+  @Column({
+    type: 'enum',
+    enum: JobSystemType,
+    enumName: 'jobs_systemtype_enum',
+  })
+  systemType: JobSystemType;
+
+  @Column({
+    type: 'enum',
+    enum: JobPipelineStage,
+    enumName: 'jobs_jobstatus_enum',
+    default: JobPipelineStage.LEAD,
+  })
+  jobStatus: JobPipelineStage;
 
   // Baseline requirement: kW size used for capacity + reporting.
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
@@ -30,8 +44,14 @@ export class Job {
   @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
   batterySizeKwh: string | null;
 
-  @Column({ type: 'numeric', precision: 12, scale: 2 })
-  projectPrice: string;
+  @Column({
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
+  projectPrice: string | null;
 
   @Column({ type: 'boolean', default: false })
   contractSigned: boolean;

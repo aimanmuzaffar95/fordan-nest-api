@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CustomerJobsController } from './customer-jobs.controller';
+import { JobAuditLogsService } from './job-audit-logs.service';
+import { JobAuditLog } from './entities/job-audit-log.entity';
 import { Job } from './entities/job.entity';
 import { MeterApplication } from '../metering/entities/meter-application.entity';
 import { Customer } from '../customers/entities/customer.entity';
@@ -22,8 +25,8 @@ import { JobsService } from './jobs.service';
       User,
     ]),
   ],
-  controllers: [JobsController],
-  providers: [JobsService],
-  exports: [JobsService],
+  controllers: [JobsController, CustomerJobsController],
+  providers: [JobsService, JobAuditLogsService],
+  exports: [JobsService, JobAuditLogsService],
 })
 export class JobsModule {}

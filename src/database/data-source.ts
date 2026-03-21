@@ -7,6 +7,7 @@ import { Invoice } from '../invoices/entities/invoice.entity';
 import { InvoiceItem } from '../invoices/entities/invoice-item.entity';
 import { InvoicePayment } from '../invoices/entities/invoice-payment.entity';
 import { Job } from '../jobs/entities/job.entity';
+import { StaffRole } from '../staff/entities/staff-role.entity';
 import { Team } from '../teams/entities/team.entity';
 import { Assignment } from '../assignments/entities/assignment.entity';
 import { MeterApplication } from '../metering/entities/meter-application.entity';
@@ -90,6 +91,7 @@ export const AppDataSource = new DataSource({
     Invoice,
     InvoiceItem,
     InvoicePayment,
+    StaffRole,
     Team,
     Assignment,
     MeterApplication,
