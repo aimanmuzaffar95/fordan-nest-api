@@ -8,6 +8,7 @@ import { Job } from '../jobs/entities/job.entity';
 import { JobPipelineStage } from '../jobs/job-pipeline-stage.enum';
 import { JobSystemType } from '../jobs/job-system-type.enum';
 import { StaffRole } from '../staff/entities/staff-role.entity';
+import { Team } from '../teams/entities/team.entity';
 
 type SeedUser = {
   username: string;
@@ -88,6 +89,7 @@ async function main(): Promise<void> {
           'Specialises in inverter setup, configuration and troubleshooting',
       },
     ] as const;
+    const teamsRepo = AppDataSource.getRepository(Team);
 
     for (const u of seedUsers()) {
       let user = await usersRepo.findOne({
@@ -167,6 +169,23 @@ async function main(): Promise<void> {
         order: { createdAt: 'ASC' },
       });
       if (customers.length > 0) {
+    // Baseline operational setup: teams are required for scheduling/assignment capacity.
+    if ((await teamsRepo.count()) === 0) {
+      const teamsToInsert = teamsRepo.create([
+        { name: 'Team A', dailyCapacityKw: '100.00' },
+        { name: 'Team B', dailyCapacityKw: '100.00' },
+        { name: 'Team C', dailyCapacityKw: '100.00' },
+      ]);
+      await teamsRepo.save(teamsToInsert);
+    }
+
+    // Minimal jobs seed so the invoice/order flow has records to link against.
+    if ((await jobsRepo.count()) === 0) {
+      const customer = await customersRepo
+        .createQueryBuilder('customer')
+        .orderBy('customer.createdAt', 'DESC')
+        .getOne();
+      if (customer) {
         const jobsToInsert = [
           jobsRepo.create({
             customer: customers[0],

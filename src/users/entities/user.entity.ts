@@ -5,6 +5,11 @@ import {
   ManyToOne,
   OneToOne,
   PrimaryGeneratedColumn,
+  CreateDateColumn,
+  Entity,
+  OneToOne,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { UserCredential } from '../../auth/entities/user-credential.entity';
 import { StaffRole } from '../../staff/entities/staff-role.entity';
@@ -45,7 +50,18 @@ export class User {
 
   @Column({ type: 'timestamp', nullable: true })
   deletedAt: Date | null;
+  @Column({ type: 'uuid', nullable: true })
+  teamId: string | null;
+
+  @Column({ type: 'boolean', default: true })
+  active: boolean;
 
   @OneToOne(() => UserCredential, (credential) => credential.user)
   credential: UserCredential;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

@@ -163,7 +163,7 @@ export class InstallerService {
   ) {
     if (this.activeRun) {
       throw new InternalServerErrorException(
-        `Another installer run is active: ${this.activeRun.kind} (${this.activeRun.id})`,
+        `Another setup run is active: ${this.activeRun.kind} (${this.activeRun.id})`,
       );
     }
 

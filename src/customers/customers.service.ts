@@ -66,28 +66,42 @@ export class CustomersService {
     limit = 20,
   ): Promise<PaginatedCustomers> {
     const term = `%${query.toLowerCase()}%`;
+    const fullNameExpr =
+      "LOWER(CONCAT(COALESCE(customer.firstName, ''), ' ', COALESCE(customer.lastName, '')))";
+    const matchPriorityExpr = `
+      CASE
+        WHEN LOWER(customer.firstName) LIKE :term THEN 0
+        WHEN LOWER(customer.lastName) LIKE :term THEN 0
+        WHEN ${fullNameExpr} LIKE :term THEN 0
+        WHEN LOWER(customer.email) LIKE :term THEN 1
+        WHEN LOWER(customer.phone) LIKE :term THEN 2
+        ELSE 3
+      END
+    `;
 
-    const searchQueryBuilder = this.customersRepository
+    const filteredQueryBuilder = this.customersRepository
       .createQueryBuilder('customer')
       .where(
         new Brackets((qb) => {
           qb.where('LOWER(customer.firstName) LIKE :term', { term })
             .orWhere('LOWER(customer.lastName) LIKE :term', { term })
-            .orWhere(
-              "LOWER(customer.firstName || ' ' || customer.lastName) LIKE :term",
-              {
-                term,
-              },
-            )
+            .orWhere(`${fullNameExpr} LIKE :term`, { term })
             .orWhere('LOWER(customer.email) LIKE :term', { term })
             .orWhere('LOWER(customer.phone) LIKE :term', { term });
         }),
-      )
-      .orderBy('customer.createdAt', 'DESC')
-      .skip((page - 1) * limit)
-      .take(limit);
+      );
 
-    const [items, total] = await searchQueryBuilder.getManyAndCount();
+    const [items, total] = await Promise.all([
+      filteredQueryBuilder
+        .clone()
+        .addSelect(matchPriorityExpr, 'matchPriority')
+        .orderBy(matchPriorityExpr, 'ASC')
+        .addOrderBy('customer.createdAt', 'DESC')
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getMany(),
+      filteredQueryBuilder.clone().getCount(),
+    ]);
 
     return {
       items: items.map((item) => CustomerResponseDto.fromEntity(item)),

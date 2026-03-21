@@ -18,6 +18,19 @@ import { InvoicesModule } from './invoices/invoices.module';
 import { StaffRole } from './staff/entities/staff-role.entity';
 import { StaffModule } from './staff/staff.module';
 
+import { Team } from './teams/entities/team.entity';
+import { Assignment } from './assignments/entities/assignment.entity';
+import { MeterApplication } from './metering/entities/meter-application.entity';
+import { Alert } from './alerts/entities/alert.entity';
+import { File as FileEntity } from './files/entities/file.entity';
+import { Note } from './notes/entities/note.entity';
+import { TimelineEvent } from './timeline/entities/timeline-event.entity';
+import { TeamsModule } from './teams/teams.module';
+import { AssignmentsModule } from './assignments/assignments.module';
+import { ScheduleModule } from './schedule/schedule.module';
+import { MeteringModule } from './metering/metering.module';
+import { RuntimeSettingsModule } from './runtime-settings/runtime-settings.module';
+
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
   const s = v.trim().toLowerCase();
@@ -91,6 +104,13 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
         InvoiceItem,
         InvoicePayment,
         StaffRole,
+        Team,
+        Assignment,
+        MeterApplication,
+        Alert,
+        FileEntity,
+        Note,
+        TimelineEvent,
       ],
       synchronize: SYNCHRONIZE,
     }),
@@ -100,6 +120,11 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
     InvoicesModule,
     JobsModule,
     StaffModule,
+    TeamsModule,
+    AssignmentsModule,
+    ScheduleModule,
+    MeteringModule,
+    RuntimeSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

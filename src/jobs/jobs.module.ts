@@ -5,6 +5,10 @@ import { CustomerJobsController } from './customer-jobs.controller';
 import { JobAuditLogsService } from './job-audit-logs.service';
 import { JobAuditLog } from './entities/job-audit-log.entity';
 import { Job } from './entities/job.entity';
+import { MeterApplication } from '../metering/entities/meter-application.entity';
+import { Customer } from '../customers/entities/customer.entity';
+import { User } from '../users/entities/user.entity';
+import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
 
@@ -13,7 +17,13 @@ import { JobsService } from './jobs.service';
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'development-secret',
     }),
-    TypeOrmModule.forFeature([Job, JobAuditLog]),
+    TypeOrmModule.forFeature([
+      Job,
+      MeterApplication,
+      Customer,
+      TimelineEvent,
+      User,
+    ]),
   ],
   controllers: [JobsController, CustomerJobsController],
   providers: [JobsService, JobAuditLogsService],
