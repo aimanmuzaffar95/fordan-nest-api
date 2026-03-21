@@ -81,7 +81,7 @@ export class AssignmentsService {
       (sum, a) => sum + Number(a.job.systemSizeKw),
       0,
     );
-    const addKw = Number(job.systemSizeKw);
+    const addKw = Number(job.job.systemSizeKw);
     const capKw = Number(team.dailyCapacityKw);
     if (usedKw + addKw > capKw + 1e-6) {
       throw new ConflictException({

@@ -1,12 +1,9 @@
 import {
   Column,
+  CreateDateColumn,
   Entity,
   JoinColumn,
   ManyToOne,
-  OneToOne,
-  PrimaryGeneratedColumn,
-  CreateDateColumn,
-  Entity,
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,

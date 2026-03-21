@@ -5,9 +5,7 @@ import {
   PreconditionFailedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
-import { Customer } from '../customers/entities/customer.entity';
-import { UserRole } from '../users/entities/user-role.enum';
+import { Brackets, DataSource, Repository } from 'typeorm';
 import { JobAuditLogsService } from './job-audit-logs.service';
 import { JobAuditAction } from './job-audit-action.enum';
 import { CreateJobForCustomerDto } from './dto/create-job-for-customer.dto';
@@ -15,7 +13,6 @@ import { JobDetailResponseDto } from './dto/job-detail-response.dto';
 import { JobPipelineStage } from './job-pipeline-stage.enum';
 import { JobSystemType } from './job-system-type.enum';
 import { JobAuditLog } from './entities/job-audit-log.entity';
-import { Brackets, DataSource, Repository } from 'typeorm';
 import { Job } from './entities/job.entity';
 import { Customer } from '../customers/entities/customer.entity';
 import { User } from '../users/entities/user.entity';
@@ -41,7 +38,6 @@ export class JobsService {
     private readonly customersRepo: Repository<Customer>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
-    private readonly dataSource: DataSource,
   ) {}
 
   async list(query: FindJobsQueryDto, viewer?: JobListViewer) {
@@ -94,9 +90,12 @@ export class JobsService {
     return { items, total, page, pageSize };
   }
 
-  private async findOneOrFail(jobsRepo: Repository<Job>, id: string) {
+  private async findOneOrFail(
+    jobsRepo: Repository<Job>,
+    id: string,
+    viewer?: JobListViewer,
+  ) {
     const job = await jobsRepo.findOne({
-      
       where: { id },
       relations: {
         customer: true,
@@ -114,8 +113,8 @@ export class JobsService {
     return job;
   }
 
-  async getOne(id: string) {
-    const job = await this.findOneOrFail(this.jobsRepo, id);
+  async getOne(id: string, viewer?: JobListViewer) {
+    const job = await this.findOneOrFail(this.jobsRepo, id, viewer);
     const timeline = await this.dataSource.getRepository(JobAuditLog).find({
       where: { jobId: id },
       relations: {
@@ -407,6 +406,8 @@ export class JobsService {
 
     const metadata = entry.metadata as { overridePreMeterLock?: unknown };
     return metadata.overridePreMeterLock === true;
+  }
+
   /** Direct assignment or same team as `assignedTeamId` on the job. */
   private async assertInstallerJobAccess(job: Job, userId: string) {
     if (job.assignedStaffUserId === userId) {
@@ -468,8 +469,8 @@ export class JobsService {
       const currentJob = await jobRepo.findOne({ where: { id: jobId } });
       if (!currentJob) throw new NotFoundException('Job not found');
 
-      const actualFromStage = currentJob.pipelineStage;
-      const actualToStage = toStage;
+      const actualFromStage = currentJob.pipelineStage as JobPipelineStage;
+      const actualToStage = toStage as JobPipelineStage;
       const originalPosition = currentJob.pipelinePosition ?? 0;
 
       if (actualFromStage === actualToStage) {
@@ -606,7 +607,7 @@ export class JobsService {
 
       const job = jobRepo.create({
         customerId,
-        systemType: dto.systemType,
+        systemType: dto.systemType as JobSystemType,
         systemSizeKw: dto.systemSizeKw.toString(),
         batterySizeKwh:
           typeof dto.batterySizeKwh === 'number'
@@ -618,10 +619,10 @@ export class JobsService {
         depositAmount: dto.depositAmount.toString(),
         depositDate: dto.depositPaid ? (dto.depositDate ?? today) : null,
         etaCompletionDate: dto.etaCompletionDate ?? null,
-        pipelineStage: dto.pipelineStage,
+        pipelineStage: dto.pipelineStage as JobPipelineStage,
         pipelinePosition: nextPipelinePosition,
         installDate: dto.installDate ?? null,
-        jobStatus: dto.pipelineStage,
+        jobStatus: dto.pipelineStage as JobPipelineStage,
         invoiceStatus: 'not_invoiced',
         invoiceDate: null,
         invoiceDueDate: null,

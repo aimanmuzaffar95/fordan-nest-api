@@ -38,8 +38,8 @@ export class Job {
   jobStatus: JobPipelineStage;
 
   // Baseline requirement: kW size used for capacity + reporting.
-  @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
-  systemSizeKw: string;
+  @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
+  systemSizeKw: string | null;
 
   @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
   batterySizeKwh: string | null;
@@ -97,9 +97,6 @@ export class Job {
 
   @Column({ type: 'uuid', nullable: true })
   managerId: string | null;
-
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  jobStatus: string | null;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   invoiceStatus: string | null;

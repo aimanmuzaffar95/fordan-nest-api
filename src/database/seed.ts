@@ -163,12 +163,6 @@ async function main(): Promise<void> {
       ]);
     }
 
-    // Seed stage-aware jobs so the pipeline board has meaningful local data.
-    if ((await jobsRepo.count()) === 0) {
-      const customers = await customersRepo.find({
-        order: { createdAt: 'ASC' },
-      });
-      if (customers.length > 0) {
     // Baseline operational setup: teams are required for scheduling/assignment capacity.
     if ((await teamsRepo.count()) === 0) {
       const teamsToInsert = teamsRepo.create([
@@ -181,11 +175,10 @@ async function main(): Promise<void> {
 
     // Minimal jobs seed so the invoice/order flow has records to link against.
     if ((await jobsRepo.count()) === 0) {
-      const customer = await customersRepo
-        .createQueryBuilder('customer')
-        .orderBy('customer.createdAt', 'DESC')
-        .getOne();
-      if (customer) {
+      const customers = await customersRepo.find({
+        order: { createdAt: 'ASC' },
+      });
+      if (customers.length > 0) {
         const jobsToInsert = [
           jobsRepo.create({
             customer: customers[0],

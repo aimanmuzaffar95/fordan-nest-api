@@ -3,13 +3,11 @@ import {
   Controller,
   Get,
   Param,
-  Body,
   Patch,
   Req,
   ParseUUIDPipe,
   Post,
   Query,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import {

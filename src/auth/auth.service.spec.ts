@@ -5,6 +5,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { hash } from 'bcryptjs';
 import { Repository } from 'typeorm';
 import { UserRole } from '../users/entities/user-role.enum';
+import { StaffService } from '../staff/staff.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { UserCredential } from './entities/user-credential.entity';
@@ -35,6 +36,12 @@ describe('AuthService', () => {
           provide: UsersService,
           useValue: {
             seedDefaultUsers: jest.fn(),
+          },
+        },
+        {
+          provide: StaffService,
+          useValue: {
+            seedDefaultStaffRoles: jest.fn(),
           },
         },
         {
