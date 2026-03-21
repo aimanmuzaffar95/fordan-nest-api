@@ -19,6 +19,7 @@ import { JobsService } from './jobs.service';
     }),
     TypeOrmModule.forFeature([
       Job,
+      JobAuditLog,
       MeterApplication,
       Customer,
       TimelineEvent,

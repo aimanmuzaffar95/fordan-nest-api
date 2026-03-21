@@ -7,7 +7,7 @@ import {
   TableIndex,
 } from 'typeorm';
 
-export class AddStaffRolesAndStaffProfileFields20260320 implements MigrationInterface {
+export class AddStaffRolesAndStaffProfileFields20260320_1700000000008 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({
