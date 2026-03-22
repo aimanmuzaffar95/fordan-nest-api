@@ -9,6 +9,7 @@ import { MeterApplication } from '../metering/entities/meter-application.entity'
 import { Customer } from '../customers/entities/customer.entity';
 import { User } from '../users/entities/user.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
+import { Note } from '../notes/entities/note.entity';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
 
@@ -24,6 +25,7 @@ import { JobsService } from './jobs.service';
       Customer,
       TimelineEvent,
       User,
+      Note,
     ]),
   ],
   controllers: [JobsController, CustomerJobsController],

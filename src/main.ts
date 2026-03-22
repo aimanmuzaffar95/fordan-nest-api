@@ -23,6 +23,7 @@ async function bootstrap() {
       'Content-Type',
       'Authorization',
       'X-Installer-Setup-Token',
+      'X-Public-Lead-Secret',
     ],
     credentials: false,
   });

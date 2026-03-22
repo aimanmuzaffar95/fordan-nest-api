@@ -30,6 +30,9 @@ import { AssignmentsModule } from './assignments/assignments.module';
 import { ScheduleModule } from './schedule/schedule.module';
 import { MeteringModule } from './metering/metering.module';
 import { RuntimeSettingsModule } from './runtime-settings/runtime-settings.module';
+import { PublicLeadsModule } from './public-leads/public-leads.module';
+import { MailModule } from './mail/mail.module';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -70,6 +73,13 @@ const DB_NAME =
   process.env.DATABASE_NAME ?? process.env.DB_DATABASE ?? 'nestdb';
 const DB_SOCKET_PATH = process.env.DATABASE_SOCKET_PATH?.trim() || undefined;
 const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
+
+const publicLeadThrottleTtl = Number(
+  process.env.PUBLIC_LEAD_THROTTLE_TTL_MS ?? '60000',
+);
+const publicLeadThrottleLimit = Number(
+  process.env.PUBLIC_LEAD_THROTTLE_LIMIT ?? '12',
+);
 
 @Module({
   imports: [
@@ -125,6 +135,16 @@ const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
     ScheduleModule,
     MeteringModule,
     RuntimeSettingsModule,
+    MailModule,
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: publicLeadThrottleTtl,
+          limit: publicLeadThrottleLimit,
+        },
+      ],
+    }),
+    PublicLeadsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

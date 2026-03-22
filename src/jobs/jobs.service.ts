@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -19,6 +20,7 @@ import { User } from '../users/entities/user.entity';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
 import { MeterApplication } from '../metering/entities/meter-application.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
+import { Note } from '../notes/entities/note.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -38,6 +40,8 @@ export class JobsService {
     private readonly customersRepo: Repository<Customer>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
+    @InjectRepository(Note)
+    private readonly notesRepo: Repository<Note>,
   ) {}
 
   async list(query: FindJobsQueryDto, viewer?: JobListViewer) {
@@ -592,10 +596,22 @@ export class JobsService {
 
     const today = new Date().toISOString().slice(0, 10);
 
+    let assignedStaffUserId: string | null = null;
+    if (dto.assignedStaffUserId) {
+      const assignee = await this.usersRepo.findOne({
+        where: { id: dto.assignedStaffUserId },
+      });
+      if (!assignee) {
+        throw new BadRequestException('Assigned staff user not found');
+      }
+      assignedStaffUserId = assignee.id;
+    }
+
     return this.dataSource.transaction(async (manager) => {
       const jobRepo = manager.getRepository(Job);
       const meterRepo = manager.getRepository(MeterApplication);
       const timelineRepository = manager.getRepository(TimelineEvent);
+      const noteRepo = manager.getRepository(Note);
 
       const maxInStage = await jobRepo.findOne({
         where: { pipelineStage: dto.pipelineStage },
@@ -628,7 +644,7 @@ export class JobsService {
         invoiceDueDate: null,
         paidDate: null,
         assignedTeamId: null,
-        assignedStaffUserId: null,
+        assignedStaffUserId,
         scheduledDate: null,
         scheduledSlot: null,
         managerId: null,
@@ -655,6 +671,17 @@ export class JobsService {
       await createMeter('pre_meter', dto.preMeterStatus);
       await createMeter('post_meter', dto.postMeterStatus);
 
+      const notesBody = dto.notes?.trim();
+      if (notesBody) {
+        await noteRepo.save(
+          noteRepo.create({
+            jobId: savedJob.id,
+            body: notesBody,
+            createdByUserId: userId,
+          }),
+        );
+      }
+
       await timelineRepository.save(
         timelineRepository.create({
           jobId: savedJob.id,
@@ -662,6 +689,7 @@ export class JobsService {
           payload: {
             pipelineStage: savedJob.pipelineStage,
             pipelinePosition: savedJob.pipelinePosition,
+            source: 'staff_job_create',
           },
           createdByUserId: userId,
         }),

@@ -5,8 +5,11 @@ import {
   IsNumber,
   IsOptional,
   IsInt,
+  IsUUID,
+  MaxLength,
   Min,
   IsDateString,
+  IsString,
 } from 'class-validator';
 
 const VALID_PIPELINE_STAGES = [
@@ -82,4 +85,16 @@ export class CreateJobDto {
 
   @IsIn([...VALID_METER_STATUSES])
   postMeterStatus!: (typeof VALID_METER_STATUSES)[number];
+
+  @IsOptional()
+  @IsUUID('4')
+  assignedStaffUserId?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(4000)
+  notes?: string;
 }
