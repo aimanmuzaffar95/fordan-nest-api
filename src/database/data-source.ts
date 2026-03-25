@@ -15,6 +15,7 @@ import { Alert } from '../alerts/entities/alert.entity';
 import { File as FileEntity } from '../files/entities/file.entity';
 import { Note } from '../notes/entities/note.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
+import { EmployeeForm } from '../employee-forms/entities/employee-form.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -99,6 +100,7 @@ export const AppDataSource = new DataSource({
     FileEntity,
     Note,
     TimelineEvent,
+    EmployeeForm,
   ],
   migrations: isMigrationCli
     ? ['src/migrations/*.ts']

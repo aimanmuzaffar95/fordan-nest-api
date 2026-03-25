@@ -21,7 +21,7 @@ const lockedAtColumnType = (() => {
     process.env.DB_DIALECT ??
     process.env.DATABASE_DIALECT ??
     process.env.TYPEORM_CONNECTION ??
-    '';
+    'postgres';
   const v = raw.trim().toLowerCase();
   return v.includes('postgres') ? 'timestamp' : 'datetime';
 })();

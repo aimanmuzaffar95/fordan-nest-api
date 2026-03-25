@@ -33,6 +33,8 @@ import { RuntimeSettingsModule } from './runtime-settings/runtime-settings.modul
 import { PublicLeadsModule } from './public-leads/public-leads.module';
 import { MailModule } from './mail/mail.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { EmployeeFormsModule } from './employee-forms/employee-forms.module';
+import { EmployeeForm } from './employee-forms/entities/employee-form.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -121,6 +123,7 @@ const publicLeadThrottleLimit = Number(
         FileEntity,
         Note,
         TimelineEvent,
+        EmployeeForm,
       ],
       synchronize: SYNCHRONIZE,
     }),
@@ -135,6 +138,7 @@ const publicLeadThrottleLimit = Number(
     ScheduleModule,
     MeteringModule,
     RuntimeSettingsModule,
+    EmployeeFormsModule,
     MailModule,
     ThrottlerModule.forRoot({
       throttlers: [
