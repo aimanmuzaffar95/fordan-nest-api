@@ -9,6 +9,12 @@ import { JobPipelineStage } from '../jobs/job-pipeline-stage.enum';
 import { JobSystemType } from '../jobs/job-system-type.enum';
 import { StaffRole } from '../staff/entities/staff-role.entity';
 import { Team } from '../teams/entities/team.entity';
+import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
+import { SolarPanelStockStatus } from '../solar-panels/entities/solar-panel-stock-status.enum';
+import { Inverter } from '../inverters/entities/inverter.entity';
+import { InverterStockStatus } from '../inverters/entities/inverter-stock-status.enum';
+import { Battery } from '../batteries/entities/battery.entity';
+import { BatteryStockStatus } from '../batteries/entities/battery-stock-status.enum';
 
 type SeedUser = {
   username: string;
@@ -71,6 +77,9 @@ async function main(): Promise<void> {
     const customersRepo = AppDataSource.getRepository(Customer);
     const jobsRepo = AppDataSource.getRepository(Job);
     const staffRolesRepo = AppDataSource.getRepository(StaffRole);
+    const solarPanelsRepo = AppDataSource.getRepository(SolarPanel);
+    const invertersRepo = AppDataSource.getRepository(Inverter);
+    const batteriesRepo = AppDataSource.getRepository(Battery);
 
     const defaultStaffRoles = [
       {
@@ -171,6 +180,129 @@ async function main(): Promise<void> {
         { name: 'Team C', dailyCapacityKw: '100.00' },
       ]);
       await teamsRepo.save(teamsToInsert);
+    }
+
+    if ((await solarPanelsRepo.count()) === 0) {
+      await solarPanelsRepo.save(
+        solarPanelsRepo.create([
+          {
+            brand: 'Longi Solar',
+            model: 'LR5-54HTH-440M',
+            wattage: '440.00',
+            stockStatus: SolarPanelStockStatus.AVAILABLE,
+            efficiency: '22.50',
+            dimensions: '1722 x 1134 x 30 mm',
+            weightKg: '20.80',
+            warrantyYears: 25,
+            notes: 'High-efficiency mono module for residential installs.',
+          },
+          {
+            brand: 'Trina Solar',
+            model: 'TSM-NEG9R.28',
+            wattage: '440.00',
+            stockStatus: SolarPanelStockStatus.OUT_OF_STOCK,
+            efficiency: '22.00',
+            dimensions: '1762 x 1134 x 30 mm',
+            weightKg: '21.00',
+            warrantyYears: 25,
+            notes: 'Dual-glass module suited for premium rooftop systems.',
+          },
+          {
+            brand: 'Canadian Solar',
+            model: 'CS7L-595MS',
+            wattage: '595.00',
+            stockStatus: SolarPanelStockStatus.DISCONTINUED,
+            efficiency: '21.30',
+            dimensions: '2172 x 1303 x 35 mm',
+            weightKg: '31.00',
+            warrantyYears: 25,
+            notes: 'Legacy utility-scale panel kept for historical reference.',
+          },
+        ]),
+      );
+    }
+
+    if ((await invertersRepo.count()) === 0) {
+      await invertersRepo.save(
+        invertersRepo.create([
+          {
+            brand: 'Huawei',
+            model: 'M1 High Current',
+            capacityKw: '10.00',
+            stockStatus: InverterStockStatus.AVAILABLE,
+            inverterType: 'Hybrid',
+            phases: 'Three phase',
+            efficiency: '98.60',
+            warrantyYears: 10,
+            notes: 'Popular hybrid inverter for premium residential systems.',
+          },
+          {
+            brand: 'Fronius',
+            model: '8.2-1',
+            capacityKw: '8.20',
+            stockStatus: InverterStockStatus.OUT_OF_STOCK,
+            inverterType: 'String',
+            phases: 'Single phase',
+            efficiency: '97.90',
+            warrantyYears: 10,
+            notes:
+              'Single-phase string inverter for medium residential arrays.',
+          },
+          {
+            brand: 'GoodWe',
+            model: 'GW15K-ET',
+            capacityKw: '15.00',
+            stockStatus: InverterStockStatus.DISCONTINUED,
+            inverterType: 'Hybrid',
+            phases: 'Three phase',
+            efficiency: '98.20',
+            warrantyYears: 5,
+            notes:
+              'Legacy three-phase inverter retained for historical lookups.',
+          },
+        ]),
+      );
+    }
+
+    if ((await batteriesRepo.count()) === 0) {
+      await batteriesRepo.save(
+        batteriesRepo.create([
+          {
+            brand: 'Tesla',
+            model: 'PW-3-GEN',
+            capacityKwh: '13.50',
+            stockStatus: BatteryStockStatus.AVAILABLE,
+            voltage: '350.00',
+            chemistry: 'LFP',
+            cycleLife: 6000,
+            warrantyYears: 10,
+            notes: 'Flagship residential battery with integrated inverter.',
+          },
+          {
+            brand: 'BYD',
+            model: 'HVS 10.2',
+            capacityKwh: '10.20',
+            stockStatus: BatteryStockStatus.OUT_OF_STOCK,
+            voltage: '409.00',
+            chemistry: 'LFP',
+            cycleLife: 6000,
+            warrantyYears: 10,
+            notes: 'Modular stackable storage for premium hybrid systems.',
+          },
+          {
+            brand: 'Sonnen',
+            model: 'Eco 9.43',
+            capacityKwh: '10.00',
+            stockStatus: BatteryStockStatus.DISCONTINUED,
+            voltage: '120.00',
+            chemistry: 'Lithium iron phosphate',
+            cycleLife: 10000,
+            warrantyYears: 10,
+            notes:
+              'Legacy battery retained for upgrade and replacement planning.',
+          },
+        ]),
+      );
     }
 
     // Minimal jobs seed so the invoice/order flow has records to link against.

@@ -16,6 +16,9 @@ import { File as FileEntity } from '../files/entities/file.entity';
 import { Note } from '../notes/entities/note.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { EmployeeForm } from '../employee-forms/entities/employee-form.entity';
+import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
+import { Inverter } from '../inverters/entities/inverter.entity';
+import { Battery } from '../batteries/entities/battery.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -101,6 +104,9 @@ export const AppDataSource = new DataSource({
     Note,
     TimelineEvent,
     EmployeeForm,
+    SolarPanel,
+    Inverter,
+    Battery,
   ],
   migrations: isMigrationCli
     ? ['src/migrations/*.ts']

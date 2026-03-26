@@ -35,6 +35,12 @@ import { MailModule } from './mail/mail.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { EmployeeFormsModule } from './employee-forms/employee-forms.module';
 import { EmployeeForm } from './employee-forms/entities/employee-form.entity';
+import { SolarPanelsModule } from './solar-panels/solar-panels.module';
+import { SolarPanel } from './solar-panels/entities/solar-panel.entity';
+import { InvertersModule } from './inverters/inverters.module';
+import { Inverter } from './inverters/entities/inverter.entity';
+import { BatteriesModule } from './batteries/batteries.module';
+import { Battery } from './batteries/entities/battery.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -124,6 +130,9 @@ const publicLeadThrottleLimit = Number(
         Note,
         TimelineEvent,
         EmployeeForm,
+        SolarPanel,
+        Inverter,
+        Battery,
       ],
       synchronize: SYNCHRONIZE,
     }),
@@ -139,6 +148,9 @@ const publicLeadThrottleLimit = Number(
     MeteringModule,
     RuntimeSettingsModule,
     EmployeeFormsModule,
+    SolarPanelsModule,
+    InvertersModule,
+    BatteriesModule,
     MailModule,
     ThrottlerModule.forRoot({
       throttlers: [

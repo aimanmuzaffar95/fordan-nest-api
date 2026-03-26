@@ -40,7 +40,9 @@ async function bootstrap() {
   );
   const openApi = setupOpenApi(app);
   const port = Number(process.env.PORT ?? 3000);
-  await app.listen(port, '0.0.0.0');
+  // Avoid IPv4-only binding so `localhost` checks work both on host and inside
+  // the dev container, where `localhost` can resolve to `::1`.
+  await app.listen(port);
   if (openApi) {
     logger.log(`OpenAPI UI: http://localhost:${port}/api/docs`);
   }
