@@ -23,6 +23,9 @@ export class Battery {
   @Column({ type: 'numeric', precision: 10, scale: 2 })
   capacityKwh: string;
 
+  @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
+  defaultUnitPrice: string;
+
   @Column({
     type: 'varchar',
     length: 30,

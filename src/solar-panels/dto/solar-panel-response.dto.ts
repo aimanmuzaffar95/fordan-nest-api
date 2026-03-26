@@ -8,6 +8,7 @@ export class SolarPanelResponseDto {
   brand: string;
   model: string;
   wattage: number;
+  defaultUnitPrice: number;
   stockStatus: SolarPanelStockStatus;
   efficiency: number | null;
   dimensions: string | null;
@@ -24,6 +25,7 @@ export class SolarPanelResponseDto {
       brand: entity.brand,
       model: entity.model,
       wattage: Number(entity.wattage),
+      defaultUnitPrice: Number(entity.defaultUnitPrice),
       stockStatus: entity.stockStatus,
       efficiency: entity.efficiency === null ? null : Number(entity.efficiency),
       dimensions: entity.dimensions,

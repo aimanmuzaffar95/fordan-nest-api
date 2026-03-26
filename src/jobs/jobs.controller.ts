@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Patch,
+  Put,
   Req,
   ParseUUIDPipe,
   Post,
@@ -25,6 +26,7 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
 import { TransitionJobStageDto } from './dto/transition-job-stage.dto';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
+import { UpdateJobProposalConfigDto } from './dto/update-job-proposal-config.dto';
 import { JobsService } from './jobs.service';
 
 @ApiTags('Jobs')
@@ -89,6 +91,45 @@ export class JobsController {
       throw new Error('Missing authenticated user context');
     }
     return this.jobs.getOne(id, { userId, role });
+  }
+
+  @Get(':id/proposal-config')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Get job proposal configuration',
+    description:
+      'Returns the persisted proposal-only equipment selections for a job. **Installer:** **404** if the job is not assigned to you.',
+  })
+  getProposalConfig(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.jobs.getProposalConfig(id, { userId, role });
+  }
+
+  @Put(':id/proposal-config')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Replace job proposal configuration',
+    description:
+      'Persists the proposal-only equipment selection set for the job. Existing proposal selections are replaced atomically.',
+  })
+  updateProposalConfig(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateJobProposalConfigDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.jobs.updateProposalConfig(id, dto, { userId, role });
   }
 
   @Patch(':id/pipeline')

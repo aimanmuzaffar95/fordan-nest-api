@@ -38,6 +38,10 @@ export class CreateBatteryDto {
   @Min(0.01)
   capacityKwh!: number;
 
+  @IsNumber()
+  @Min(0)
+  defaultUnitPrice!: number;
+
   @IsEnum(BatteryStockStatus)
   stockStatus!: BatteryStockStatus;
 

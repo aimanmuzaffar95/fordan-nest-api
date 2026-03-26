@@ -40,6 +40,7 @@ export class InvertersService {
         brand: dto.brand,
         model: dto.model,
         capacityKw: dto.capacityKw.toFixed(2),
+        defaultUnitPrice: dto.defaultUnitPrice.toFixed(2),
         stockStatus: dto.stockStatus,
         inverterType: dto.inverterType ?? null,
         phases: dto.phases ?? null,

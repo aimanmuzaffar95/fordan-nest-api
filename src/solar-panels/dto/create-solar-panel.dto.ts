@@ -38,6 +38,10 @@ export class CreateSolarPanelDto {
   @Min(0.01)
   wattage!: number;
 
+  @IsNumber()
+  @Min(0)
+  defaultUnitPrice!: number;
+
   @IsEnum(SolarPanelStockStatus)
   stockStatus!: SolarPanelStockStatus;
 

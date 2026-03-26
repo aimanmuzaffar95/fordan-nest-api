@@ -9,6 +9,7 @@ import { Customer } from './customers/entities/customer.entity';
 import { User } from './users/entities/user.entity';
 import { InstallerModule } from './installer/installer.module';
 import { JobAuditLog } from './jobs/entities/job-audit-log.entity';
+import { JobProposalSelection } from './jobs/entities/job-proposal-selection.entity';
 import { JobsModule } from './jobs/jobs.module';
 import { Job } from './jobs/entities/job.entity';
 import { Invoice } from './invoices/entities/invoice.entity';
@@ -118,6 +119,7 @@ const publicLeadThrottleLimit = Number(
         Customer,
         Job,
         JobAuditLog,
+        JobProposalSelection,
         Invoice,
         InvoiceItem,
         InvoicePayment,

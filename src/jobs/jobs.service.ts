@@ -7,13 +7,23 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
+import { buildEquipmentCatalogName } from '../equipment-catalog/build-equipment-catalog-name';
+import { Battery } from '../batteries/entities/battery.entity';
+import { Inverter } from '../inverters/entities/inverter.entity';
 import { JobAuditLogsService } from './job-audit-logs.service';
 import { JobAuditAction } from './job-audit-action.enum';
 import { CreateJobForCustomerDto } from './dto/create-job-for-customer.dto';
 import { JobDetailResponseDto } from './dto/job-detail-response.dto';
+import { JobProposalConfigResponseDto } from './dto/job-proposal-config-response.dto';
+import {
+  UpdateJobProposalConfigDto,
+  UpdateJobProposalConfigItemDto,
+} from './dto/update-job-proposal-config.dto';
+import { JobProposalEquipmentType } from './job-proposal-equipment-type.enum';
 import { JobPipelineStage } from './job-pipeline-stage.enum';
 import { JobSystemType } from './job-system-type.enum';
 import { JobAuditLog } from './entities/job-audit-log.entity';
+import { JobProposalSelection } from './entities/job-proposal-selection.entity';
 import { Job } from './entities/job.entity';
 import { Customer } from '../customers/entities/customer.entity';
 import { User } from '../users/entities/user.entity';
@@ -24,6 +34,7 @@ import { Note } from '../notes/entities/note.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
 import { CreateJobDto } from './dto/create-job.dto';
+import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 
 export type JobListViewer = { userId: string; role: UserRole };
 
@@ -36,12 +47,20 @@ export class JobsService {
     private readonly jobAuditLogs: JobAuditLogsService,
     @InjectRepository(MeterApplication)
     private readonly meterApplicationsRepo: Repository<MeterApplication>,
+    @InjectRepository(JobProposalSelection)
+    private readonly jobProposalSelectionsRepo: Repository<JobProposalSelection>,
     @InjectRepository(Customer)
     private readonly customersRepo: Repository<Customer>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     @InjectRepository(Note)
     private readonly notesRepo: Repository<Note>,
+    @InjectRepository(SolarPanel)
+    private readonly solarPanelsRepo: Repository<SolarPanel>,
+    @InjectRepository(Inverter)
+    private readonly invertersRepo: Repository<Inverter>,
+    @InjectRepository(Battery)
+    private readonly batteriesRepo: Repository<Battery>,
   ) {}
 
   async list(query: FindJobsQueryDto, viewer?: JobListViewer) {
@@ -130,6 +149,57 @@ export class JobsService {
     });
 
     return this.mapJobDetail(job, timeline);
+  }
+
+  async getProposalConfig(
+    id: string,
+    viewer?: JobListViewer,
+  ): Promise<JobProposalConfigResponseDto> {
+    await this.findOneOrFail(this.jobsRepo, id, viewer);
+
+    const selections = await this.jobProposalSelectionsRepo.find({
+      where: { jobId: id },
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
+    });
+
+    return this.buildProposalConfigResponse(id, selections);
+  }
+
+  async updateProposalConfig(
+    jobId: string,
+    dto: UpdateJobProposalConfigDto,
+    viewer: JobListViewer,
+  ): Promise<JobProposalConfigResponseDto> {
+    await this.findOneOrFail(this.jobsRepo, jobId, viewer);
+
+    return this.dataSource.transaction(async (manager) => {
+      const proposalSelectionsRepo =
+        manager.getRepository(JobProposalSelection);
+      const normalizedItems = await this.normalizeProposalItems(dto.items);
+
+      await proposalSelectionsRepo.delete({ jobId });
+
+      const savedSelections =
+        normalizedItems.length === 0
+          ? []
+          : await proposalSelectionsRepo.save(
+              normalizedItems.map((item, index) =>
+                proposalSelectionsRepo.create({
+                  jobId,
+                  equipmentType: item.equipmentType,
+                  equipmentId: item.equipmentId,
+                  equipmentNameSnapshot: item.name,
+                  equipmentSubtitleSnapshot: item.subtitle,
+                  defaultUnitPriceSnapshot: item.defaultUnitPrice.toFixed(2),
+                  proposalUnitPrice: item.proposalUnitPrice.toFixed(2),
+                  quantity: item.quantity,
+                  sortOrder: index,
+                }),
+              ),
+            );
+
+      return this.buildProposalConfigResponse(jobId, savedSelections);
+    });
   }
 
   async createForCustomer(
@@ -410,6 +480,252 @@ export class JobsService {
 
     const metadata = entry.metadata as { overridePreMeterLock?: unknown };
     return metadata.overridePreMeterLock === true;
+  }
+
+  private async buildProposalConfigResponse(
+    jobId: string,
+    selections: JobProposalSelection[],
+  ): Promise<JobProposalConfigResponseDto> {
+    const catalogMaps = await this.loadEquipmentMaps(selections);
+    const items = selections.map((selection) =>
+      this.mapProposalSelection(selection, catalogMaps),
+    );
+
+    return {
+      jobId,
+      items,
+      totalProposalAmount: items.reduce((sum, item) => sum + item.lineTotal, 0),
+    };
+  }
+
+  private async normalizeProposalItems(
+    items: UpdateJobProposalConfigItemDto[],
+  ) {
+    const requestedByType = {
+      [JobProposalEquipmentType.PANEL]: [] as string[],
+      [JobProposalEquipmentType.INVERTER]: [] as string[],
+      [JobProposalEquipmentType.BATTERY]: [] as string[],
+    };
+
+    items.forEach((item) => {
+      requestedByType[item.equipmentType].push(item.equipmentId);
+    });
+
+    const panelIds = requestedByType[JobProposalEquipmentType.PANEL];
+    const inverterIds = requestedByType[JobProposalEquipmentType.INVERTER];
+    const batteryIds = requestedByType[JobProposalEquipmentType.BATTERY];
+
+    const [resolvedPanels, resolvedInverters, resolvedBatteries] =
+      await Promise.all([
+        panelIds.length > 0
+          ? this.solarPanelsRepo
+              .createQueryBuilder('panel')
+              .where('panel.id IN (:...ids)', { ids: panelIds })
+              .getMany()
+          : Promise.resolve([] as SolarPanel[]),
+        inverterIds.length > 0
+          ? this.invertersRepo
+              .createQueryBuilder('inverter')
+              .where('inverter.id IN (:...ids)', { ids: inverterIds })
+              .getMany()
+          : Promise.resolve([] as Inverter[]),
+        batteryIds.length > 0
+          ? this.batteriesRepo
+              .createQueryBuilder('battery')
+              .where('battery.id IN (:...ids)', { ids: batteryIds })
+              .getMany()
+          : Promise.resolve([] as Battery[]),
+      ]);
+
+    const panelMap = new Map(resolvedPanels.map((panel) => [panel.id, panel]));
+    const inverterMap = new Map(
+      resolvedInverters.map((inverter) => [inverter.id, inverter]),
+    );
+    const batteryMap = new Map(
+      resolvedBatteries.map((battery) => [battery.id, battery]),
+    );
+
+    return items.map((item) => {
+      if (item.equipmentType === JobProposalEquipmentType.PANEL) {
+        const panel = panelMap.get(item.equipmentId);
+        if (!panel) {
+          throw new BadRequestException(
+            'One or more solar panels were not found',
+          );
+        }
+
+        return {
+          ...item,
+          name: buildEquipmentCatalogName(panel.brand, panel.model),
+          subtitle: `${this.formatNumeric(panel.wattage)} W panel`,
+          defaultUnitPrice: Number(panel.defaultUnitPrice),
+        };
+      }
+
+      if (item.equipmentType === JobProposalEquipmentType.INVERTER) {
+        const inverter = inverterMap.get(item.equipmentId);
+        if (!inverter) {
+          throw new BadRequestException('One or more inverters were not found');
+        }
+
+        return {
+          ...item,
+          name: buildEquipmentCatalogName(inverter.brand, inverter.model),
+          subtitle: `${this.formatNumeric(inverter.capacityKw)} kW inverter`,
+          defaultUnitPrice: Number(inverter.defaultUnitPrice),
+        };
+      }
+
+      const battery = batteryMap.get(item.equipmentId);
+      if (!battery) {
+        throw new BadRequestException('One or more batteries were not found');
+      }
+
+      return {
+        ...item,
+        name: buildEquipmentCatalogName(battery.brand, battery.model),
+        subtitle: `${this.formatNumeric(battery.capacityKwh)} kWh battery`,
+        defaultUnitPrice: Number(battery.defaultUnitPrice),
+      };
+    });
+  }
+
+  private async loadEquipmentMaps(selections: JobProposalSelection[]) {
+    const panelIds = selections
+      .filter(
+        (selection) =>
+          selection.equipmentType === JobProposalEquipmentType.PANEL,
+      )
+      .map((selection) => selection.equipmentId);
+    const inverterIds = selections
+      .filter(
+        (selection) =>
+          selection.equipmentType === JobProposalEquipmentType.INVERTER,
+      )
+      .map((selection) => selection.equipmentId);
+    const batteryIds = selections
+      .filter(
+        (selection) =>
+          selection.equipmentType === JobProposalEquipmentType.BATTERY,
+      )
+      .map((selection) => selection.equipmentId);
+
+    const [panels, inverters, batteries] = await Promise.all([
+      panelIds.length > 0
+        ? this.solarPanelsRepo
+            .createQueryBuilder('panel')
+            .where('panel.id IN (:...ids)', { ids: panelIds })
+            .getMany()
+        : Promise.resolve([] as SolarPanel[]),
+      inverterIds.length > 0
+        ? this.invertersRepo
+            .createQueryBuilder('inverter')
+            .where('inverter.id IN (:...ids)', { ids: inverterIds })
+            .getMany()
+        : Promise.resolve([] as Inverter[]),
+      batteryIds.length > 0
+        ? this.batteriesRepo
+            .createQueryBuilder('battery')
+            .where('battery.id IN (:...ids)', { ids: batteryIds })
+            .getMany()
+        : Promise.resolve([] as Battery[]),
+    ]);
+
+    return {
+      panels: new Map(panels.map((panel) => [panel.id, panel])),
+      inverters: new Map(inverters.map((inverter) => [inverter.id, inverter])),
+      batteries: new Map(batteries.map((battery) => [battery.id, battery])),
+    };
+  }
+
+  private mapProposalSelection(
+    selection: JobProposalSelection,
+    catalogMaps: {
+      panels: Map<string, SolarPanel>;
+      inverters: Map<string, Inverter>;
+      batteries: Map<string, Battery>;
+    },
+  ) {
+    const proposalUnitPrice = Number(selection.proposalUnitPrice);
+    const defaultUnitPrice = Number(selection.defaultUnitPriceSnapshot);
+
+    if (selection.equipmentType === JobProposalEquipmentType.PANEL) {
+      const panel = catalogMaps.panels.get(selection.equipmentId);
+      return {
+        id: selection.id,
+        equipmentType: selection.equipmentType,
+        equipmentId: selection.equipmentId,
+        name: panel
+          ? buildEquipmentCatalogName(panel.brand, panel.model)
+          : selection.equipmentNameSnapshot,
+        subtitle: panel
+          ? `${this.formatNumeric(panel.wattage)} W panel`
+          : selection.equipmentSubtitleSnapshot,
+        quantity: selection.quantity,
+        defaultUnitPrice,
+        proposalUnitPrice,
+        lineTotal: proposalUnitPrice * selection.quantity,
+        stockStatus: panel?.stockStatus ?? null,
+        wattage: panel ? Number(panel.wattage) : null,
+        inverterCapacityKw: null,
+        batteryCapacityKwh: null,
+        efficiency:
+          panel && panel.efficiency !== null ? Number(panel.efficiency) : null,
+      };
+    }
+
+    if (selection.equipmentType === JobProposalEquipmentType.INVERTER) {
+      const inverter = catalogMaps.inverters.get(selection.equipmentId);
+      return {
+        id: selection.id,
+        equipmentType: selection.equipmentType,
+        equipmentId: selection.equipmentId,
+        name: inverter
+          ? buildEquipmentCatalogName(inverter.brand, inverter.model)
+          : selection.equipmentNameSnapshot,
+        subtitle: inverter
+          ? `${this.formatNumeric(inverter.capacityKw)} kW inverter`
+          : selection.equipmentSubtitleSnapshot,
+        quantity: selection.quantity,
+        defaultUnitPrice,
+        proposalUnitPrice,
+        lineTotal: proposalUnitPrice * selection.quantity,
+        stockStatus: inverter?.stockStatus ?? null,
+        wattage: null,
+        inverterCapacityKw: inverter ? Number(inverter.capacityKw) : null,
+        batteryCapacityKwh: null,
+        efficiency:
+          inverter && inverter.efficiency !== null
+            ? Number(inverter.efficiency)
+            : null,
+      };
+    }
+
+    const battery = catalogMaps.batteries.get(selection.equipmentId);
+    return {
+      id: selection.id,
+      equipmentType: selection.equipmentType,
+      equipmentId: selection.equipmentId,
+      name: battery
+        ? buildEquipmentCatalogName(battery.brand, battery.model)
+        : selection.equipmentNameSnapshot,
+      subtitle: battery
+        ? `${this.formatNumeric(battery.capacityKwh)} kWh battery`
+        : selection.equipmentSubtitleSnapshot,
+      quantity: selection.quantity,
+      defaultUnitPrice,
+      proposalUnitPrice,
+      lineTotal: proposalUnitPrice * selection.quantity,
+      stockStatus: battery?.stockStatus ?? null,
+      wattage: null,
+      inverterCapacityKw: null,
+      batteryCapacityKwh: battery ? Number(battery.capacityKwh) : null,
+      efficiency: null,
+    };
+  }
+
+  private formatNumeric(value: string): string {
+    return Number(value).toString();
   }
 
   /** Direct assignment or same team as `assignedTeamId` on the job. */

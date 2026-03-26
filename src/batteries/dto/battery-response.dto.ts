@@ -8,6 +8,7 @@ export class BatteryResponseDto {
   brand: string;
   model: string;
   capacityKwh: number;
+  defaultUnitPrice: number;
   stockStatus: BatteryStockStatus;
   voltage: number | null;
   chemistry: string | null;
@@ -24,6 +25,7 @@ export class BatteryResponseDto {
       brand: entity.brand,
       model: entity.model,
       capacityKwh: Number(entity.capacityKwh),
+      defaultUnitPrice: Number(entity.defaultUnitPrice),
       stockStatus: entity.stockStatus,
       voltage: entity.voltage === null ? null : Number(entity.voltage),
       chemistry: entity.chemistry,

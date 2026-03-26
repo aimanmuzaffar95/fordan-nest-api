@@ -8,6 +8,7 @@ export class InverterResponseDto {
   brand: string;
   model: string;
   capacityKw: number;
+  defaultUnitPrice: number;
   stockStatus: InverterStockStatus;
   inverterType: string | null;
   phases: string | null;
@@ -24,6 +25,7 @@ export class InverterResponseDto {
       brand: entity.brand,
       model: entity.model,
       capacityKw: Number(entity.capacityKw),
+      defaultUnitPrice: Number(entity.defaultUnitPrice),
       stockStatus: entity.stockStatus,
       inverterType: entity.inverterType,
       phases: entity.phases,

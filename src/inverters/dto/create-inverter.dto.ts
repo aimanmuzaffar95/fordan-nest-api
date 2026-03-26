@@ -38,6 +38,10 @@ export class CreateInverterDto {
   @Min(0.01)
   capacityKw!: number;
 
+  @IsNumber()
+  @Min(0)
+  defaultUnitPrice!: number;
+
   @IsEnum(InverterStockStatus)
   stockStatus!: InverterStockStatus;
 

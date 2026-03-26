@@ -40,6 +40,7 @@ export class BatteriesService {
         brand: dto.brand,
         model: dto.model,
         capacityKwh: dto.capacityKwh.toFixed(2),
+        defaultUnitPrice: dto.defaultUnitPrice.toFixed(2),
         stockStatus: dto.stockStatus,
         voltage:
           typeof dto.voltage === 'number' ? dto.voltage.toFixed(2) : null,

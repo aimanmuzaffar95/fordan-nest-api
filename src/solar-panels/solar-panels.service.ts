@@ -40,6 +40,7 @@ export class SolarPanelsService {
         brand: dto.brand,
         model: dto.model,
         wattage: dto.wattage.toFixed(2),
+        defaultUnitPrice: dto.defaultUnitPrice.toFixed(2),
         stockStatus: dto.stockStatus,
         efficiency:
           typeof dto.efficiency === 'number' ? dto.efficiency.toFixed(2) : null,

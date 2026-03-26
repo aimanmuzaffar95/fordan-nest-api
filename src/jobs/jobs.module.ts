@@ -4,9 +4,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CustomerJobsController } from './customer-jobs.controller';
 import { JobAuditLogsService } from './job-audit-logs.service';
 import { JobAuditLog } from './entities/job-audit-log.entity';
+import { JobProposalSelection } from './entities/job-proposal-selection.entity';
 import { Job } from './entities/job.entity';
+import { Battery } from '../batteries/entities/battery.entity';
 import { MeterApplication } from '../metering/entities/meter-application.entity';
 import { Customer } from '../customers/entities/customer.entity';
+import { Inverter } from '../inverters/entities/inverter.entity';
+import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 import { User } from '../users/entities/user.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { Note } from '../notes/entities/note.entity';
@@ -21,11 +25,15 @@ import { JobsService } from './jobs.service';
     TypeOrmModule.forFeature([
       Job,
       JobAuditLog,
+      JobProposalSelection,
       MeterApplication,
       Customer,
       TimelineEvent,
       User,
       Note,
+      SolarPanel,
+      Inverter,
+      Battery,
     ]),
   ],
   controllers: [JobsController, CustomerJobsController],
