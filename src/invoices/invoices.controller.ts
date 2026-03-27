@@ -5,9 +5,11 @@ import {
   Param,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -27,37 +29,87 @@ export class InvoicesController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  list(@Query() query: QueryInvoicesDto) {
-    return this.invoices.list(query);
+  list(
+    @Query() query: QueryInvoicesDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.invoices.list(query, { userId, role });
   }
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  getOne(@Param('id') id: string) {
-    return this.invoices.getOne(id);
+  getOne(
+    @Param('id') id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.invoices.getOne(id, { userId, role });
   }
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  create(@Body() dto: CreateInvoiceDto) {
-    return this.invoices.create(dto);
+  create(
+    @Body() dto: CreateInvoiceDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.invoices.create(dto, { userId, role });
   }
 
   @Post(':id/send')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  send(@Param('id') id: string) {
-    return this.invoices.send(id);
+  send(
+    @Param('id') id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.invoices.send(id, { userId, role });
   }
 
   @Post(':id/payments')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  recordPayment(@Param('id') id: string, @Body() dto: RecordPaymentDto) {
-    return this.invoices.recordPayment(id, dto);
+  recordPayment(
+    @Param('id') id: string,
+    @Body() dto: RecordPaymentDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.invoices.recordPayment(id, dto, { userId, role });
   }
 
   @Post(':id/cancel')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  cancel(@Param('id') id: string, @Body() dto: CancelInvoiceDto) {
-    return this.invoices.cancel(id, dto);
+  cancel(
+    @Param('id') id: string,
+    @Body() dto: CancelInvoiceDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.invoices.cancel(id, dto, { userId, role });
   }
 }

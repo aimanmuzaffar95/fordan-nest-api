@@ -29,7 +29,7 @@ export class ScheduleController {
   @ApiOperation({
     summary: 'Schedule aggregate (assignments + kW by team/day)',
     description:
-      '**Query:** `from`, `to` (inclusive `YYYY-MM-DD`, max **366** days), optional **`teamId`**. **Installer:** rows where you are **`staffUserId`** OR assignment **`teamId`** matches **`users.teamId`**; **403** if `teamId` filter ≠ your team or you have no team but pass `teamId`.',
+      '**Query:** `from`, `to` (inclusive `YYYY-MM-DD`, max **366** days), optional **`teamId`**. **Admin:** all rows. **Manager:** when `calendarScopeEnforced=true`, rows for jobs where `job.managerId` matches the viewer. **Installer:** rows where you are **`staffUserId`** OR assignment **`teamId`** matches **`users.teamId`**; **403** if `teamId` filter ≠ your team or you have no team but pass `teamId`.',
   })
   @ApiForbiddenResponse({
     description: '**403** — installer `teamId` filter not allowed.',

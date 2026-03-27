@@ -4,9 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Customer } from '../customers/entities/customer.entity';
 import { Job } from '../jobs/entities/job.entity';
+import { UserRole } from '../users/entities/user-role.enum';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { InvoicePayment } from './entities/invoice-payment.entity';
@@ -15,6 +16,11 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
+
+type InvoiceViewer = {
+  userId: string;
+  role: UserRole;
+};
 
 @Injectable()
 export class InvoicesService {
@@ -31,11 +37,12 @@ export class InvoicesService {
     private readonly jobsRepo: Repository<Job>,
   ) {}
 
-  async list(query: QueryInvoicesDto) {
+  async list(query: QueryInvoicesDto, viewer?: InvoiceViewer) {
     const qb = this.invoicesRepo
       .createQueryBuilder('invoice')
       .leftJoinAndSelect('invoice.customer', 'customer')
       .orderBy('invoice.issueDate', 'DESC');
+    this.applyViewerScope(qb, viewer);
 
     if (query.status) {
       qb.andWhere('invoice.status = :status', { status: query.status });
@@ -76,32 +83,47 @@ export class InvoicesService {
     };
   }
 
-  async getOne(id: string) {
-    const invoice = await this.invoicesRepo.findOne({
-      where: { id },
-      relations: ['customer', 'items', 'payments'],
-      order: {
-        items: {
-          position: 'ASC',
-        },
-      },
-    });
+  async getOne(id: string, viewer?: InvoiceViewer) {
+    const qb = this.invoicesRepo
+      .createQueryBuilder('invoice')
+      .leftJoinAndSelect('invoice.customer', 'customer')
+      .leftJoinAndSelect('invoice.items', 'items')
+      .leftJoinAndSelect('invoice.payments', 'payments')
+      .where('invoice.id = :id', { id })
+      .orderBy('items.position', 'ASC');
+    this.applyViewerScope(qb, viewer);
+    const invoice = await qb.getOne();
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
     }
     return invoice;
   }
 
-  async create(dto: CreateInvoiceDto): Promise<Invoice> {
+  async create(
+    dto: CreateInvoiceDto,
+    viewer?: InvoiceViewer,
+  ): Promise<Invoice> {
     // v0.3+: invoices can be linked to an order/job. If `jobId` is provided,
     // we derive `customerId` from the job to keep backend source-of-truth.
     let derivedCustomerId: string | undefined = dto.customerId;
     let derivedJobId: string | null = null;
 
+    if (viewer?.role === UserRole.MANAGER && !dto.jobId) {
+      throw new BadRequestException(
+        'Managers can only create invoices for jobs assigned to them',
+      );
+    }
+
     if (dto.jobId) {
       const job = await this.jobsRepo.findOne({ where: { id: dto.jobId } });
       if (!job) {
         throw new BadRequestException('Job not found');
+      }
+      if (
+        viewer?.role === UserRole.MANAGER &&
+        job.managerId !== viewer.userId
+      ) {
+        throw new NotFoundException('Job not found');
       }
 
       derivedCustomerId = job.customerId;
@@ -171,14 +193,15 @@ export class InvoicesService {
     return this.invoicesRepo.save(invoice);
   }
 
-  async recordPayment(id: string, dto: RecordPaymentDto): Promise<Invoice> {
+  async recordPayment(
+    id: string,
+    dto: RecordPaymentDto,
+    viewer?: InvoiceViewer,
+  ): Promise<Invoice> {
     // Load only what we need to update invoice totals.
     // Avoid re-saving the whole entity graph (relations) since that can trigger
     // TypeORM cascade/serialization edge cases.
-    const invoice = await this.invoicesRepo.findOne({ where: { id } });
-    if (!invoice) {
-      throw new NotFoundException('Invoice not found');
-    }
+    const invoice = await this.findInvoiceEntityOrFail(id, viewer);
     if (invoice.status === InvoiceStatus.CANCELLED) {
       throw new BadRequestException(
         'Cannot record payment on cancelled invoice',
@@ -217,14 +240,11 @@ export class InvoicesService {
     });
 
     // Re-fetch the full graph so the UI always gets items/payments/customer.
-    return this.getOne(id);
+    return this.getOne(id, viewer);
   }
 
-  async send(id: string): Promise<Invoice> {
-    const invoice = await this.invoicesRepo.findOne({ where: { id } });
-    if (!invoice) {
-      throw new NotFoundException('Invoice not found');
-    }
+  async send(id: string, viewer?: InvoiceViewer): Promise<Invoice> {
+    const invoice = await this.findInvoiceEntityOrFail(id, viewer);
     if (invoice.status === InvoiceStatus.CANCELLED) {
       throw new BadRequestException('Cannot send cancelled invoice');
     }
@@ -238,11 +258,12 @@ export class InvoicesService {
     return this.invoicesRepo.save(invoice);
   }
 
-  async cancel(id: string, dto: CancelInvoiceDto): Promise<Invoice> {
-    const invoice = await this.invoicesRepo.findOne({ where: { id } });
-    if (!invoice) {
-      throw new NotFoundException('Invoice not found');
-    }
+  async cancel(
+    id: string,
+    dto: CancelInvoiceDto,
+    viewer?: InvoiceViewer,
+  ): Promise<Invoice> {
+    const invoice = await this.findInvoiceEntityOrFail(id, viewer);
     if (invoice.status === InvoiceStatus.CANCELLED) {
       return invoice;
     }
@@ -270,5 +291,35 @@ export class InvoicesService {
     }
 
     throw new Error('Failed to generate unique invoice number');
+  }
+
+  private applyViewerScope(
+    qb: SelectQueryBuilder<Invoice>,
+    viewer?: InvoiceViewer,
+  ) {
+    if (viewer?.role !== UserRole.MANAGER) {
+      return qb;
+    }
+
+    return qb.innerJoin(
+      'invoice.job',
+      'job_scope',
+      'job_scope.managerId = :managerUserId',
+      { managerUserId: viewer.userId },
+    );
+  }
+
+  private async findInvoiceEntityOrFail(id: string, viewer?: InvoiceViewer) {
+    const qb = this.invoicesRepo
+      .createQueryBuilder('invoice')
+      .where('invoice.id = :id', { id });
+    this.applyViewerScope(qb, viewer);
+    const invoice = await qb.getOne();
+
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    return invoice;
   }
 }

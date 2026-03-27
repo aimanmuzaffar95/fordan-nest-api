@@ -38,9 +38,12 @@ export class MeterApplicationsController {
   @ApiOperation({
     summary: 'Update meter application status',
     description:
-      '**Admin/manager only.** Sets **`pending`**, **`approved`**, or **`rejected`**. When **`rejected`**, **`rejectionReason`** must be a non-empty string. Writes **`meter_status_change`** on the job timeline.',
+      '**Admin/manager only.** Sets **`pending`**, **`approved`**, or **`rejected`**. When **`rejected`**, **`rejectionReason`** must be a non-empty string. **Manager:** only meter applications whose parent job has `managerId = auth.user.id`. Writes **`meter_status_change`** on the job timeline.',
   })
-  @ApiNotFoundResponse({ description: 'Unknown meter application id.' })
+  @ApiNotFoundResponse({
+    description:
+      'Unknown meter application id, or manager attempted to access a meter application outside their job scope.',
+  })
   @ApiForbiddenResponse({ description: 'Installer or other disallowed role.' })
   patch(
     @Param('id', ParseUUIDPipe) id: string,
@@ -51,6 +54,9 @@ export class MeterApplicationsController {
     if (!req.user?.role || !userId) {
       throw new Error('Missing authenticated user context');
     }
-    return this.meters.updateStatus(id, dto, userId);
+    return this.meters.updateStatus(id, dto, {
+      userId,
+      role: req.user.role,
+    });
   }
 }

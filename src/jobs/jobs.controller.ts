@@ -50,7 +50,7 @@ export class JobsController {
   @ApiOperation({
     summary: 'List jobs',
     description:
-      '**Installer:** only jobs where you are `assignedStaffUserId` or (when set) `assignedTeamId` matches your `users.teamId`. **Admin/Manager:** all jobs (subject to filters).',
+      '**Manager:** only jobs where `managerId` matches the authenticated user. **Installer:** only jobs where you are `assignedStaffUserId` or (when set) `assignedTeamId` matches your `users.teamId`. **Admin:** all jobs (subject to filters).',
   })
   list(
     @Query() query: FindJobsQueryDto,
@@ -70,10 +70,17 @@ export class JobsController {
   @ApiOperation({
     summary: 'Lead capture analytics (public form submissions)',
     description:
-      'Aggregates job notes from public lead submissions (`__FORDAN_LEAD_META__` line or legacy “Lead source: public web form” text).',
+      'Aggregates job notes from public lead submissions (`__FORDAN_LEAD_META__` line or legacy “Lead source: public web form” text). **Manager:** only jobs assigned to you.',
   })
-  leadCaptureInsights() {
-    return this.leadCaptureInsightsService.getInsights();
+  leadCaptureInsights(
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.leadCaptureInsightsService.getInsights({ userId, role });
   }
 
   @Post(':id/stage')
@@ -97,7 +104,7 @@ export class JobsController {
   @ApiOperation({
     summary: 'Get job by id',
     description:
-      '**Installer:** **404** if the job is not assigned to you (directly or via team). Same response as unknown id (no leak).',
+      '**Manager:** **404** if the job is not assigned to you via `managerId`. **Installer:** **404** if the job is not assigned to you (directly or via team). Same response as unknown id (no leak).',
   })
   getOne(
     @Param('id', ParseUUIDPipe) id: string,

@@ -4,7 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, QueryFailedError, Repository } from 'typeorm';
+import {
+  Brackets,
+  QueryFailedError,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
+import { Job } from '../jobs/entities/job.entity';
+import { UserRole } from '../users/entities/user-role.enum';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CustomerResponseDto } from './dto/customer-response.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -15,6 +22,11 @@ type PaginatedCustomers = {
   page: number;
   limit: number;
   total: number;
+};
+
+type CustomerViewer = {
+  userId: string;
+  role: UserRole;
 };
 
 @Injectable()
@@ -45,12 +57,23 @@ export class CustomersService {
     return CustomerResponseDto.fromEntity(saved);
   }
 
-  async findAll(page = 1, limit = 20): Promise<PaginatedCustomers> {
-    const [items, total] = await this.customersRepository.findAndCount({
-      skip: (page - 1) * limit,
-      take: limit,
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(
+    page = 1,
+    limit = 20,
+    viewer?: CustomerViewer,
+  ): Promise<PaginatedCustomers> {
+    const qb = this.customersRepository.createQueryBuilder('customer');
+    this.applyViewerScope(qb, viewer);
+
+    const [items, total] = await Promise.all([
+      qb
+        .clone()
+        .orderBy('customer.createdAt', 'DESC')
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getMany(),
+      qb.clone().getCount(),
+    ]);
 
     return {
       items: items.map((item) => CustomerResponseDto.fromEntity(item)),
@@ -64,6 +87,7 @@ export class CustomersService {
     query: string,
     page = 1,
     limit = 20,
+    viewer?: CustomerViewer,
   ): Promise<PaginatedCustomers> {
     const term = `%${query.toLowerCase()}%`;
     const fullNameExpr =
@@ -90,6 +114,7 @@ export class CustomersService {
             .orWhere('LOWER(customer.phone) LIKE :term', { term });
         }),
       );
+    this.applyViewerScope(filteredQueryBuilder, viewer);
 
     const [items, total] = await Promise.all([
       filteredQueryBuilder
@@ -111,8 +136,15 @@ export class CustomersService {
     };
   }
 
-  async findOne(id: string): Promise<CustomerResponseDto> {
-    const customer = await this.customersRepository.findOne({ where: { id } });
+  async findOne(
+    id: string,
+    viewer?: CustomerViewer,
+  ): Promise<CustomerResponseDto> {
+    const qb = this.customersRepository
+      .createQueryBuilder('customer')
+      .where('customer.id = :id', { id });
+    this.applyViewerScope(qb, viewer);
+    const customer = await qb.getOne();
 
     if (!customer) {
       throw new NotFoundException('Customer not found');
@@ -124,8 +156,13 @@ export class CustomersService {
   async update(
     id: string,
     dto: UpdateCustomerDto,
+    viewer?: CustomerViewer,
   ): Promise<CustomerResponseDto> {
-    const customer = await this.customersRepository.findOne({ where: { id } });
+    const qb = this.customersRepository
+      .createQueryBuilder('customer')
+      .where('customer.id = :id', { id });
+    this.applyViewerScope(qb, viewer);
+    const customer = await qb.getOne();
 
     if (!customer) {
       throw new NotFoundException('Customer not found');
@@ -170,5 +207,23 @@ export class CustomersService {
 
       throw error;
     }
+  }
+
+  private applyViewerScope(
+    qb: SelectQueryBuilder<Customer>,
+    viewer?: CustomerViewer,
+  ) {
+    if (viewer?.role !== UserRole.MANAGER) {
+      return qb;
+    }
+
+    return qb
+      .innerJoin(
+        Job,
+        'job_scope',
+        'job_scope.customerId = customer.id AND job_scope.managerId = :managerUserId',
+        { managerUserId: viewer.userId },
+      )
+      .distinct(true);
   }
 }

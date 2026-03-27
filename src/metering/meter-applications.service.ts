@@ -4,10 +4,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { MeterApplication } from './entities/meter-application.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { UpdateMeterApplicationDto } from './dto/update-meter-application.dto';
+import { Job } from '../jobs/entities/job.entity';
+import { UserRole } from '../users/entities/user-role.enum';
+
+type MeterApplicationViewer = {
+  userId: string;
+  role: UserRole;
+};
 
 @Injectable()
 export class MeterApplicationsService {
@@ -21,9 +28,16 @@ export class MeterApplicationsService {
   async updateStatus(
     id: string,
     dto: UpdateMeterApplicationDto,
-    actorUserId: string,
+    viewer: MeterApplicationViewer,
   ): Promise<MeterApplication> {
-    const row = await this.meterRepo.findOne({ where: { id } });
+    const qb = this.meterRepo
+      .createQueryBuilder('meterApplication')
+      .leftJoinAndSelect('meterApplication.job', 'job')
+      .where('meterApplication.id = :id', { id });
+
+    this.applyViewerScope(qb, viewer);
+
+    const row = await qb.getOne();
     if (!row) {
       throw new NotFoundException('Meter application not found');
     }
@@ -43,13 +57,13 @@ export class MeterApplicationsService {
     row.status = dto.status;
     if (dto.status === 'approved') {
       row.approvalDate = today;
-      row.approvedByUserId = actorUserId;
+      row.approvedByUserId = viewer.userId;
       row.rejectedAt = null;
       row.rejectedByUserId = null;
       row.rejectionReason = null;
     } else if (dto.status === 'rejected') {
       row.rejectedAt = today;
-      row.rejectedByUserId = actorUserId;
+      row.rejectedByUserId = viewer.userId;
       row.rejectionReason = dto.rejectionReason!.trim();
       row.approvalDate = null;
       row.approvedByUserId = null;
@@ -74,10 +88,26 @@ export class MeterApplicationsService {
           status: saved.status,
           rejectionReason: saved.rejectionReason,
         },
-        createdByUserId: actorUserId,
+        createdByUserId: viewer.userId,
       }),
     );
 
     return saved;
+  }
+
+  private applyViewerScope(
+    qb: SelectQueryBuilder<MeterApplication>,
+    viewer: MeterApplicationViewer,
+  ) {
+    if (viewer.role !== UserRole.MANAGER) {
+      return;
+    }
+
+    qb.innerJoin(
+      Job,
+      'job_scope',
+      'job_scope.id = meterApplication.jobId AND job_scope.managerId = :managerUserId',
+      { managerUserId: viewer.userId },
+    );
   }
 }

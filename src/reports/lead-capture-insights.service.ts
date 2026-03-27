@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { Note } from '../notes/entities/note.entity';
+import { UserRole } from '../users/entities/user-role.enum';
 
 const META_PREFIX = '__FORDAN_LEAD_META__';
 
@@ -13,6 +14,11 @@ export type PublicLeadMetaV1 = {
   utmCampaign?: string;
   pageReferrer?: string;
   selfReportedSource?: string;
+};
+
+type InsightsViewer = {
+  userId: string;
+  role: UserRole;
 };
 
 function parseMetaLine(body: string): PublicLeadMetaV1 | null {
@@ -65,25 +71,29 @@ export class LeadCaptureInsightsService {
     private readonly notesRepo: Repository<Note>,
   ) {}
 
-  async getInsights() {
+  async getInsights(viewer?: InsightsViewer) {
     const prefixLen = META_PREFIX.length;
 
     // Avoid SQL LIKE on raw prefix: `_` is a single-char wildcard in LIKE.
-    const notes = await this.notesRepo
-      .createQueryBuilder('n')
-      .where(
-        new Brackets((qb) => {
-          qb.where('SUBSTRING(n.body, 1, :prefixLen) = :prefix', {
-            prefixLen,
-            prefix: META_PREFIX,
-          }).orWhere('n.body LIKE :legacy', {
-            legacy: '%Lead source: public web form%',
-          });
-        }),
-      )
-      .orderBy('n.createdAt', 'DESC')
-      .take(800)
-      .getMany();
+    const qb = this.notesRepo.createQueryBuilder('n').where(
+      new Brackets((qb) => {
+        qb.where('SUBSTRING(n.body, 1, :prefixLen) = :prefix', {
+          prefixLen,
+          prefix: META_PREFIX,
+        }).orWhere('n.body LIKE :legacy', {
+          legacy: '%Lead source: public web form%',
+        });
+      }),
+    );
+
+    if (viewer?.role === UserRole.MANAGER) {
+      qb.innerJoin('n.job', 'job_scope').andWhere(
+        'job_scope.managerId = :managerUserId',
+        { managerUserId: viewer.userId },
+      );
+    }
+
+    const notes = await qb.orderBy('n.createdAt', 'DESC').take(800).getMany();
 
     const byFormSlug: Record<string, number> = {};
     const byUtmSource: Record<string, number> = {};
@@ -96,8 +106,7 @@ export class LeadCaptureInsightsService {
     }> = [];
 
     for (const n of notes) {
-      const meta =
-        parseMetaLine(n.body) ?? parseLegacyPublicLeadBody(n.body);
+      const meta = parseMetaLine(n.body) ?? parseLegacyPublicLeadBody(n.body);
       if (!meta) continue;
 
       byFormSlug[meta.formSlug] = (byFormSlug[meta.formSlug] ?? 0) + 1;

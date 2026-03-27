@@ -63,6 +63,10 @@ type InvoiceProjection = Pick<
 
 type MeterStatusKey = 'pre_meter' | 'post_meter';
 type ManagerActivityItem = ManagerActivityResponse['items'][number];
+type DashboardViewer = {
+  userId: string;
+  role: UserRole;
+};
 
 @Injectable()
 export class AdminDashboardReportsService {
@@ -81,44 +85,59 @@ export class AdminDashboardReportsService {
     private readonly usersRepo: Repository<User>,
   ) {}
 
-  async getSummary(): Promise<DashboardSummaryResponse> {
+  async getSummary(
+    viewer?: DashboardViewer,
+  ): Promise<DashboardSummaryResponse> {
     const now = new Date();
     const weekStart = this.startOfWeek(now);
     const weekEndExclusive = this.addDays(weekStart, 7);
+    const jobsWhere =
+      viewer?.role === UserRole.MANAGER
+        ? { managerId: viewer.userId }
+        : undefined;
 
-    const [jobs, invoices, meterApplications] = await Promise.all([
-      this.jobsRepo.find({
-        select: {
-          id: true,
-          pipelineStage: true,
-          scheduledDate: true,
-          installDate: true,
-        },
-      }),
-      this.invoicesRepo.find({
-        select: {
-          id: true,
-          jobId: true,
-          status: true,
-          total: true,
-          amountPaid: true,
-        },
-      }),
-      this.meterApplicationsRepo.find({
-        select: {
-          id: true,
-          jobId: true,
-          type: true,
-          status: true,
-          updatedAt: true,
-        },
-      }),
+    const jobs = await this.jobsRepo.find({
+      where: jobsWhere,
+      select: {
+        id: true,
+        pipelineStage: true,
+        scheduledDate: true,
+        installDate: true,
+      },
+    });
+    const jobIds = jobs.map((job) => job.id);
+    const [invoices, scopedMeterApplications] = await Promise.all([
+      jobIds.length > 0
+        ? this.invoicesRepo.find({
+            where: { jobId: In(jobIds) },
+            select: {
+              id: true,
+              jobId: true,
+              status: true,
+              total: true,
+              amountPaid: true,
+            },
+          })
+        : [],
+      jobIds.length > 0
+        ? this.meterApplicationsRepo.find({
+            where: { jobId: In(jobIds) },
+            select: {
+              id: true,
+              jobId: true,
+              type: true,
+              status: true,
+              updatedAt: true,
+            },
+          })
+        : [],
     ]);
 
     const activeInvoiceCountByJobId =
       this.buildActiveInvoiceCountByJobId(invoices);
-    const latestMeterStatusByJobId =
-      this.buildLatestMeterStatusByJobId(meterApplications);
+    const latestMeterStatusByJobId = this.buildLatestMeterStatusByJobId(
+      scopedMeterApplications,
+    );
 
     const totals = jobs.reduce(
       (acc, job) => {
@@ -181,14 +200,23 @@ export class AdminDashboardReportsService {
     };
   }
 
-  async getRevenueForecast(daysAhead = 30): Promise<RevenueForecastResponse> {
+  async getRevenueForecast(
+    daysAhead = 30,
+    viewer?: DashboardViewer,
+  ): Promise<RevenueForecastResponse> {
     const windowDays = Number.isFinite(daysAhead) ? Math.max(1, daysAhead) : 30;
     const now = new Date();
     const windowStart = this.formatDateOnly(now);
     const windowEndDate = this.addDays(now, windowDays);
     const windowEndInclusive = this.formatDateOnly(windowEndDate);
 
+    const jobsWhere =
+      viewer?.role === UserRole.MANAGER
+        ? { managerId: viewer.userId }
+        : undefined;
+
     const jobs = await this.jobsRepo.find({
+      where: jobsWhere,
       select: {
         id: true,
         scheduledDate: true,
@@ -254,23 +282,42 @@ export class AdminDashboardReportsService {
     };
   }
 
-  async getManagerActivity(limit = 15): Promise<ManagerActivityResponse> {
+  async getManagerActivity(
+    limit = 15,
+    viewer?: DashboardViewer,
+  ): Promise<ManagerActivityResponse> {
     const safeLimit = Number.isFinite(limit) ? Math.max(1, limit) : 15;
     const take = safeLimit * 3;
+    const assignmentsWhere =
+      viewer?.role === UserRole.MANAGER
+        ? {
+            job: {
+              managerId: viewer.userId,
+            },
+          }
+        : undefined;
 
     const [auditEntries, recentAssignments] = await Promise.all([
-      this.jobAuditLogsRepo
-        .createQueryBuilder('audit')
-        .innerJoinAndSelect('audit.job', 'job')
-        .innerJoinAndSelect('job.customer', 'customer')
-        .innerJoinAndSelect('audit.performedBy', 'performedBy')
-        .where('performedBy.role = :managerRole', {
-          managerRole: UserRole.MANAGER,
-        })
-        .orderBy('audit.createdAt', 'DESC')
-        .take(take)
-        .getMany(),
+      (() => {
+        const qb = this.jobAuditLogsRepo
+          .createQueryBuilder('audit')
+          .innerJoinAndSelect('audit.job', 'job')
+          .innerJoinAndSelect('job.customer', 'customer')
+          .innerJoinAndSelect('audit.performedBy', 'performedBy')
+          .where('performedBy.role = :managerRole', {
+            managerRole: UserRole.MANAGER,
+          });
+
+        if (viewer?.role === UserRole.MANAGER) {
+          qb.andWhere('job.managerId = :viewerId', {
+            viewerId: viewer.userId,
+          });
+        }
+
+        return qb.orderBy('audit.createdAt', 'DESC').take(take).getMany();
+      })(),
       this.assignmentsRepo.find({
+        where: assignmentsWhere,
         relations: {
           job: {
             customer: true,

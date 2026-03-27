@@ -108,6 +108,12 @@ export class JobsService {
       );
     }
 
+    if (viewer?.role === UserRole.MANAGER) {
+      qb.andWhere('job.managerId = :managerUserId', {
+        managerUserId: viewer.userId,
+      });
+    }
+
     if (query.customerId) {
       qb.andWhere('job.customerId = :customerId', {
         customerId: query.customerId,
@@ -144,6 +150,10 @@ export class JobsService {
 
     if (viewer?.role === UserRole.INSTALLER) {
       await this.assertInstallerJobAccess(job, viewer.userId);
+    }
+
+    if (viewer?.role === UserRole.MANAGER) {
+      this.assertManagerJobAccess(job, viewer.userId);
     }
 
     return job;
@@ -321,6 +331,7 @@ export class JobsService {
 
   async createForCustomer(
     performedById: string | null,
+    performedByRole: UserRole | null,
     customerId: string,
     dto: CreateJobForCustomerDto,
   ) {
@@ -359,6 +370,7 @@ export class JobsService {
         depositPaid,
         depositDate: depositPaid ? new Date().toISOString().slice(0, 10) : null,
         installDate: dto.installDate ?? null,
+        managerId: performedByRole === UserRole.MANAGER ? performedById : null,
       });
 
       const savedJob = await jobsRepo.save(job);
@@ -393,7 +405,11 @@ export class JobsService {
   ) {
     return this.dataSource.transaction(async (manager) => {
       const jobsRepo = manager.getRepository(Job);
-      const job = await this.findOneOrFail(jobsRepo, id);
+      const viewer =
+        performedById && performedByRole
+          ? { userId: performedById, role: performedByRole }
+          : undefined;
+      const job = await this.findOneOrFail(jobsRepo, id, viewer);
 
       if (job.jobStatus === toStage) {
         return job;
@@ -434,7 +450,7 @@ export class JobsService {
         },
       });
 
-      return this.findOneOrFail(jobsRepo, id);
+      return this.findOneOrFail(jobsRepo, id, viewer);
     });
   }
 
@@ -1061,6 +1077,14 @@ export class JobsService {
     throw new NotFoundException('Job not found');
   }
 
+  private assertManagerJobAccess(job: Job, userId: string) {
+    if (job.managerId === userId) {
+      return;
+    }
+
+    throw new NotFoundException('Job not found');
+  }
+
   async updateJobPipeline(
     jobId: string,
     dto: UpdateJobPipelineDto,
@@ -1069,6 +1093,9 @@ export class JobsService {
   ): Promise<Job> {
     const job = await this.jobsRepo.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Job not found');
+    if (userRole === UserRole.MANAGER) {
+      this.assertManagerJobAccess(job, userId);
+    }
 
     const toStage = dto.pipelineStage;
 
@@ -1277,7 +1304,7 @@ export class JobsService {
         assignedStaffUserId,
         scheduledDate: null,
         scheduledSlot: null,
-        managerId: null,
+        managerId: userRole === UserRole.MANAGER ? userId : null,
       });
 
       const savedJob = await jobRepo.save(job);

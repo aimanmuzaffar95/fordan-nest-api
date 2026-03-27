@@ -29,6 +29,7 @@ export class CustomerJobsController {
   ) {
     return this.jobsService.createForCustomer(
       req.user?.sub ?? null,
+      req.user?.role ?? null,
       customerId,
       dto,
     );

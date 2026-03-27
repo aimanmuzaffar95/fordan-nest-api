@@ -68,10 +68,18 @@ export class CustomersController {
     description:
       '**403** — `installer` and other roles cannot browse the full customer list.',
   })
-  findAll(@Query() query: FindCustomersQueryDto) {
+  findAll(
+    @Query() query: FindCustomersQueryDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    return this.customersService.findAll(page, limit);
+    return this.customersService.findAll(page, limit, { userId, role });
   }
 
   @Get('search')
@@ -84,8 +92,19 @@ export class CustomersController {
     description:
       '**403** — `installer` cannot search the global customer directory.',
   })
-  search(@Query() query: SearchCustomersQueryDto) {
-    return this.customersService.search(query.q, query.page, query.limit);
+  search(
+    @Query() query: SearchCustomersQueryDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.customersService.search(query.q, query.page, query.limit, {
+      userId,
+      role,
+    });
   }
 
   @Get(':id')
@@ -98,8 +117,16 @@ export class CustomersController {
     description:
       '**403** — `installer` cannot fetch arbitrary customer records by id.',
   })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.customersService.findOne(id);
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.customersService.findOne(id, { userId, role });
   }
 
   @Patch(':id')
@@ -114,8 +141,14 @@ export class CustomersController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCustomerDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    return this.customersService.update(id, dto);
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.customersService.update(id, dto, { userId, role });
   }
 
   @Post(':customerId/jobs')

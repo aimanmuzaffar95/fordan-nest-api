@@ -1,4 +1,5 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -16,19 +17,48 @@ export class AdminDashboardController {
 
   @Get('summary')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  getSummary() {
-    return this.adminDashboardReports.getSummary();
+  getSummary(
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.adminDashboardReports.getSummary({ userId, role });
   }
 
   @Get('revenue-forecast')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  getRevenueForecast(@Query() query: AdminDashboardRevenueForecastQueryDto) {
-    return this.adminDashboardReports.getRevenueForecast(query.daysAhead);
+  getRevenueForecast(
+    @Query() query: AdminDashboardRevenueForecastQueryDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.adminDashboardReports.getRevenueForecast(query.daysAhead, {
+      userId,
+      role,
+    });
   }
 
   @Get('manager-activity')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  getManagerActivity(@Query() query: AdminDashboardManagerActivityQueryDto) {
-    return this.adminDashboardReports.getManagerActivity(query.limit);
+  getManagerActivity(
+    @Query() query: AdminDashboardManagerActivityQueryDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.adminDashboardReports.getManagerActivity(query.limit, {
+      userId,
+      role,
+    });
   }
 }

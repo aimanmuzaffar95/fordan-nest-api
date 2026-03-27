@@ -120,8 +120,9 @@ export class ScheduleService {
     }
 
     if (viewer.role === UserRole.MANAGER && calendarScopeEnforced) {
-      // "Assigned to them" for manager means assignments where they are the staff assignee.
-      qb.andWhere('a.staffUserId = :viewerId', { viewerId: viewer.userId });
+      // Managers should see assignments for jobs they manage, not rows where they
+      // happen to be the installer assignee.
+      qb.andWhere('job.managerId = :viewerId', { viewerId: viewer.userId });
     }
 
     if (viewer.role !== UserRole.INSTALLER || !calendarScopeEnforced) {
