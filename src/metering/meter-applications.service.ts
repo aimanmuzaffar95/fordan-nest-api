@@ -16,6 +16,17 @@ type MeterApplicationViewer = {
   role: UserRole;
 };
 
+export type MeterApplicationListItem = {
+  id: string;
+  jobId: string;
+  type: string;
+  status: string;
+  dateSubmitted: string;
+  approvalDate: string | null;
+  submittedByUserId: string;
+  rejectionReason: string | null;
+};
+
 @Injectable()
 export class MeterApplicationsService {
   constructor(
@@ -24,6 +35,31 @@ export class MeterApplicationsService {
     @InjectRepository(TimelineEvent)
     private readonly timelineRepo: Repository<TimelineEvent>,
   ) {}
+
+  async list(
+    viewer: MeterApplicationViewer,
+  ): Promise<{ items: MeterApplicationListItem[] }> {
+    const qb = this.meterRepo
+      .createQueryBuilder('meterApplication')
+      .select([
+        'meterApplication.id AS id',
+        'meterApplication.jobId AS "jobId"',
+        'meterApplication.type AS type',
+        'meterApplication.status AS status',
+        'meterApplication.dateSubmitted AS "dateSubmitted"',
+        'meterApplication.approvalDate AS "approvalDate"',
+        'meterApplication.submittedByUserId AS "submittedByUserId"',
+        'meterApplication.rejectionReason AS "rejectionReason"',
+      ])
+      .orderBy('meterApplication.dateSubmitted', 'DESC')
+      .addOrderBy('meterApplication.createdAt', 'DESC');
+
+    this.applyViewerScope(qb, viewer);
+
+    return {
+      items: await qb.getRawMany<MeterApplicationListItem>(),
+    };
+  }
 
   async updateStatus(
     id: string,

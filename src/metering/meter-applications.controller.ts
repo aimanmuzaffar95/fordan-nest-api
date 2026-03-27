@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -32,6 +33,22 @@ import { MeterApplicationsService } from './meter-applications.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class MeterApplicationsController {
   constructor(private readonly meters: MeterApplicationsService) {}
+
+  @Get()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'List meter applications',
+    description:
+      'Returns live meter application rows for dashboard and operational workflows. **Manager:** only meter applications whose parent job has `managerId = auth.user.id`.',
+  })
+  list(@Req() req: Request & { user?: { sub?: string; role?: UserRole } }) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.meters.list({ userId, role });
+  }
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)

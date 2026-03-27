@@ -6,7 +6,7 @@ import {
   PreconditionFailedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, Repository } from 'typeorm';
+import { Brackets, DataSource, In, Repository } from 'typeorm';
 import { Assignment } from '../assignments/entities/assignment.entity';
 import { buildEquipmentCatalogName } from '../equipment-catalog/build-equipment-catalog-name';
 import { Battery } from '../batteries/entities/battery.entity';
@@ -129,7 +129,49 @@ export class JobsService {
     qb.skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();
-    return { items, total, page, pageSize };
+    const jobIds = items.map((item) => item.id);
+    const invoicesByJobId = new Map<string, Invoice[]>();
+
+    if (jobIds.length > 0) {
+      const invoices = await this.dataSource.getRepository(Invoice).find({
+        where: {
+          jobId: In(jobIds),
+        },
+        relations: {
+          payments: true,
+        },
+        order: {
+          issueDate: 'DESC',
+        },
+      });
+
+      invoices.forEach((invoice) => {
+        if (!invoice.jobId) {
+          return;
+        }
+
+        const existing = invoicesByJobId.get(invoice.jobId);
+        if (existing) {
+          existing.push(invoice);
+          return;
+        }
+
+        invoicesByJobId.set(invoice.jobId, [invoice]);
+      });
+    }
+
+    return {
+      items: items.map((item) => ({
+        ...item,
+        ...this.buildDerivedInvoiceFields(
+          item,
+          invoicesByJobId.get(item.id) ?? [],
+        ),
+      })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   private async findOneOrFail(
@@ -592,25 +634,7 @@ export class JobsService {
     const remainingAmountNumber = hasProjectPrice
       ? Math.max(projectPrice - totalPaidAmount, 0)
       : null;
-    const latestInvoice = activeInvoices[0] ?? null;
-    const latestOutstandingInvoice =
-      activeInvoices.find((invoice) => invoice.status !== InvoiceStatus.PAID) ??
-      latestInvoice;
-    const latestPaymentDate =
-      activeInvoices
-        .flatMap((invoice) => invoice.payments ?? [])
-        .map((payment) => payment.paymentDate)
-        .filter((value): value is string => Boolean(value))
-        .sort((a, b) => b.localeCompare(a))[0] ?? null;
-    const derivedInvoiceStatus = (() => {
-      if (activeInvoices.length === 0) {
-        return job.invoiceStatus ?? 'not_invoiced';
-      }
-      if (remainingAmountNumber !== null && remainingAmountNumber <= 0.0001) {
-        return 'paid';
-      }
-      return 'invoiced';
-    })();
+    const derivedInvoiceFields = this.buildDerivedInvoiceFields(job, invoices);
 
     return {
       job: {
@@ -634,16 +658,10 @@ export class JobsService {
         managerId: job.managerId,
         assignedStaffUserId: job.assignedStaffUserId,
         assignedTeamId: job.assignedTeamId,
-        invoiceStatus: derivedInvoiceStatus,
-        invoiceDate: latestInvoice?.issueDate ?? job.invoiceDate,
-        invoiceDueDate:
-          latestOutstandingInvoice?.dueDate ??
-          latestInvoice?.dueDate ??
-          job.invoiceDueDate,
-        paidDate:
-          derivedInvoiceStatus === 'paid'
-            ? (latestPaymentDate ?? job.paidDate)
-            : job.paidDate,
+        invoiceStatus: derivedInvoiceFields.invoiceStatus,
+        invoiceDate: derivedInvoiceFields.invoiceDate,
+        invoiceDueDate: derivedInvoiceFields.invoiceDueDate,
+        paidDate: derivedInvoiceFields.paidDate,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
       },
@@ -1083,6 +1101,57 @@ export class JobsService {
     }
 
     throw new NotFoundException('Job not found');
+  }
+
+  private buildDerivedInvoiceFields(job: Job, invoices: Invoice[]) {
+    const projectPrice = Number(job.projectPrice ?? 0);
+    const hasProjectPrice = Number.isFinite(projectPrice) && projectPrice > 0;
+    const paidDepositAmount = job.depositPaid
+      ? Number(job.depositAmount ?? 0)
+      : 0;
+    const activeInvoices = invoices.filter(
+      (invoice) => invoice.status !== InvoiceStatus.CANCELLED,
+    );
+    const invoicePaidAmount = activeInvoices.reduce(
+      (sum, invoice) => sum + Number(invoice.amountPaid ?? 0),
+      0,
+    );
+    const totalPaidAmount = paidDepositAmount + invoicePaidAmount;
+    const remainingAmountNumber = hasProjectPrice
+      ? Math.max(projectPrice - totalPaidAmount, 0)
+      : null;
+    const latestInvoice = activeInvoices[0] ?? null;
+    const latestOutstandingInvoice =
+      activeInvoices.find((invoice) => invoice.status !== InvoiceStatus.PAID) ??
+      latestInvoice;
+    const latestPaymentDate =
+      activeInvoices
+        .flatMap((invoice) => invoice.payments ?? [])
+        .map((payment) => payment.paymentDate)
+        .filter((value): value is string => Boolean(value))
+        .sort((a, b) => b.localeCompare(a))[0] ?? null;
+    const derivedInvoiceStatus = (() => {
+      if (activeInvoices.length === 0) {
+        return job.invoiceStatus ?? 'not_invoiced';
+      }
+      if (remainingAmountNumber !== null && remainingAmountNumber <= 0.0001) {
+        return 'paid';
+      }
+      return 'invoiced';
+    })();
+
+    return {
+      invoiceStatus: derivedInvoiceStatus,
+      invoiceDate: latestInvoice?.issueDate ?? job.invoiceDate,
+      invoiceDueDate:
+        latestOutstandingInvoice?.dueDate ??
+        latestInvoice?.dueDate ??
+        job.invoiceDueDate,
+      paidDate:
+        derivedInvoiceStatus === 'paid'
+          ? (latestPaymentDate ?? job.paidDate)
+          : job.paidDate,
+    };
   }
 
   async updateJobPipeline(
