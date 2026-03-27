@@ -15,6 +15,7 @@ import { JobAuditLogsService } from './job-audit-logs.service';
 import { JobAuditAction } from './job-audit-action.enum';
 import { CreateJobForCustomerDto } from './dto/create-job-for-customer.dto';
 import { JobDetailResponseDto } from './dto/job-detail-response.dto';
+import { CreateJobTextEntryDto } from './dto/create-job-text-entry.dto';
 import { JobProposalConfigResponseDto } from './dto/job-proposal-config-response.dto';
 import {
   UpdateJobProposalConfigDto,
@@ -24,6 +25,7 @@ import { JobProposalEquipmentType } from './job-proposal-equipment-type.enum';
 import { JobPipelineStage } from './job-pipeline-stage.enum';
 import { JobSystemType } from './job-system-type.enum';
 import { JobAuditLog } from './entities/job-audit-log.entity';
+import { JobInternalComment } from './entities/job-internal-comment.entity';
 import { JobProposalSelection } from './entities/job-proposal-selection.entity';
 import { Job } from './entities/job.entity';
 import { Customer } from '../customers/entities/customer.entity';
@@ -64,6 +66,8 @@ export class JobsService {
     private readonly usersRepo: Repository<User>,
     @InjectRepository(Note)
     private readonly notesRepo: Repository<Note>,
+    @InjectRepository(JobInternalComment)
+    private readonly jobInternalCommentsRepo: Repository<JobInternalComment>,
     @InjectRepository(SolarPanel)
     private readonly solarPanelsRepo: Repository<SolarPanel>,
     @InjectRepository(Inverter)
@@ -155,10 +159,7 @@ export class JobsService {
     dto: UpdateJobDto,
     viewer: JobListViewer,
   ): Promise<JobDetailResponseDto> {
-    const hasManagerIdUpdate = Object.prototype.hasOwnProperty.call(
-      dto,
-      'managerId',
-    );
+    const hasManagerIdUpdate = Object.hasOwn(dto, 'managerId');
     if (!hasManagerIdUpdate) {
       return this.getOne(id, viewer);
     }
@@ -207,6 +208,64 @@ export class JobsService {
     });
 
     return this.getOne(id, viewer);
+  }
+
+  async createNote(
+    id: string,
+    dto: CreateJobTextEntryDto,
+    viewer: JobListViewer,
+  ) {
+    await this.findOneOrFail(this.jobsRepo, id, viewer);
+
+    const savedNote = await this.notesRepo.save(
+      this.notesRepo.create({
+        jobId: id,
+        body: dto.body.trim(),
+        createdByUserId: viewer.userId,
+      }),
+    );
+
+    const createdNote = await this.notesRepo.findOne({
+      where: { id: savedNote.id },
+      relations: {
+        createdByUser: true,
+      },
+    });
+
+    if (!createdNote) {
+      throw new NotFoundException('Job note not found after save');
+    }
+
+    return this.mapTextEntry(createdNote);
+  }
+
+  async createInternalComment(
+    id: string,
+    dto: CreateJobTextEntryDto,
+    viewer: JobListViewer,
+  ) {
+    await this.findOneOrFail(this.jobsRepo, id, viewer);
+
+    const savedComment = await this.jobInternalCommentsRepo.save(
+      this.jobInternalCommentsRepo.create({
+        jobId: id,
+        body: dto.body.trim(),
+        createdByUserId: viewer.userId,
+      }),
+    );
+
+    const createdComment = await this.jobInternalCommentsRepo.findOne({
+      where: { id: savedComment.id },
+      relations: {
+        createdByUser: true,
+      },
+    });
+
+    if (!createdComment) {
+      throw new NotFoundException('Job internal comment not found after save');
+    }
+
+    return this.mapTextEntry(createdComment);
   }
 
   async getProposalConfig(
@@ -430,52 +489,80 @@ export class JobsService {
     );
   }
 
-  private async buildJobDetailResponse(job: Job): Promise<JobDetailResponseDto> {
-    const [timeline, manager, assignedStaffUser, assignedTeam, installerRows, invoices] =
-      await Promise.all([
-        this.dataSource.getRepository(JobAuditLog).find({
-          where: { jobId: job.id },
-          relations: {
-            performedBy: true,
-          },
-          order: {
-            createdAt: 'DESC',
-          },
-        }),
-        job.managerId
-          ? this.usersRepo.findOne({ where: { id: job.managerId } })
-          : Promise.resolve(null),
-        job.assignedStaffUserId
-          ? this.usersRepo.findOne({ where: { id: job.assignedStaffUserId } })
-          : Promise.resolve(null),
-        job.assignedTeamId
-          ? this.teamsRepo.findOne({ where: { id: job.assignedTeamId } })
-          : Promise.resolve(null),
-        this.assignmentsRepo.find({
-          where: { jobId: job.id },
-          relations: {
-            staffUser: true,
-            team: true,
-          },
-          order: {
-            scheduledDate: 'ASC',
-            slot: 'ASC',
-          },
-        }),
-        this.dataSource.getRepository(Invoice).find({
-          where: { jobId: job.id },
-          relations: {
-            payments: true,
-          },
-          order: {
-            issueDate: 'DESC',
-          },
-        }),
-      ]);
+  private async buildJobDetailResponse(
+    job: Job,
+  ): Promise<JobDetailResponseDto> {
+    const [
+      timeline,
+      manager,
+      assignedStaffUser,
+      assignedTeam,
+      installerRows,
+      invoices,
+      notes,
+      internalComments,
+    ] = await Promise.all([
+      this.dataSource.getRepository(JobAuditLog).find({
+        where: { jobId: job.id },
+        relations: {
+          performedBy: true,
+        },
+        order: {
+          createdAt: 'DESC',
+        },
+      }),
+      job.managerId
+        ? this.usersRepo.findOne({ where: { id: job.managerId } })
+        : Promise.resolve(null),
+      job.assignedStaffUserId
+        ? this.usersRepo.findOne({ where: { id: job.assignedStaffUserId } })
+        : Promise.resolve(null),
+      job.assignedTeamId
+        ? this.teamsRepo.findOne({ where: { id: job.assignedTeamId } })
+        : Promise.resolve(null),
+      this.assignmentsRepo.find({
+        where: { jobId: job.id },
+        relations: {
+          staffUser: true,
+          team: true,
+        },
+        order: {
+          scheduledDate: 'ASC',
+          slot: 'ASC',
+        },
+      }),
+      this.dataSource.getRepository(Invoice).find({
+        where: { jobId: job.id },
+        relations: {
+          payments: true,
+        },
+        order: {
+          issueDate: 'DESC',
+        },
+      }),
+      this.notesRepo.find({
+        where: { jobId: job.id },
+        relations: {
+          createdByUser: true,
+        },
+        order: {
+          createdAt: 'ASC',
+        },
+      }),
+      this.jobInternalCommentsRepo.find({
+        where: { jobId: job.id },
+        relations: {
+          createdByUser: true,
+        },
+        order: {
+          createdAt: 'ASC',
+        },
+      }),
+    ]);
 
-      const projectPrice = Number(job.projectPrice ?? 0);
-      const hasProjectPrice = Number.isFinite(projectPrice) && projectPrice > 0;
-      const paidDepositAmount = job.depositPaid
+    const projectPrice = Number(job.projectPrice ?? 0);
+    const hasProjectPrice = Number.isFinite(projectPrice) && projectPrice > 0;
+    const paidDepositAmount = job.depositPaid
       ? Number(job.depositAmount ?? 0)
       : 0;
     const activeInvoices = invoices.filter(
@@ -493,11 +580,12 @@ export class JobsService {
     const latestOutstandingInvoice =
       activeInvoices.find((invoice) => invoice.status !== InvoiceStatus.PAID) ??
       latestInvoice;
-    const latestPaymentDate = activeInvoices
-      .flatMap((invoice) => invoice.payments ?? [])
-      .map((payment) => payment.paymentDate)
-      .filter((value): value is string => Boolean(value))
-      .sort((a, b) => b.localeCompare(a))[0] ?? null;
+    const latestPaymentDate =
+      activeInvoices
+        .flatMap((invoice) => invoice.payments ?? [])
+        .map((payment) => payment.paymentDate)
+        .filter((value): value is string => Boolean(value))
+        .sort((a, b) => b.localeCompare(a))[0] ?? null;
     const derivedInvoiceStatus = (() => {
       if (activeInvoices.length === 0) {
         return job.invoiceStatus ?? 'not_invoiced';
@@ -533,10 +621,12 @@ export class JobsService {
         invoiceStatus: derivedInvoiceStatus,
         invoiceDate: latestInvoice?.issueDate ?? job.invoiceDate,
         invoiceDueDate:
-          latestOutstandingInvoice?.dueDate ?? latestInvoice?.dueDate ?? job.invoiceDueDate,
+          latestOutstandingInvoice?.dueDate ??
+          latestInvoice?.dueDate ??
+          job.invoiceDueDate,
         paidDate:
           derivedInvoiceStatus === 'paid'
-            ? latestPaymentDate ?? job.paidDate
+            ? (latestPaymentDate ?? job.paidDate)
             : job.paidDate,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
@@ -577,8 +667,14 @@ export class JobsService {
       financials: {
         depositPaidAmount: paidDepositAmount.toFixed(2),
         remainingAmount:
-          remainingAmountNumber !== null ? remainingAmountNumber.toFixed(2) : null,
+          remainingAmountNumber !== null
+            ? remainingAmountNumber.toFixed(2)
+            : null,
       },
+      notes: notes.map((entry) => this.mapTextEntry(entry)),
+      internalComments: internalComments.map((entry) =>
+        this.mapTextEntry(entry),
+      ),
       timeline: timeline.map((entry) => ({
         id: entry.id,
         action: entry.action,
@@ -615,6 +711,30 @@ export class JobsService {
       phone: user.phoneNumber,
       role: user.role,
       teamId: user.teamId,
+    };
+  }
+
+  private mapTextEntry(entry: Note | JobInternalComment) {
+    return {
+      id: entry.id,
+      body: entry.body,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+      createdBy: this.mapTextEntryActor(entry.createdByUser),
+    };
+  }
+
+  private mapTextEntryActor(user: User | null | undefined) {
+    if (!user) return null;
+
+    const firstName = user.firstName.trim();
+    const lastName = user.lastName.trim();
+
+    return {
+      id: user.id,
+      firstName,
+      lastName,
+      fullName: `${firstName} ${lastName}`.trim(),
     };
   }
 

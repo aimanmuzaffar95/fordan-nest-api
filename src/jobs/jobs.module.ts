@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CustomerJobsController } from './customer-jobs.controller';
 import { JobAuditLogsService } from './job-audit-logs.service';
 import { JobAuditLog } from './entities/job-audit-log.entity';
+import { JobInternalComment } from './entities/job-internal-comment.entity';
 import { JobProposalSelection } from './entities/job-proposal-selection.entity';
 import { Job } from './entities/job.entity';
 import { Assignment } from '../assignments/entities/assignment.entity';
@@ -28,6 +29,7 @@ import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.ser
     TypeOrmModule.forFeature([
       Job,
       JobAuditLog,
+      JobInternalComment,
       JobProposalSelection,
       MeterApplication,
       Assignment,

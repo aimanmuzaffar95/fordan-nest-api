@@ -24,6 +24,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/entities/user-role.enum';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
+import { CreateJobTextEntryDto } from './dto/create-job-text-entry.dto';
 import { TransitionJobStageDto } from './dto/transition-job-stage.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
@@ -128,6 +129,46 @@ export class JobsController {
       throw new Error('Missing authenticated user context');
     }
     return this.jobs.updateJob(id, dto, { userId, role });
+  }
+
+  @Post(':id/notes')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Add job note',
+    description:
+      'Creates a persisted job note. Response includes the stored author and timestamps for immediate job-detail rendering.',
+  })
+  createNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateJobTextEntryDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.jobs.createNote(id, dto, { userId, role });
+  }
+
+  @Post(':id/internal-comments')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Add job internal comment',
+    description:
+      'Creates a persisted internal comment for the job. Response includes the stored author and timestamps for immediate job-detail rendering.',
+  })
+  createInternalComment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateJobTextEntryDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.jobs.createInternalComment(id, dto, { userId, role });
   }
 
   @Get(':id/proposal-config')

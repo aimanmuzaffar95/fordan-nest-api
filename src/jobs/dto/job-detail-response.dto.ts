@@ -80,6 +80,21 @@ export type JobDetailTimelineActorDto = {
   role: UserRole;
 };
 
+export type JobDetailTextEntryActorDto = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+};
+
+export type JobDetailTextEntryDto = {
+  id: string;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: JobDetailTextEntryActorDto | null;
+};
+
 export type JobDetailTimelineItemDto = {
   id: string;
   action: JobAuditAction;
@@ -100,5 +115,7 @@ export type JobDetailResponseDto = {
   assignedTeam: JobDetailTeamDto | null;
   installerAssignments: JobDetailAssignmentDto[];
   financials: JobDetailFinancialsDto;
+  notes: JobDetailTextEntryDto[];
+  internalComments: JobDetailTextEntryDto[];
   timeline: JobDetailTimelineItemDto[];
 };
