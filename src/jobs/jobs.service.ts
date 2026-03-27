@@ -48,6 +48,7 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
+import { JobAuditValue } from './types/job-audit-value.type';
 
 export type JobListViewer = { userId: string; role: UserRole };
 
@@ -558,7 +559,8 @@ export class JobsService {
     job: Job,
   ): Promise<JobDetailResponseDto> {
     const [
-      timeline,
+      auditLogs,
+      domainTimelineEvents,
       manager,
       assignedStaffUser,
       assignedTeam,
@@ -571,6 +573,15 @@ export class JobsService {
         where: { jobId: job.id },
         relations: {
           performedBy: true,
+        },
+        order: {
+          createdAt: 'DESC',
+        },
+      }),
+      this.dataSource.getRepository(TimelineEvent).find({
+        where: { jobId: job.id },
+        relations: {
+          createdByUser: true,
         },
         order: {
           createdAt: 'DESC',
@@ -729,18 +740,90 @@ export class JobsService {
       internalComments: internalComments.map((entry) =>
         this.mapTextEntry(entry),
       ),
-      timeline: timeline.map((entry) => ({
-        id: entry.id,
-        action: entry.action,
-        field: entry.field,
-        oldValue: entry.oldValue,
-        newValue: entry.newValue,
-        metadata: entry.metadata,
-        createdAt: entry.createdAt,
-        performedBy: mapTimelineActor(entry.performedBy),
-        description: this.describeAuditEntry(entry),
-      })),
+      timeline: [
+        ...auditLogs.map((entry) => ({
+          id: entry.id,
+          source: 'job_audit_log' as const,
+          action: entry.action,
+          field: entry.field,
+          oldValue: entry.oldValue,
+          newValue: entry.newValue,
+          metadata: entry.metadata,
+          createdAt: entry.createdAt,
+          performedBy: mapTimelineActor(entry.performedBy),
+          description: this.describeAuditEntry(entry),
+        })),
+        ...domainTimelineEvents.map((entry) => ({
+          id: entry.id,
+          source: 'timeline_event' as const,
+          action: entry.type,
+          field: null,
+          oldValue: null,
+          newValue: null,
+          metadata: entry.payload as JobAuditValue | null,
+          createdAt: entry.createdAt,
+          performedBy: mapTimelineActor(entry.createdByUser),
+          description: this.describeDomainTimelineEvent(entry),
+        })),
+      ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
     };
+  }
+
+  private describeDomainTimelineEvent(entry: TimelineEvent): string {
+    const raw = entry.payload;
+    const payload =
+      raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>)
+        : {};
+    switch (entry.type) {
+      case 'stage_change': {
+        const from =
+          typeof payload.fromStage === 'string'
+            ? this.humanizeToken(payload.fromStage)
+            : 'previous stage';
+        const to =
+          typeof payload.toStage === 'string'
+            ? this.humanizeToken(payload.toStage)
+            : 'next stage';
+        return `Pipeline stage changed from ${from} to ${to}`;
+      }
+      case 'job_created': {
+        const stage =
+          typeof payload.pipelineStage === 'string'
+            ? this.humanizeToken(payload.pipelineStage)
+            : 'pipeline';
+        return `Job created (${stage})`;
+      }
+      case 'meter_status_change': {
+        const prev =
+          typeof payload.previousStatus === 'string'
+            ? this.humanizeToken(payload.previousStatus)
+            : null;
+        const next =
+          typeof payload.status === 'string'
+            ? this.humanizeToken(payload.status)
+            : null;
+        const meterType =
+          typeof payload.meterType === 'string'
+            ? this.humanizeToken(payload.meterType)
+            : 'Meter';
+        if (prev && next) {
+          return `${meterType} status changed from ${prev} to ${next}`;
+        }
+        if (next) {
+          return `${meterType} status updated to ${next}`;
+        }
+        return `${meterType} status updated`;
+      }
+      case 'assignment_lock_change': {
+        const locked = payload.locked === true;
+        return locked
+          ? 'Assignment schedule locked'
+          : 'Assignment schedule unlocked';
+      }
+      default:
+        return this.humanizeToken(entry.type);
+    }
   }
 
   private safeTrim(value: string | null | undefined): string {

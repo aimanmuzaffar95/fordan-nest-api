@@ -1,5 +1,4 @@
 import { UserRole } from '../../users/entities/user-role.enum';
-import { JobAuditAction } from '../job-audit-action.enum';
 import { JobSystemType } from '../job-system-type.enum';
 import { JobAuditValue } from '../types/job-audit-value.type';
 
@@ -98,7 +97,9 @@ export type JobDetailTextEntryDto = {
 
 export type JobDetailTimelineItemDto = {
   id: string;
-  action: JobAuditAction;
+  /** `job_audit_logs.action` when `source` is `job_audit_log`; `timeline_events.type` when `source` is `timeline_event`. */
+  action: string;
+  source: 'job_audit_log' | 'timeline_event';
   field: string | null;
   oldValue: JobAuditValue | null;
   newValue: JobAuditValue | null;
