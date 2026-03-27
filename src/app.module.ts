@@ -43,6 +43,7 @@ import { InvertersModule } from './inverters/inverters.module';
 import { Inverter } from './inverters/entities/inverter.entity';
 import { BatteriesModule } from './batteries/batteries.module';
 import { Battery } from './batteries/entities/battery.entity';
+import { AdminSettings } from './runtime-settings/admin-settings.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -137,6 +138,7 @@ const publicLeadThrottleLimit = Number(
         SolarPanel,
         Inverter,
         Battery,
+        AdminSettings,
       ],
       synchronize: SYNCHRONIZE,
     }),

@@ -59,7 +59,8 @@ export class ScheduleService {
     query: GetScheduleQueryDto,
     viewer: ScheduleViewer,
   ): Promise<ScheduleResponseDto> {
-    const calendarScopeEnforced = this.runtimeSettings.getCalendarScopeEnforced();
+    const calendarScopeEnforced =
+      await this.runtimeSettings.getCalendarScopeEnforced();
     const from = query.from.slice(0, 10);
     const to = query.to.slice(0, 10);
 
@@ -78,7 +79,7 @@ export class ScheduleService {
       );
     }
 
-    let filterTeamId = query.teamId ?? null;
+    const filterTeamId = query.teamId ?? null;
 
     const qb = this.assignmentRepo
       .createQueryBuilder('a')

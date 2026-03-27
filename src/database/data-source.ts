@@ -21,6 +21,7 @@ import { EmployeeForm } from '../employee-forms/entities/employee-form.entity';
 import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 import { Inverter } from '../inverters/entities/inverter.entity';
 import { Battery } from '../batteries/entities/battery.entity';
+import { AdminSettings } from '../runtime-settings/admin-settings.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -111,6 +112,7 @@ export const AppDataSource = new DataSource({
     SolarPanel,
     Inverter,
     Battery,
+    AdminSettings,
   ],
   migrations: isMigrationCli
     ? ['src/migrations/*.ts']
