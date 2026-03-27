@@ -66,6 +66,7 @@ const argv = process.argv.join(' ').toLowerCase();
 // (e.g. seed scripts) should not import TS migrations at Node runtime.
 const isMigrationCli =
   argv.includes('migration:run') ||
+  argv.includes('migration:show') ||
   argv.includes('migration:generate') ||
   argv.includes('migration:revert');
 
