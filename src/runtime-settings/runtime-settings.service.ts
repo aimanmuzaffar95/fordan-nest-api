@@ -5,6 +5,7 @@ import {
   AdminSettings,
   ADMIN_SETTINGS_SINGLETON_ID,
 } from './admin-settings.entity';
+import { parseAttendanceGeofenceMode } from '../attendance/attendance-geofence-mode';
 import { UpdateAdminSettingsDto } from './dto/update-admin-settings.dto';
 
 export type AdminSettingsPayload = {
@@ -15,6 +16,9 @@ export type AdminSettingsPayload = {
   installWarningDays: number;
   postMeterDeadlineDays: number;
   maxJobsPerTeamPerDay: number;
+  attendanceGeofenceMode: string;
+  attendanceGeofenceRadiusMeters: number;
+  attendanceMaxGpsAccuracyMeters: number;
 };
 
 @Injectable()
@@ -68,6 +72,9 @@ export class RuntimeSettingsService {
       installWarningDays: 3,
       postMeterDeadlineDays: 2,
       maxJobsPerTeamPerDay: 2,
+      attendanceGeofenceMode: 'audit_only',
+      attendanceGeofenceRadiusMeters: 150,
+      attendanceMaxGpsAccuracyMeters: 100,
       updatedByUserId: null,
     });
 
@@ -83,6 +90,13 @@ export class RuntimeSettingsService {
       installWarningDays: settings.installWarningDays,
       postMeterDeadlineDays: settings.postMeterDeadlineDays,
       maxJobsPerTeamPerDay: settings.maxJobsPerTeamPerDay,
+      attendanceGeofenceMode: parseAttendanceGeofenceMode(
+        settings.attendanceGeofenceMode ?? 'audit_only',
+      ),
+      attendanceGeofenceRadiusMeters:
+        settings.attendanceGeofenceRadiusMeters ?? 150,
+      attendanceMaxGpsAccuracyMeters:
+        settings.attendanceMaxGpsAccuracyMeters ?? 100,
     };
   }
 }

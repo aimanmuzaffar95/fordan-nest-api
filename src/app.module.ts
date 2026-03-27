@@ -44,6 +44,10 @@ import { Inverter } from './inverters/entities/inverter.entity';
 import { BatteriesModule } from './batteries/batteries.module';
 import { Battery } from './batteries/entities/battery.entity';
 import { AdminSettings } from './runtime-settings/admin-settings.entity';
+import { AttendanceModule } from './attendance/attendance.module';
+import { AvailabilityModule } from './availability/availability.module';
+import { AttendanceSession } from './attendance/entities/attendance-session.entity';
+import { StaffAvailability } from './availability/entities/staff-availability.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -139,6 +143,8 @@ const publicLeadThrottleLimit = Number(
         Inverter,
         Battery,
         AdminSettings,
+        AttendanceSession,
+        StaffAvailability,
       ],
       synchronize: SYNCHRONIZE,
     }),
@@ -153,6 +159,8 @@ const publicLeadThrottleLimit = Number(
     ScheduleModule,
     MeteringModule,
     RuntimeSettingsModule,
+    AttendanceModule,
+    AvailabilityModule,
     EmployeeFormsModule,
     SolarPanelsModule,
     InvertersModule,

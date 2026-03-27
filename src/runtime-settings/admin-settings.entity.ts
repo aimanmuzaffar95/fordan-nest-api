@@ -37,6 +37,15 @@ export class AdminSettings {
   @Column({ type: 'int', default: 2 })
   maxJobsPerTeamPerDay: number;
 
+  @Column({ type: 'varchar', length: 20, default: 'audit_only' })
+  attendanceGeofenceMode: string;
+
+  @Column({ type: 'int', default: 150 })
+  attendanceGeofenceRadiusMeters: number;
+
+  @Column({ type: 'int', default: 100 })
+  attendanceMaxGpsAccuracyMeters: number;
+
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })
   updatedByUser: User | null;

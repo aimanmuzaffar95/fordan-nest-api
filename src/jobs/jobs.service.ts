@@ -1531,4 +1531,12 @@ export class JobsService {
       message.toLowerCase().includes('ordernumber')
     );
   }
+
+  /** Loads a job with installer/manager/admin visibility rules (e.g. attendance). */
+  async loadJobWithViewerAccess(
+    id: string,
+    viewer: JobListViewer,
+  ): Promise<Job> {
+    return this.findOneOrFail(this.jobsRepo, id, viewer);
+  }
 }

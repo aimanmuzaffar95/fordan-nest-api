@@ -113,6 +113,12 @@ export class Job {
   @Column({ type: 'date', nullable: true })
   paidDate: string | null;
 
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  jobSiteLatitude: string | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  jobSiteLongitude: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
