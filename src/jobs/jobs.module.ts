@@ -19,7 +19,10 @@ import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { Note } from '../notes/entities/note.entity';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
+import { Invoice } from '../invoices/entities/invoice.entity';
 import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.service';
+import { AdminDashboardController } from '../reports/admin-dashboard.controller';
+import { AdminDashboardReportsService } from '../reports/admin-dashboard.service';
 
 @Module({
   imports: [
@@ -38,13 +41,23 @@ import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.ser
       TimelineEvent,
       User,
       Note,
+      Invoice,
       SolarPanel,
       Inverter,
       Battery,
     ]),
   ],
-  controllers: [JobsController, CustomerJobsController],
-  providers: [JobsService, JobAuditLogsService, LeadCaptureInsightsService],
+  controllers: [
+    JobsController,
+    CustomerJobsController,
+    AdminDashboardController,
+  ],
+  providers: [
+    JobsService,
+    JobAuditLogsService,
+    LeadCaptureInsightsService,
+    AdminDashboardReportsService,
+  ],
   exports: [JobsService, JobAuditLogsService],
 })
 export class JobsModule {}
