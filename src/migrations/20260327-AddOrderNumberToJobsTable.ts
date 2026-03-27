@@ -10,7 +10,7 @@ type RawJobRow = {
   orderNumber: string | null;
 };
 
-export class AddOrderNumberToJobsTable20260327_1700000000011 implements MigrationInterface {
+export class AddOrderNumberToJobsTable20260327_1700000000016 implements MigrationInterface {
   private readonly uniqueIndexName = 'IDX_jobs_orderNumber_unique';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

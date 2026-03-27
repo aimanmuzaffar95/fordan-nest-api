@@ -9,3 +9,7 @@ See:
 
 - `docs/sops/SOP_MIGRATIONS_PRODUCTION.md`
 
+Notes:
+
+- TypeORM orders migrations by the trailing 13-digit timestamp in the migration class name, not by the file name prefix alone.
+- Keep those class-name timestamps unique and increasing, especially when a migration depends on tables created by an earlier migration.

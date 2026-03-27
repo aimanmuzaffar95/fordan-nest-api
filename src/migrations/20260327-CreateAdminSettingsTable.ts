@@ -5,7 +5,7 @@ import {
   TableForeignKey,
 } from 'typeorm';
 
-export class CreateAdminSettingsTable20260327_1400000000010
+export class CreateAdminSettingsTable20260327_1700000000014
   implements MigrationInterface
 {
   public async up(queryRunner: QueryRunner): Promise<void> {

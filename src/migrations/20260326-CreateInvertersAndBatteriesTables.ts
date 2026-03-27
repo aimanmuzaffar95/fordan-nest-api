@@ -2,7 +2,7 @@ import { MigrationInterface, QueryRunner, Table } from 'typeorm';
 import { InverterStockStatus } from '../inverters/entities/inverter-stock-status.enum';
 import { BatteryStockStatus } from '../batteries/entities/battery-stock-status.enum';
 
-export class CreateInvertersAndBatteriesTables20260326_1800000000009 implements MigrationInterface {
+export class CreateInvertersAndBatteriesTables20260326_1700000000011 implements MigrationInterface {
   private getDialectDefaults(queryRunner: QueryRunner) {
     const dialect = queryRunner.connection.options.type;
     const uuidDefault =

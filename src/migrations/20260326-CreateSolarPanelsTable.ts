@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner, Table } from 'typeorm';
 import { SolarPanelStockStatus } from '../solar-panels/entities/solar-panel-stock-status.enum';
 
-export class CreateSolarPanelsTable20260326_1700000000008 implements MigrationInterface {
+export class CreateSolarPanelsTable20260326_1700000000010 implements MigrationInterface {
   private getDialectDefaults(queryRunner: QueryRunner) {
     const dialect = queryRunner.connection.options.type;
     const uuidDefault =

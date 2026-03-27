@@ -7,7 +7,7 @@ import {
   TableIndex,
 } from 'typeorm';
 
-export class AddEquipmentPricingAndProposalSelections20260326_1900000000010
+export class AddEquipmentPricingAndProposalSelections20260326_1700000000012
   implements MigrationInterface
 {
   public async up(queryRunner: QueryRunner): Promise<void> {

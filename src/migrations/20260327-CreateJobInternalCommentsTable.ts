@@ -5,7 +5,7 @@ import {
   TableForeignKey,
 } from 'typeorm';
 
-export class CreateJobInternalCommentsTable20260327_1200000000009 implements MigrationInterface {
+export class CreateJobInternalCommentsTable20260327_1700000000015 implements MigrationInterface {
   private getDialectDefaults(queryRunner: QueryRunner) {
     const dialect = queryRunner.connection.options.type;
     const uuidDefault =

@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class RemoveEquipmentCatalogNameColumns20260326_1900000000010 implements MigrationInterface {
+export class RemoveEquipmentCatalogNameColumns20260326_1700000000013 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await this.dropNameColumn(queryRunner, 'solar_panels');
     await this.dropNameColumn(queryRunner, 'inverters');
