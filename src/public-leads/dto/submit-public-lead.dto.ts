@@ -1,12 +1,65 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsEmail,
   IsIn,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+
+/** UTM / form slug / referrer — nested so global ValidationPipe whitelist applies reliably. */
+export class PublicLeadTrackingDto {
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(80)
+  formSlug?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(120)
+  utmSource?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(120)
+  utmMedium?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(120)
+  utmCampaign?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(500)
+  pageReferrer?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(120)
+  selfReportedSource?: string;
+}
 
 export class SubmitPublicLeadDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -76,4 +129,11 @@ export class SubmitPublicLeadDto {
   @IsString()
   @MaxLength(200)
   submissionSecret?: string;
+
+  /** Nested attribution; `@IsObject` + `@ValidateNested` so `whitelist` / `forbidNonWhitelisted` accept this key. */
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => PublicLeadTrackingDto)
+  tracking?: PublicLeadTrackingDto;
 }

@@ -16,6 +16,7 @@ import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { Note } from '../notes/entities/note.entity';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
+import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.service';
 
 @Module({
   imports: [
@@ -37,7 +38,7 @@ import { JobsService } from './jobs.service';
     ]),
   ],
   controllers: [JobsController, CustomerJobsController],
-  providers: [JobsService, JobAuditLogsService],
+  providers: [JobsService, JobAuditLogsService, LeadCaptureInsightsService],
   exports: [JobsService, JobAuditLogsService],
 })
 export class JobsModule {}

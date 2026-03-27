@@ -54,13 +54,35 @@ export class PublicLeadsService {
     const systemSizeKw = systemType === 'battery' ? 0 : 6.6;
     const batterySizeKwh = systemType === 'solar' ? undefined : 10;
 
-    const metaParts = [
+    const t = dto.tracking;
+    const formSlug = t?.formSlug?.trim() || 'default';
+    const leadMeta = {
+      v: 1 as const,
+      formSlug,
+      utmSource: t?.utmSource?.trim() || undefined,
+      utmMedium: t?.utmMedium?.trim() || undefined,
+      utmCampaign: t?.utmCampaign?.trim() || undefined,
+      pageReferrer: t?.pageReferrer?.trim()?.slice(0, 500) || undefined,
+      selfReportedSource: t?.selfReportedSource?.trim() || undefined,
+    };
+    const metaLine = `__FORDAN_LEAD_META__${JSON.stringify(leadMeta)}`;
+
+    const humanParts = [
       'Lead source: public web form',
+      `Form: ${formSlug}`,
+      t?.utmSource?.trim() ? `utm_source: ${t.utmSource.trim()}` : '',
+      t?.utmMedium?.trim() ? `utm_medium: ${t.utmMedium.trim()}` : '',
+      t?.utmCampaign?.trim() ? `utm_campaign: ${t.utmCampaign.trim()}` : '',
+      t?.selfReportedSource?.trim()
+        ? `Heard about us: ${t.selfReportedSource.trim()}`
+        : '',
       dto.propertyType
         ? `Property type: ${dto.propertyType.replace(/_/g, ' ')}`
         : '',
       dto.notes?.trim() ? `Notes: ${dto.notes.trim()}` : '',
     ].filter(Boolean);
+
+    const notesBody = [metaLine, '', humanParts.join(' | ')].join('\n');
 
     const jobDto: CreateJobDto = {
       systemType,
@@ -73,7 +95,7 @@ export class PublicLeadsService {
       pipelineStage: 'lead',
       preMeterStatus: 'pending',
       postMeterStatus: 'pending',
-      notes: metaParts.join(' | ') || undefined,
+      notes: notesBody,
     };
 
     const job = await this.jobs.createJob(

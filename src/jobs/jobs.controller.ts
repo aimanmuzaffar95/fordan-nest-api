@@ -28,6 +28,7 @@ import { TransitionJobStageDto } from './dto/transition-job-stage.dto';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
 import { UpdateJobProposalConfigDto } from './dto/update-job-proposal-config.dto';
 import { JobsService } from './jobs.service';
+import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.service';
 
 @ApiTags('Jobs')
 @ApiBearerAuth('JWT')
@@ -37,7 +38,10 @@ import { JobsService } from './jobs.service';
 @Controller('jobs')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class JobsController {
-  constructor(private readonly jobs: JobsService) {}
+  constructor(
+    private readonly jobs: JobsService,
+    private readonly leadCaptureInsightsService: LeadCaptureInsightsService,
+  ) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
@@ -56,6 +60,18 @@ export class JobsController {
       throw new Error('Missing authenticated user context');
     }
     return this.jobs.list(query, { userId, role });
+  }
+
+  /** Static path must stay above `@Get(':id')` so it is not swallowed as a UUID. */
+  @Get('lead-capture-insights')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Lead capture analytics (public form submissions)',
+    description:
+      'Aggregates job notes from public lead submissions (`__FORDAN_LEAD_META__` line or legacy “Lead source: public web form” text).',
+  })
+  leadCaptureInsights() {
+    return this.leadCaptureInsightsService.getInsights();
   }
 
   @Post(':id/stage')
