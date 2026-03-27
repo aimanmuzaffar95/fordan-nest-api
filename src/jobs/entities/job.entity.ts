@@ -15,6 +15,9 @@ export class Job {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'varchar', length: 50, unique: true })
+  orderNumber: string;
+
   @ManyToOne(() => Customer, { nullable: false })
   customer: Customer;
 

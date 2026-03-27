@@ -14,6 +14,7 @@ export type JobDetailCustomerDto = {
 
 export type JobDetailJobDto = {
   id: string;
+  orderNumber: string;
   customerId: string;
   systemType: JobSystemType;
   jobStatus: string;

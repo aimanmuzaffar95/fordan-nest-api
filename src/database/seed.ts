@@ -324,6 +324,7 @@ async function main(): Promise<void> {
           jobsRepo.create({
             customer: customers[0],
             customerId: customers[0].id,
+            orderNumber: 'ORD-1001',
             systemType: JobSystemType.SOLAR,
             jobStatus: JobPipelineStage.LEAD,
             systemSizeKw: '5.00',
@@ -338,6 +339,7 @@ async function main(): Promise<void> {
           jobsRepo.create({
             customer: customers[1] ?? customers[0],
             customerId: (customers[1] ?? customers[0]).id,
+            orderNumber: 'ORD-1002',
             systemType: JobSystemType.SOLAR,
             jobStatus: JobPipelineStage.QUOTED,
             systemSizeKw: '6.60',
@@ -352,6 +354,7 @@ async function main(): Promise<void> {
           jobsRepo.create({
             customer: customers[2] ?? customers[0],
             customerId: (customers[2] ?? customers[0]).id,
+            orderNumber: 'ORD-1003',
             systemType: JobSystemType.BOTH,
             jobStatus: JobPipelineStage.SCHEDULED,
             systemSizeKw: '10.00',
@@ -366,6 +369,7 @@ async function main(): Promise<void> {
           jobsRepo.create({
             customer: customers[0],
             customerId: customers[0].id,
+            orderNumber: 'ORD-1004',
             systemType: JobSystemType.BATTERY,
             jobStatus: JobPipelineStage.PRE_METER_SUBMITTED,
             systemSizeKw: null,
@@ -380,6 +384,7 @@ async function main(): Promise<void> {
           jobsRepo.create({
             customer: customers[1] ?? customers[0],
             customerId: (customers[1] ?? customers[0]).id,
+            orderNumber: 'ORD-1005',
             systemType: JobSystemType.BOTH,
             jobStatus: JobPipelineStage.INSTALLED,
             systemSizeKw: '12.00',
@@ -394,6 +399,7 @@ async function main(): Promise<void> {
           jobsRepo.create({
             customer: customers[2] ?? customers[0],
             customerId: (customers[2] ?? customers[0]).id,
+            orderNumber: 'ORD-1006',
             systemType: JobSystemType.SOLAR,
             jobStatus: JobPipelineStage.PAID,
             systemSizeKw: '8.80',

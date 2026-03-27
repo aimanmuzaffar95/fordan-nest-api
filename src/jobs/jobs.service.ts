@@ -6,7 +6,13 @@ import {
   PreconditionFailedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, In, Repository } from 'typeorm';
+import {
+  Brackets,
+  DataSource,
+  In,
+  QueryFailedError,
+  Repository,
+} from 'typeorm';
 import { Assignment } from '../assignments/entities/assignment.entity';
 import { buildEquipmentCatalogName } from '../equipment-catalog/build-equipment-catalog-name';
 import { Battery } from '../batteries/entities/battery.entity';
@@ -47,6 +53,9 @@ export type JobListViewer = { userId: string; role: UserRole };
 
 @Injectable()
 export class JobsService {
+  private static readonly ORDER_NUMBER_PREFIX = 'ORD-';
+  private static readonly FIRST_ORDER_NUMBER = 1001;
+
   constructor(
     @InjectRepository(Job)
     private readonly jobsRepo: Repository<Job>,
@@ -394,7 +403,7 @@ export class JobsService {
         ? (dto.depositAmount ?? 0)
         : 0;
       const projectPrice = dto.projectPrice ?? 0;
-      const job = jobsRepo.create({
+      const savedJob = await this.createJobWithGeneratedOrderNumber(jobsRepo, {
         customerId,
         systemType: dto.systemType,
         jobStatus,
@@ -414,8 +423,6 @@ export class JobsService {
         installDate: dto.installDate ?? null,
         managerId: performedByRole === UserRole.MANAGER ? performedById : null,
       });
-
-      const savedJob = await jobsRepo.save(job);
 
       await this.jobAuditLogs.logWithManager(manager, {
         jobId: savedJob.id,
@@ -639,6 +646,7 @@ export class JobsService {
     return {
       job: {
         id: job.id,
+        orderNumber: job.orderNumber,
         customerId: job.customerId,
         systemType: job.systemType,
         jobStatus: job.jobStatus,
@@ -1347,7 +1355,7 @@ export class JobsService {
       const nextPipelinePosition =
         dto.pipelinePosition ?? (maxInStage?.pipelinePosition ?? 0) + 1;
 
-      const job = jobRepo.create({
+      const savedJob = await this.createJobWithGeneratedOrderNumber(jobRepo, {
         customerId,
         systemType: dto.systemType as JobSystemType,
         systemSizeKw: dto.systemSizeKw.toString(),
@@ -1375,8 +1383,6 @@ export class JobsService {
         scheduledSlot: null,
         managerId: userRole === UserRole.MANAGER ? userId : null,
       });
-
-      const savedJob = await jobRepo.save(job);
 
       const createMeter = (type: 'pre_meter' | 'post_meter', status: string) =>
         meterRepo.save(
@@ -1423,5 +1429,82 @@ export class JobsService {
 
       return savedJob;
     });
+  }
+
+  private async createJobWithGeneratedOrderNumber(
+    jobsRepo: Repository<Job>,
+    payload: Omit<Partial<Job>, 'orderNumber'>,
+  ) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const job = jobsRepo.create({
+        ...payload,
+        orderNumber: await this.generateOrderNumber(jobsRepo),
+      });
+
+      try {
+        return await jobsRepo.save(job);
+      } catch (error) {
+        if (this.isDuplicateOrderNumberError(error)) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw new BadRequestException('Failed to generate unique order number');
+  }
+
+  private async generateOrderNumber(jobsRepo: Repository<Job>) {
+    const existingOrderNumbers = await jobsRepo
+      .createQueryBuilder('job')
+      .select('job.orderNumber', 'orderNumber')
+      .where('job.orderNumber IS NOT NULL')
+      .getRawMany<{ orderNumber: string | null }>();
+
+    const highestOrderNumber = existingOrderNumbers.reduce((max, row) => {
+      const parsed = this.parseOrderNumber(row.orderNumber);
+      if (parsed === null || parsed <= max) {
+        return max;
+      }
+
+      return parsed;
+    }, JobsService.FIRST_ORDER_NUMBER - 1);
+
+    return `${JobsService.ORDER_NUMBER_PREFIX}${highestOrderNumber + 1}`;
+  }
+
+  private parseOrderNumber(value: string | null | undefined) {
+    if (!value) {
+      return null;
+    }
+
+    const match = new RegExp(`^${JobsService.ORDER_NUMBER_PREFIX}(\\d+)$`).exec(
+      value,
+    );
+    if (!match) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(match[1], 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private isDuplicateOrderNumberError(error: unknown) {
+    if (!(error instanceof QueryFailedError)) {
+      return false;
+    }
+
+    const driverError = (
+      error as QueryFailedError & {
+        driverError?: { code?: string; message?: string };
+      }
+    ).driverError;
+
+    const message = String(driverError?.message ?? '');
+    return (
+      (driverError?.code === '23505' || driverError?.code === 'ER_DUP_ENTRY') &&
+      message.toLowerCase().includes('ordernumber')
+    );
   }
 }
