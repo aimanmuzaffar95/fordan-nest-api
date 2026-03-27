@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -158,6 +159,47 @@ export class JobsController {
     return this.jobs.createNote(id, dto, { userId, role });
   }
 
+  @Patch(':id/notes/:noteId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Update job note',
+    description:
+      '**Installer:** may edit only notes they created. **Admin/manager:** may edit any note on a job they can access.',
+  })
+  updateNote(
+    @Param('id', ParseUUIDPipe) jobId: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Body() dto: CreateJobTextEntryDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.jobs.updateNote(jobId, noteId, dto, { userId, role });
+  }
+
+  @Delete(':id/notes/:noteId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Delete job note',
+    description:
+      '**Installer:** may delete only notes they created. **Admin/manager:** may delete any note on a job they can access.',
+  })
+  deleteNote(
+    @Param('id', ParseUUIDPipe) jobId: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.jobs.deleteNote(jobId, noteId, { userId, role });
+  }
+
   @Post(':id/internal-comments')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
   @ApiOperation({
@@ -176,6 +218,53 @@ export class JobsController {
       throw new Error('Missing authenticated user context');
     }
     return this.jobs.createInternalComment(id, dto, { userId, role });
+  }
+
+  @Patch(':id/internal-comments/:commentId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Update job internal comment',
+    description:
+      '**Installer:** may edit only comments they created. **Admin/manager:** may edit any internal comment on a job they can access.',
+  })
+  updateInternalComment(
+    @Param('id', ParseUUIDPipe) jobId: string,
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+    @Body() dto: CreateJobTextEntryDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.jobs.updateInternalComment(jobId, commentId, dto, {
+      userId,
+      role,
+    });
+  }
+
+  @Delete(':id/internal-comments/:commentId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Delete job internal comment',
+    description:
+      '**Installer:** may delete only comments they created. **Admin/manager:** may delete any internal comment on a job they can access.',
+  })
+  deleteInternalComment(
+    @Param('id', ParseUUIDPipe) jobId: string,
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.jobs.deleteInternalComment(jobId, commentId, {
+      userId,
+      role,
+    });
   }
 
   @Get(':id/proposal-config')

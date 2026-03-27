@@ -330,6 +330,104 @@ export class JobsService {
     return this.mapTextEntry(createdComment);
   }
 
+  private assertInstallerOwnsTextEntry(
+    viewer: JobListViewer,
+    createdByUserId: string | null,
+  ): void {
+    if (viewer.role !== UserRole.INSTALLER) {
+      return;
+    }
+    if (createdByUserId !== viewer.userId) {
+      throw new ForbiddenException(
+        'You can only change notes or comments you created.',
+      );
+    }
+  }
+
+  async updateNote(
+    jobId: string,
+    noteId: string,
+    dto: CreateJobTextEntryDto,
+    viewer: JobListViewer,
+  ) {
+    await this.findOneOrFail(this.jobsRepo, jobId, viewer);
+    const note = await this.notesRepo.findOne({
+      where: { id: noteId, jobId },
+    });
+    if (!note) {
+      throw new NotFoundException('Note not found');
+    }
+    this.assertInstallerOwnsTextEntry(viewer, note.createdByUserId);
+
+    note.body = dto.body.trim();
+    await this.notesRepo.save(note);
+    const updated = await this.notesRepo.findOne({
+      where: { id: noteId },
+      relations: { createdByUser: true },
+    });
+    if (!updated) {
+      throw new NotFoundException('Job note not found after update');
+    }
+    return this.mapTextEntry(updated);
+  }
+
+  async deleteNote(jobId: string, noteId: string, viewer: JobListViewer) {
+    await this.findOneOrFail(this.jobsRepo, jobId, viewer);
+    const note = await this.notesRepo.findOne({
+      where: { id: noteId, jobId },
+    });
+    if (!note) {
+      throw new NotFoundException('Note not found');
+    }
+    this.assertInstallerOwnsTextEntry(viewer, note.createdByUserId);
+    await this.notesRepo.remove(note);
+    return { id: noteId };
+  }
+
+  async updateInternalComment(
+    jobId: string,
+    commentId: string,
+    dto: CreateJobTextEntryDto,
+    viewer: JobListViewer,
+  ) {
+    await this.findOneOrFail(this.jobsRepo, jobId, viewer);
+    const comment = await this.jobInternalCommentsRepo.findOne({
+      where: { id: commentId, jobId },
+    });
+    if (!comment) {
+      throw new NotFoundException('Internal comment not found');
+    }
+    this.assertInstallerOwnsTextEntry(viewer, comment.createdByUserId);
+
+    comment.body = dto.body.trim();
+    await this.jobInternalCommentsRepo.save(comment);
+    const updated = await this.jobInternalCommentsRepo.findOne({
+      where: { id: commentId },
+      relations: { createdByUser: true },
+    });
+    if (!updated) {
+      throw new NotFoundException('Internal comment not found after update');
+    }
+    return this.mapTextEntry(updated);
+  }
+
+  async deleteInternalComment(
+    jobId: string,
+    commentId: string,
+    viewer: JobListViewer,
+  ) {
+    await this.findOneOrFail(this.jobsRepo, jobId, viewer);
+    const comment = await this.jobInternalCommentsRepo.findOne({
+      where: { id: commentId, jobId },
+    });
+    if (!comment) {
+      throw new NotFoundException('Internal comment not found');
+    }
+    this.assertInstallerOwnsTextEntry(viewer, comment.createdByUserId);
+    await this.jobInternalCommentsRepo.remove(comment);
+    return { id: commentId };
+  }
+
   async getProposalConfig(
     id: string,
     viewer?: JobListViewer,
@@ -470,15 +568,17 @@ export class JobsService {
         !this.hasPreMeterApprovalForInstall(job.jobStatus)
       ) {
         if (!overridePreMeterLock) {
-          throw new PreconditionFailedException(
-            'Pre-meter is not approved. An admin must manually override the pre-meter lock before moving this job to Installed.',
-          );
+          throw new PreconditionFailedException({
+            message:
+              'Pre-meter is not approved. An admin must manually override the pre-meter lock before moving this job to Installed.',
+            code: 'PRECONDITION_FAILED',
+          });
         }
 
         if (performedByRole !== UserRole.ADMIN) {
-          throw new ForbiddenException(
-            'Only admins can override the pre-meter lock.',
-          );
+          throw new ForbiddenException({
+            message: 'Only admins can override the pre-meter lock.',
+          });
         }
       }
 
