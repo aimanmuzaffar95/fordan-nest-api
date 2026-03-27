@@ -25,6 +25,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/entities/user-role.enum';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
 import { TransitionJobStageDto } from './dto/transition-job-stage.dto';
+import { UpdateJobDto } from './dto/update-job.dto';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
 import { UpdateJobProposalConfigDto } from './dto/update-job-proposal-config.dto';
 import { JobsService } from './jobs.service';
@@ -107,6 +108,26 @@ export class JobsController {
       throw new Error('Missing authenticated user context');
     }
     return this.jobs.getOne(id, { userId, role });
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Update non-pipeline job fields',
+    description:
+      'Currently supports manager assignment updates for the live job detail summary card. Returns the refreshed job detail payload.',
+  })
+  updateJob(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateJobDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.jobs.updateJob(id, dto, { userId, role });
   }
 
   @Get(':id/proposal-config')

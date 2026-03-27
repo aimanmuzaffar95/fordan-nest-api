@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
+import { Assignment } from '../assignments/entities/assignment.entity';
 import { buildEquipmentCatalogName } from '../equipment-catalog/build-equipment-catalog-name';
 import { Battery } from '../batteries/entities/battery.entity';
 import { Inverter } from '../inverters/entities/inverter.entity';
@@ -26,8 +27,12 @@ import { JobAuditLog } from './entities/job-audit-log.entity';
 import { JobProposalSelection } from './entities/job-proposal-selection.entity';
 import { Job } from './entities/job.entity';
 import { Customer } from '../customers/entities/customer.entity';
+import { Team } from '../teams/entities/team.entity';
 import { User } from '../users/entities/user.entity';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
+import { UpdateJobDto } from './dto/update-job.dto';
+import { Invoice } from '../invoices/entities/invoice.entity';
+import { InvoiceStatus } from '../invoices/entities/invoice-status.enum';
 import { MeterApplication } from '../metering/entities/meter-application.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { Note } from '../notes/entities/note.entity';
@@ -47,10 +52,14 @@ export class JobsService {
     private readonly jobAuditLogs: JobAuditLogsService,
     @InjectRepository(MeterApplication)
     private readonly meterApplicationsRepo: Repository<MeterApplication>,
+    @InjectRepository(Assignment)
+    private readonly assignmentsRepo: Repository<Assignment>,
     @InjectRepository(JobProposalSelection)
     private readonly jobProposalSelectionsRepo: Repository<JobProposalSelection>,
     @InjectRepository(Customer)
     private readonly customersRepo: Repository<Customer>,
+    @InjectRepository(Team)
+    private readonly teamsRepo: Repository<Team>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     @InjectRepository(Note)
@@ -138,17 +147,66 @@ export class JobsService {
 
   async getOne(id: string, viewer?: JobListViewer) {
     const job = await this.findOneOrFail(this.jobsRepo, id, viewer);
-    const timeline = await this.dataSource.getRepository(JobAuditLog).find({
-      where: { jobId: id },
-      relations: {
-        performedBy: true,
-      },
-      order: {
-        createdAt: 'DESC',
-      },
+    return this.buildJobDetailResponse(job);
+  }
+
+  async updateJob(
+    id: string,
+    dto: UpdateJobDto,
+    viewer: JobListViewer,
+  ): Promise<JobDetailResponseDto> {
+    const hasManagerIdUpdate = Object.prototype.hasOwnProperty.call(
+      dto,
+      'managerId',
+    );
+    if (!hasManagerIdUpdate) {
+      return this.getOne(id, viewer);
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      const jobsRepo = manager.getRepository(Job);
+      const usersRepo = manager.getRepository(User);
+      const job = await this.findOneOrFail(jobsRepo, id, viewer);
+
+      const nextManagerId =
+        dto.managerId === undefined ? job.managerId : dto.managerId;
+
+      if (nextManagerId === job.managerId) {
+        return;
+      }
+
+      let validatedManagerId: string | null = null;
+      if (nextManagerId) {
+        const managerUser = await usersRepo.findOne({
+          where: { id: nextManagerId },
+        });
+        if (!managerUser) {
+          throw new NotFoundException('Manager user not found');
+        }
+        if (managerUser.role !== UserRole.MANAGER) {
+          throw new BadRequestException('Selected user is not a manager');
+        }
+        validatedManagerId = managerUser.id;
+      }
+
+      const previousManagerId = job.managerId;
+      job.managerId = validatedManagerId;
+      await jobsRepo.save(job);
+
+      await this.jobAuditLogs.logWithManager(manager, {
+        jobId: job.id,
+        performedById: viewer.userId,
+        action: JobAuditAction.MANAGER_ASSIGNMENT_CHANGED,
+        field: 'managerId',
+        oldValue: previousManagerId,
+        newValue: validatedManagerId,
+        metadata: {
+          source: 'job_detail_summary',
+        },
+      });
     });
 
-    return this.mapJobDetail(job, timeline);
+    return this.getOne(id, viewer);
   }
 
   async getProposalConfig(
@@ -372,16 +430,92 @@ export class JobsService {
     );
   }
 
-  private mapJobDetail(
-    job: Job,
-    timeline: JobAuditLog[],
-  ): JobDetailResponseDto {
+  private async buildJobDetailResponse(job: Job): Promise<JobDetailResponseDto> {
+    const [timeline, manager, assignedStaffUser, assignedTeam, installerRows, invoices] =
+      await Promise.all([
+        this.dataSource.getRepository(JobAuditLog).find({
+          where: { jobId: job.id },
+          relations: {
+            performedBy: true,
+          },
+          order: {
+            createdAt: 'DESC',
+          },
+        }),
+        job.managerId
+          ? this.usersRepo.findOne({ where: { id: job.managerId } })
+          : Promise.resolve(null),
+        job.assignedStaffUserId
+          ? this.usersRepo.findOne({ where: { id: job.assignedStaffUserId } })
+          : Promise.resolve(null),
+        job.assignedTeamId
+          ? this.teamsRepo.findOne({ where: { id: job.assignedTeamId } })
+          : Promise.resolve(null),
+        this.assignmentsRepo.find({
+          where: { jobId: job.id },
+          relations: {
+            staffUser: true,
+            team: true,
+          },
+          order: {
+            scheduledDate: 'ASC',
+            slot: 'ASC',
+          },
+        }),
+        this.dataSource.getRepository(Invoice).find({
+          where: { jobId: job.id },
+          relations: {
+            payments: true,
+          },
+          order: {
+            issueDate: 'DESC',
+          },
+        }),
+      ]);
+
+      const projectPrice = Number(job.projectPrice ?? 0);
+      const hasProjectPrice = Number.isFinite(projectPrice) && projectPrice > 0;
+      const paidDepositAmount = job.depositPaid
+      ? Number(job.depositAmount ?? 0)
+      : 0;
+    const activeInvoices = invoices.filter(
+      (invoice) => invoice.status !== InvoiceStatus.CANCELLED,
+    );
+    const invoicePaidAmount = activeInvoices.reduce(
+      (sum, invoice) => sum + Number(invoice.amountPaid ?? 0),
+      0,
+    );
+    const totalPaidAmount = paidDepositAmount + invoicePaidAmount;
+    const remainingAmountNumber = hasProjectPrice
+      ? Math.max(projectPrice - totalPaidAmount, 0)
+      : null;
+    const latestInvoice = activeInvoices[0] ?? null;
+    const latestOutstandingInvoice =
+      activeInvoices.find((invoice) => invoice.status !== InvoiceStatus.PAID) ??
+      latestInvoice;
+    const latestPaymentDate = activeInvoices
+      .flatMap((invoice) => invoice.payments ?? [])
+      .map((payment) => payment.paymentDate)
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => b.localeCompare(a))[0] ?? null;
+    const derivedInvoiceStatus = (() => {
+      if (activeInvoices.length === 0) {
+        return job.invoiceStatus ?? 'not_invoiced';
+      }
+      if (remainingAmountNumber !== null && remainingAmountNumber <= 0.0001) {
+        return 'paid';
+      }
+      return 'invoiced';
+    })();
+
     return {
       job: {
         id: job.id,
         customerId: job.customerId,
         systemType: job.systemType,
         jobStatus: job.jobStatus,
+        pipelineStage: job.pipelineStage,
+        pipelinePosition: job.pipelinePosition,
         systemSizeKw: job.systemSizeKw,
         batterySizeKwh: job.batterySizeKwh,
         projectPrice: job.projectPrice,
@@ -389,7 +523,21 @@ export class JobsService {
         depositAmount: job.depositAmount,
         depositPaid: job.depositPaid,
         depositDate: job.depositDate,
+        etaCompletionDate: job.etaCompletionDate,
         installDate: job.installDate,
+        scheduledDate: job.scheduledDate,
+        scheduledSlot: job.scheduledSlot,
+        managerId: job.managerId,
+        assignedStaffUserId: job.assignedStaffUserId,
+        assignedTeamId: job.assignedTeamId,
+        invoiceStatus: derivedInvoiceStatus,
+        invoiceDate: latestInvoice?.issueDate ?? job.invoiceDate,
+        invoiceDueDate:
+          latestOutstandingInvoice?.dueDate ?? latestInvoice?.dueDate ?? job.invoiceDueDate,
+        paidDate:
+          derivedInvoiceStatus === 'paid'
+            ? latestPaymentDate ?? job.paidDate
+            : job.paidDate,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
       },
@@ -403,6 +551,34 @@ export class JobsService {
             address: job.customer.address,
           }
         : null,
+      manager: this.mapUserSummary(manager),
+      assignedStaffUser: this.mapUserSummary(assignedStaffUser),
+      assignedTeam: assignedTeam
+        ? {
+            id: assignedTeam.id,
+            name: assignedTeam.name,
+          }
+        : null,
+      installerAssignments: installerRows.map((row) => ({
+        id: row.id,
+        scheduledDate: row.scheduledDate,
+        slot: row.slot,
+        locked: row.locked,
+        lockedAt: row.lockedAt,
+        lockReason: row.lockReason,
+        installer: this.mapUserSummary(row.staffUser),
+        team: row.team
+          ? {
+              id: row.team.id,
+              name: row.team.name,
+            }
+          : null,
+      })),
+      financials: {
+        depositPaidAmount: paidDepositAmount.toFixed(2),
+        remainingAmount:
+          remainingAmountNumber !== null ? remainingAmountNumber.toFixed(2) : null,
+      },
       timeline: timeline.map((entry) => ({
         id: entry.id,
         action: entry.action,
@@ -421,6 +597,24 @@ export class JobsService {
           : null,
         description: this.describeAuditEntry(entry),
       })),
+    };
+  }
+
+  private mapUserSummary(user: User | null | undefined) {
+    if (!user) return null;
+
+    const firstName = user.firstName.trim();
+    const lastName = user.lastName.trim();
+
+    return {
+      id: user.id,
+      firstName,
+      lastName,
+      fullName: `${firstName} ${lastName}`.trim(),
+      email: user.emailAddress,
+      phone: user.phoneNumber,
+      role: user.role,
+      teamId: user.teamId,
     };
   }
 
