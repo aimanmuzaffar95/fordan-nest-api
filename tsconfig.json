@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node", "jest"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "resolvePackageJsonExports": true,

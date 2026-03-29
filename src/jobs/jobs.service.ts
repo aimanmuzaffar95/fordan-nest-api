@@ -643,6 +643,18 @@ export class JobsService {
       : null;
     const derivedInvoiceFields = this.buildDerivedInvoiceFields(job, invoices);
 
+    const mapTimelineActor = (user: User | null | undefined) => {
+      if (!user) return null;
+      const firstName = this.safeTrim(user.firstName);
+      const lastName = this.safeTrim(user.lastName);
+      return {
+        id: user.id,
+        firstName,
+        lastName,
+        role: user.role,
+      };
+    };
+
     return {
       job: {
         id: job.id,
@@ -725,32 +737,29 @@ export class JobsService {
         newValue: entry.newValue,
         metadata: entry.metadata,
         createdAt: entry.createdAt,
-        performedBy: entry.performedBy
-          ? {
-              id: entry.performedBy.id,
-              firstName: entry.performedBy.firstName,
-              lastName: entry.performedBy.lastName,
-              role: entry.performedBy.role,
-            }
-          : null,
+        performedBy: mapTimelineActor(entry.performedBy),
         description: this.describeAuditEntry(entry),
       })),
     };
   }
 
+  private safeTrim(value: string | null | undefined): string {
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
   private mapUserSummary(user: User | null | undefined) {
     if (!user) return null;
 
-    const firstName = user.firstName.trim();
-    const lastName = user.lastName.trim();
+    const firstName = this.safeTrim(user.firstName);
+    const lastName = this.safeTrim(user.lastName);
 
     return {
       id: user.id,
       firstName,
       lastName,
       fullName: `${firstName} ${lastName}`.trim(),
-      email: user.emailAddress,
-      phone: user.phoneNumber,
+      email: this.safeTrim(user.emailAddress),
+      phone: this.safeTrim(user.phoneNumber),
       role: user.role,
       teamId: user.teamId,
     };
@@ -769,8 +778,8 @@ export class JobsService {
   private mapTextEntryActor(user: User | null | undefined) {
     if (!user) return null;
 
-    const firstName = user.firstName.trim();
-    const lastName = user.lastName.trim();
+    const firstName = this.safeTrim(user.firstName);
+    const lastName = this.safeTrim(user.lastName);
 
     return {
       id: user.id,
@@ -784,6 +793,10 @@ export class JobsService {
     switch (entry.action) {
       case JobAuditAction.JOB_CREATED:
         return 'Job created';
+      case JobAuditAction.JOB_SOFT_DELETED:
+        return 'Job archived (soft delete)';
+      case JobAuditAction.JOB_RESTORED:
+        return 'Job restored';
       case JobAuditAction.JOB_STATUS_CHANGED:
         return `Stage changed from ${this.humanizeValue(entry.oldValue)} to ${this.humanizeValue(entry.newValue)}${this.wasPreMeterLockOverridden(entry) ? ' with pre-meter lock override' : ''}`;
       case JobAuditAction.MANAGER_ASSIGNMENT_CHANGED:
@@ -803,7 +816,11 @@ export class JobsService {
       case JobAuditAction.POST_METER_STATUS_CHANGED:
         return 'Post-meter status updated';
       default:
-        return this.humanizeToken(entry.action);
+        return this.humanizeToken(
+          typeof entry.action === 'string'
+            ? entry.action
+            : String(entry.action ?? ''),
+        );
     }
   }
 
@@ -823,8 +840,15 @@ export class JobsService {
     return 'updated value';
   }
 
-  private humanizeToken(value: string): string {
-    return value
+  private humanizeToken(value: string | null | undefined): string {
+    if (value == null || typeof value !== 'string') {
+      return 'Event';
+    }
+    const t = value.trim();
+    if (!t) {
+      return 'Event';
+    }
+    return t
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (match) => match.toUpperCase());
   }
