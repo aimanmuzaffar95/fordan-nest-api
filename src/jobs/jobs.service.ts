@@ -48,6 +48,7 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
+import { JobAuditValue } from './types/job-audit-value.type';
 
 export type JobListViewer = { userId: string; role: UserRole };
 
@@ -578,7 +579,8 @@ export class JobsService {
     job: Job,
   ): Promise<JobDetailResponseDto> {
     const [
-      timeline,
+      auditTimeline,
+      timelineEvents,
       manager,
       assignedStaffUser,
       assignedTeam,
@@ -591,6 +593,15 @@ export class JobsService {
         where: { jobId: job.id },
         relations: {
           performedBy: true,
+        },
+        order: {
+          createdAt: 'DESC',
+        },
+      }),
+      this.dataSource.getRepository(TimelineEvent).find({
+        where: { jobId: job.id },
+        relations: {
+          createdByUser: true,
         },
         order: {
           createdAt: 'DESC',
@@ -675,6 +686,43 @@ export class JobsService {
       };
     };
 
+    const combinedTimeline = [
+      ...auditTimeline.map((entry) => ({
+        id: entry.id,
+        source: 'audit' as const,
+        eventType: entry.action,
+        action: entry.action,
+        field: entry.field,
+        oldValue: entry.oldValue,
+        newValue: entry.newValue,
+        metadata: entry.metadata,
+        payload: null,
+        createdAt: entry.createdAt,
+        performedBy: mapTimelineActor(entry.performedBy),
+        createdByName: this.getTimelineActorName(entry.performedBy),
+        description: this.describeAuditEntry(entry),
+      })),
+      ...timelineEvents.map((entry) => ({
+        id: entry.id,
+        source: 'event' as const,
+        eventType: entry.type,
+        action: null,
+        field: null,
+        oldValue: null,
+        newValue: null,
+        metadata: null,
+        payload: this.normalizeTimelinePayload(entry.payload),
+        createdAt: entry.createdAt,
+        performedBy: mapTimelineActor(entry.createdByUser),
+        createdByName: this.getTimelineActorName(entry.createdByUser),
+        description: this.describeTimelineEvent(entry),
+      })),
+    ].sort(
+      (left, right) =>
+        new Date(right.createdAt).getTime() -
+        new Date(left.createdAt).getTime(),
+    );
+
     return {
       job: {
         id: job.id,
@@ -749,17 +797,7 @@ export class JobsService {
       internalComments: internalComments.map((entry) =>
         this.mapTextEntry(entry),
       ),
-      timeline: timeline.map((entry) => ({
-        id: entry.id,
-        action: entry.action,
-        field: entry.field,
-        oldValue: entry.oldValue,
-        newValue: entry.newValue,
-        metadata: entry.metadata,
-        createdAt: entry.createdAt,
-        performedBy: mapTimelineActor(entry.performedBy),
-        description: this.describeAuditEntry(entry),
-      })),
+      timeline: combinedTimeline,
     };
   }
 
@@ -809,6 +847,14 @@ export class JobsService {
     };
   }
 
+  private getTimelineActorName(user: User | null | undefined): string {
+    const firstName = this.safeTrim(user?.firstName);
+    const lastName = this.safeTrim(user?.lastName);
+    const fullName = `${firstName} ${lastName}`.trim();
+
+    return fullName || 'System';
+  }
+
   private describeAuditEntry(entry: JobAuditLog): string {
     switch (entry.action) {
       case JobAuditAction.JOB_CREATED:
@@ -842,6 +888,71 @@ export class JobsService {
             : String(entry.action ?? ''),
         );
     }
+  }
+
+  private describeTimelineEvent(entry: TimelineEvent): string {
+    const payload = this.normalizeTimelinePayload(entry.payload);
+
+    switch (entry.type) {
+      case 'job_file_uploaded': {
+        const label = this.readTimelinePayloadString(payload, 'displayName');
+        const kind = this.readTimelinePayloadString(payload, 'kind');
+        if (label) {
+          return kind === 'compliance'
+            ? `Compliance file uploaded: ${label}`
+            : `File uploaded: ${label}`;
+        }
+
+        return kind === 'compliance'
+          ? 'Compliance file uploaded'
+          : 'File uploaded';
+      }
+      case 'meter_file_uploaded': {
+        const label =
+          this.readTimelinePayloadString(payload, 'displayName') ||
+          this.readTimelinePayloadString(payload, 'originalName');
+        return label ? `Meter file uploaded: ${label}` : 'Meter file uploaded';
+      }
+      case 'meter_status_change': {
+        const status = this.readTimelinePayloadString(payload, 'status');
+        return status
+          ? `Meter application ${this.humanizeToken(status)}`
+          : 'Meter application updated';
+      }
+      case 'assignment_lock_change': {
+        const locked =
+          payload && typeof payload === 'object' && !Array.isArray(payload)
+            ? payload.locked
+            : null;
+        if (typeof locked === 'boolean') {
+          return locked ? 'Assignment locked' : 'Assignment unlocked';
+        }
+
+        return 'Assignment lock updated';
+      }
+      default:
+        return this.humanizeToken(entry.type);
+    }
+  }
+
+  private normalizeTimelinePayload(payload: unknown): JobAuditValue | null {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return null;
+    }
+
+    return payload as JobAuditValue;
+  }
+
+  private readTimelinePayloadString(
+    payload: JobAuditValue | null,
+    key: string,
+  ): string {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return '';
+    }
+
+    const value = payload[key];
+    return typeof value === 'string' ? value.trim() : '';
   }
 
   private humanizeValue(value: unknown): string {

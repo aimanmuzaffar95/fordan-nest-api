@@ -2,8 +2,39 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
+import { UserRole } from '../users/entities/user-role.enum';
 import { Customer } from './entities/customer.entity';
 import { CustomersService } from './customers.service';
+
+type QueryBuilderMock = {
+  where: jest.Mock;
+  clone: jest.Mock;
+  orderBy: jest.Mock;
+  addOrderBy: jest.Mock;
+  addSelect: jest.Mock;
+  skip: jest.Mock;
+  take: jest.Mock;
+  getMany: jest.Mock;
+  getCount: jest.Mock;
+  getOne: jest.Mock;
+  innerJoin: jest.Mock;
+  distinct: jest.Mock;
+};
+
+const createQueryBuilderMock = (): QueryBuilderMock => ({
+  where: jest.fn().mockReturnThis(),
+  clone: jest.fn(),
+  orderBy: jest.fn().mockReturnThis(),
+  addOrderBy: jest.fn().mockReturnThis(),
+  addSelect: jest.fn().mockReturnThis(),
+  skip: jest.fn().mockReturnThis(),
+  take: jest.fn().mockReturnThis(),
+  getMany: jest.fn(),
+  getCount: jest.fn(),
+  getOne: jest.fn(),
+  innerJoin: jest.fn().mockReturnThis(),
+  distinct: jest.fn().mockReturnThis(),
+});
 
 describe('CustomersService', () => {
   let service: CustomersService;
@@ -14,7 +45,6 @@ describe('CustomersService', () => {
       findOne: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
-      findAndCount: jest.fn(),
       createQueryBuilder: jest.fn(),
     }) as unknown as jest.Mocked<Repository<Customer>>;
 
@@ -90,23 +120,35 @@ describe('CustomersService', () => {
 
   it('returns paginated customers from findAll', async () => {
     const now = new Date('2026-03-12T00:00:00.000Z');
-    repository.findAndCount.mockResolvedValue([
-      [
-        {
-          id: '1',
-          firstName: 'A',
-          lastName: 'B',
-          address: null,
-          phone: '1',
-          email: 'a@example.com',
-          createdAt: now,
-          updatedAt: now,
-        } as Customer,
-      ],
-      1,
-    ]);
+    const rootQb = createQueryBuilderMock();
+    const itemsQb = createQueryBuilderMock();
+    const countQb = createQueryBuilderMock();
 
-    const result = await service.findAll(1, 20);
+    itemsQb.getMany.mockResolvedValue([
+      {
+        id: '1',
+        firstName: 'A',
+        lastName: 'B',
+        address: null,
+        phone: '1',
+        email: 'a@example.com',
+        createdAt: now,
+        updatedAt: now,
+      } as Customer,
+    ]);
+    countQb.getCount.mockResolvedValue(1);
+    // findAll clones twice: first for paginated items, second for total count.
+    rootQb.clone.mockReturnValueOnce(itemsQb).mockReturnValueOnce(countQb);
+    repository.createQueryBuilder.mockReturnValue(
+      rootQb as unknown as ReturnType<
+        Repository<Customer>['createQueryBuilder']
+      >,
+    );
+
+    const result = await service.findAll(1, 20, {
+      userId: 'admin-id',
+      role: UserRole.ADMIN,
+    });
 
     expect(result.page).toBe(1);
     expect(result.limit).toBe(20);
@@ -117,32 +159,24 @@ describe('CustomersService', () => {
 
   it('searches and returns mapped results', async () => {
     const now = new Date('2026-03-12T00:00:00.000Z');
-    const filteredQb = {
-      where: jest.fn().mockReturnThis(),
-      clone: jest.fn(),
-    };
-    const itemsQb = {
-      addSelect: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      addOrderBy: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      getMany: jest.fn().mockResolvedValue([
-        {
-          id: '1',
-          firstName: 'Aiman',
-          lastName: 'Khan',
-          address: null,
-          phone: '+1555',
-          email: 'aiman@example.com',
-          createdAt: now,
-          updatedAt: now,
-        } as Customer,
-      ]),
-    };
-    const countQb = {
-      getCount: jest.fn().mockResolvedValue(1),
-    };
+    const filteredQb = createQueryBuilderMock();
+    const itemsQb = createQueryBuilderMock();
+    const countQb = createQueryBuilderMock();
+
+    itemsQb.getMany.mockResolvedValue([
+      {
+        id: '1',
+        firstName: 'Aiman',
+        lastName: 'Khan',
+        address: null,
+        phone: '+1555',
+        email: 'aiman@example.com',
+        createdAt: now,
+        updatedAt: now,
+      } as Customer,
+    ]);
+    countQb.getCount.mockResolvedValue(1);
+    // search clones twice: first for paginated items, second for total count.
     filteredQb.clone
       .mockReturnValueOnce(
         itemsQb as unknown as ReturnType<
@@ -169,7 +203,11 @@ describe('CustomersService', () => {
   });
 
   it('throws not found when customer does not exist', async () => {
-    repository.findOne.mockResolvedValue(null);
+    const qb = createQueryBuilderMock();
+    qb.getOne.mockResolvedValue(null);
+    repository.createQueryBuilder.mockReturnValue(
+      qb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>,
+    );
 
     await expect(
       service.findOne('24d00d3c-d0af-4560-8866-dfbe2ec9fd58'),
@@ -188,9 +226,12 @@ describe('CustomersService', () => {
       updatedAt: new Date('2026-03-12T00:00:00.000Z'),
     } as Customer;
 
-    repository.findOne
-      .mockResolvedValueOnce(existing)
-      .mockResolvedValueOnce(null);
+    const qb = createQueryBuilderMock();
+    qb.getOne.mockResolvedValue(existing);
+    repository.createQueryBuilder.mockReturnValue(
+      qb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>,
+    );
+    repository.findOne.mockResolvedValue(null);
     repository.save.mockResolvedValue({
       ...existing,
       firstName: 'New',
@@ -208,7 +249,11 @@ describe('CustomersService', () => {
   });
 
   it('throws not found when updating missing customer', async () => {
-    repository.findOne.mockResolvedValue(null);
+    const qb = createQueryBuilderMock();
+    qb.getOne.mockResolvedValue(null);
+    repository.createQueryBuilder.mockReturnValue(
+      qb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>,
+    );
 
     await expect(
       service.update('24d00d3c-d0af-4560-8866-dfbe2ec9fd58', {
@@ -218,15 +263,18 @@ describe('CustomersService', () => {
   });
 
   it('throws conflict when updating to duplicate email', async () => {
-    repository.findOne
-      .mockResolvedValueOnce({
-        id: '24d00d3c-d0af-4560-8866-dfbe2ec9fd58',
-        email: 'old@example.com',
-      } as Customer)
-      .mockResolvedValueOnce({
-        id: 'other-id',
-        email: 'dup@example.com',
-      } as Customer);
+    const qb = createQueryBuilderMock();
+    qb.getOne.mockResolvedValue({
+      id: '24d00d3c-d0af-4560-8866-dfbe2ec9fd58',
+      email: 'old@example.com',
+    } as Customer);
+    repository.createQueryBuilder.mockReturnValue(
+      qb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>,
+    );
+    repository.findOne.mockResolvedValue({
+      id: 'other-id',
+      email: 'dup@example.com',
+    } as Customer);
 
     await expect(
       service.update('24d00d3c-d0af-4560-8866-dfbe2ec9fd58', {
@@ -236,12 +284,15 @@ describe('CustomersService', () => {
   });
 
   it('maps database unique violation to conflict on update', async () => {
-    repository.findOne
-      .mockResolvedValueOnce({
-        id: '24d00d3c-d0af-4560-8866-dfbe2ec9fd58',
-        email: 'old@example.com',
-      } as Customer)
-      .mockResolvedValueOnce(null);
+    const qb = createQueryBuilderMock();
+    qb.getOne.mockResolvedValue({
+      id: '24d00d3c-d0af-4560-8866-dfbe2ec9fd58',
+      email: 'old@example.com',
+    } as Customer);
+    repository.createQueryBuilder.mockReturnValue(
+      qb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>,
+    );
+    repository.findOne.mockResolvedValue(null);
 
     repository.save.mockRejectedValue(
       new QueryFailedError('UPDATE customers', [], {
@@ -254,5 +305,27 @@ describe('CustomersService', () => {
         email: 'new@example.com',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('applies manager scope when listing customers', async () => {
+    const rootQb = createQueryBuilderMock();
+    const itemsQb = createQueryBuilderMock();
+    const countQb = createQueryBuilderMock();
+    itemsQb.getMany.mockResolvedValue([]);
+    countQb.getCount.mockResolvedValue(0);
+    rootQb.clone.mockReturnValueOnce(itemsQb).mockReturnValueOnce(countQb);
+    repository.createQueryBuilder.mockReturnValue(
+      rootQb as unknown as ReturnType<
+        Repository<Customer>['createQueryBuilder']
+      >,
+    );
+
+    await service.findAll(1, 20, {
+      userId: 'manager-id',
+      role: UserRole.MANAGER,
+    });
+
+    expect(rootQb.innerJoin).toHaveBeenCalled();
+    expect(rootQb.distinct).toHaveBeenCalledWith(true);
   });
 });

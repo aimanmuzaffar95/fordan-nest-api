@@ -98,13 +98,17 @@ export type JobDetailTextEntryDto = {
 
 export type JobDetailTimelineItemDto = {
   id: string;
-  action: JobAuditAction;
+  source: 'audit' | 'event';
+  eventType: string;
+  action: JobAuditAction | string | null;
   field: string | null;
   oldValue: JobAuditValue | null;
   newValue: JobAuditValue | null;
   metadata: JobAuditValue | null;
+  payload: JobAuditValue | null;
   createdAt: Date;
   performedBy: JobDetailTimelineActorDto | null;
+  createdByName: string;
   description: string;
 };
 

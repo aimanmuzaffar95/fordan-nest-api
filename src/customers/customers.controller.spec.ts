@@ -1,5 +1,8 @@
 import { Test } from '@nestjs/testing';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { JobsService } from '../jobs/jobs.service';
+import { UserRole } from '../users/entities/user-role.enum';
 import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
 
@@ -15,9 +18,11 @@ describe('CustomersController', () => {
   const jobsService = {
     createJob: jest.fn(),
   };
+  const jwtAuthGuard = { canActivate: jest.fn().mockReturnValue(true) };
+  const rolesGuard = { canActivate: jest.fn().mockReturnValue(true) };
 
   beforeEach(async () => {
-    const moduleRef = await Test.createTestingModule({
+    const builder = Test.createTestingModule({
       controllers: [CustomersController],
       providers: [
         {
@@ -29,27 +34,48 @@ describe('CustomersController', () => {
           useValue: jobsService,
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue(jwtAuthGuard)
+      .overrideGuard(RolesGuard)
+      .useValue(rolesGuard);
+
+    const moduleRef = await builder.compile();
 
     controller = moduleRef.get(CustomersController);
     jest.clearAllMocks();
   });
 
   it('uses default pagination values in findAll', () => {
-    void controller.findAll({});
+    void controller.findAll({}, {
+      user: { sub: 'user-id', role: UserRole.ADMIN },
+    } as never);
 
-    expect(customersService.findAll).toHaveBeenCalledWith(1, 20);
+    expect(customersService.findAll).toHaveBeenCalledWith(1, 20, {
+      userId: 'user-id',
+      role: UserRole.ADMIN,
+    });
   });
 
   it('forwards pagination values in findAll', () => {
-    void controller.findAll({ page: 2, limit: 50 });
+    void controller.findAll({ page: 2, limit: 50 }, {
+      user: { sub: 'user-id', role: UserRole.MANAGER },
+    } as never);
 
-    expect(customersService.findAll).toHaveBeenCalledWith(2, 50);
+    expect(customersService.findAll).toHaveBeenCalledWith(2, 50, {
+      userId: 'user-id',
+      role: UserRole.MANAGER,
+    });
   });
 
   it('forwards search query params', () => {
-    void controller.search({ q: 'aiman', page: 2, limit: 10 });
+    void controller.search({ q: 'aiman', page: 2, limit: 10 }, {
+      user: { sub: 'user-id', role: UserRole.ADMIN },
+    } as never);
 
-    expect(customersService.search).toHaveBeenCalledWith('aiman', 2, 10);
+    expect(customersService.search).toHaveBeenCalledWith('aiman', 2, 10, {
+      userId: 'user-id',
+      role: UserRole.ADMIN,
+    });
   });
 });

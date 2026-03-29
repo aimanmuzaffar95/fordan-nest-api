@@ -25,11 +25,17 @@ export class File {
   @Column({ type: 'varchar', length: 20, default: 'local' })
   storageDriver: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  storageBucket: string | null;
+
   @Column({ type: 'varchar', length: 255 })
   storageKey: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   originalName: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  displayName: string | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
   contentType: string | null;

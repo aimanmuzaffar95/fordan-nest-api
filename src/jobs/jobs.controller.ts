@@ -2,26 +2,45 @@ import {
   Body,
   Controller,
   Get,
+  Header,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
-  Put,
-  Req,
   ParseUUIDPipe,
   Post,
+  Put,
+  Req,
+  Res,
   Query,
+  StreamableFile,
+  UnauthorizedException,
+  UploadedFile,
+  UseInterceptors,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBody,
   ApiBearerAuth,
+  ApiConsumes,
+  ApiCreatedResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiPreconditionFailedResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { Request } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { FilesService } from '../files/files.service';
+import { uploadFileFilter } from '../files/upload-file-filter';
+import { UploadJobFileDto } from './dto/upload-job-file.dto';
+import { UploadedBinaryFile } from '../files/uploaded-binary-file.type';
+import { DEFAULT_MAX_UPLOAD_SIZE_BYTES } from '../files/upload.constants';
 import { UserRole } from '../users/entities/user-role.enum';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
 import { CreateJobTextEntryDto } from './dto/create-job-text-entry.dto';
@@ -29,8 +48,8 @@ import { TransitionJobStageDto } from './dto/transition-job-stage.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
 import { UpdateJobProposalConfigDto } from './dto/update-job-proposal-config.dto';
-import { JobsService } from './jobs.service';
 import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.service';
+import { JobsService } from './jobs.service';
 
 @ApiTags('Jobs')
 @ApiBearerAuth('JWT')
@@ -42,6 +61,7 @@ import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.ser
 export class JobsController {
   constructor(
     private readonly jobs: JobsService,
+    private readonly filesService: FilesService,
     private readonly leadCaptureInsightsService: LeadCaptureInsightsService,
   ) {}
 
@@ -59,7 +79,7 @@ export class JobsController {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
+      throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.jobs.list(query, { userId, role });
   }
@@ -78,7 +98,7 @@ export class JobsController {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
+      throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.leadCaptureInsightsService.getInsights({ userId, role });
   }
@@ -90,9 +110,15 @@ export class JobsController {
     @Body() dto: TransitionJobStageDto,
     @Req() req: Request & { user?: { sub: string; role: UserRole } },
   ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+
     return this.jobs.transitionStage(
-      req.user?.sub ?? null,
-      req.user?.role ?? null,
+      userId,
+      role,
       id,
       dto.toStage,
       dto.overridePreMeterLock ?? false,
@@ -113,9 +139,150 @@ export class JobsController {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
+      throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.jobs.getOne(id, { userId, role });
+  }
+
+  @Get(':id/files')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'List files for a job',
+    description:
+      'Returns file metadata linked to the job detail page. **Manager/Installer:** **404** if the job is outside your scope.',
+  })
+  @ApiOkResponse({ description: 'Job file metadata.' })
+  @ApiNotFoundResponse({
+    description:
+      'Unknown job id, or the authenticated manager/installer attempted to access a job outside their scope.',
+  })
+  listFiles(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+
+    return this.filesService.listJobFiles(id, { userId, role });
+  }
+
+  @Post(':id/files')
+  @HttpCode(HttpStatus.CREATED)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: {
+        fileSize: DEFAULT_MAX_UPLOAD_SIZE_BYTES,
+      },
+      fileFilter: uploadFileFilter(),
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload a file for a job',
+    description:
+      'Multipart upload for job images or PDFs. Persists a user-facing display name for the job detail page and writes **`job_file_uploaded`** on the job timeline. **Manager/Installer:** **404** if the job is outside your scope.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['displayName', 'file'],
+      properties: {
+        displayName: {
+          type: 'string',
+          example: 'Roof photos - north side',
+        },
+        kind: {
+          type: 'string',
+          enum: [
+            'photos',
+            'signed_paperwork',
+            'meter_docs',
+            'compliance',
+            'other',
+          ],
+          default: 'other',
+        },
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiCreatedResponse({ description: 'File stored and metadata recorded.' })
+  @ApiNotFoundResponse({
+    description:
+      'Unknown job id, or the authenticated manager/installer attempted to access a job outside their scope.',
+  })
+  uploadFile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UploadJobFileDto,
+    @UploadedFile() file: UploadedBinaryFile | undefined,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+
+    return this.filesService.uploadJobFile(id, dto, file, { userId, role });
+  }
+
+  @Get(':id/files/:fileId/download')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Download a job file',
+    description:
+      'Streams a stored file through the API so access remains protected by JWT + RBAC. **Manager/Installer:** **404** if the job or file is outside your scope.',
+  })
+  @ApiOkResponse({ description: 'Binary file stream.' })
+  @ApiNotFoundResponse({
+    description:
+      'Unknown job id, unknown file id, or the authenticated manager/installer attempted to access a file outside their scope.',
+  })
+  @Header('Cache-Control', 'private, no-store')
+  async downloadFile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fileId', ParseUUIDPipe) fileId: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+
+    const download = await this.filesService.getJobFileDownload(id, fileId, {
+      userId,
+      role,
+    });
+
+    const safeFileName = (
+      download.file.displayName ??
+      download.file.originalName ??
+      'download'
+    )
+      .replace(/[\r\n"]/g, '_')
+      .trim();
+
+    if (download.file.contentType) {
+      res.setHeader('Content-Type', download.file.contentType);
+    }
+    if (download.contentLength !== undefined) {
+      res.setHeader('Content-Length', String(download.contentLength));
+    }
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${safeFileName || 'download'}"`,
+    );
+
+    return new StreamableFile(download.stream);
   }
 
   @Patch(':id')
@@ -133,7 +300,7 @@ export class JobsController {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
+      throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.jobs.updateJob(id, dto, { userId, role });
   }
@@ -153,7 +320,7 @@ export class JobsController {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
+      throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.jobs.createNote(id, dto, { userId, role });
   }
@@ -173,7 +340,7 @@ export class JobsController {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
+      throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.jobs.createInternalComment(id, dto, { userId, role });
   }
@@ -192,7 +359,7 @@ export class JobsController {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
+      throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.jobs.getProposalConfig(id, { userId, role });
   }
@@ -212,7 +379,7 @@ export class JobsController {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
+      throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.jobs.updateProposalConfig(id, dto, { userId, role });
   }
@@ -237,7 +404,7 @@ export class JobsController {
     const role = req.user?.role;
     // JwtAuthGuard + RolesGuard should make this safe; still guard for runtime safety.
     if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
+      throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.jobs.updateJobPipeline(id, dto, role, userId);
   }

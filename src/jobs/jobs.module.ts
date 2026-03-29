@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { FilesModule } from '../files/files.module';
 import { CustomerJobsController } from './customer-jobs.controller';
 import { JobAuditLogsService } from './job-audit-logs.service';
 import { JobAuditLog } from './entities/job-audit-log.entity';
@@ -29,6 +30,7 @@ import { AdminDashboardReportsService } from '../reports/admin-dashboard.service
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'development-secret',
     }),
+    FilesModule,
     TypeOrmModule.forFeature([
       Job,
       JobAuditLog,
