@@ -18,7 +18,7 @@ export type ScheduleItemDto = {
   jobId: string;
   customerId: string;
   systemSizeKw: number;
-  teamId: string;
+  teamId: string | null;
   teamName: string;
   teamDailyCapacityKw: number;
   staffUserId: string;
@@ -145,9 +145,9 @@ export class ScheduleService {
       jobId: a.jobId,
       customerId: a.job.customerId,
       systemSizeKw: Number(a.job.systemSizeKw),
-      teamId: a.teamId,
-      teamName: a.team.name,
-      teamDailyCapacityKw: Number(a.team.dailyCapacityKw),
+      teamId: a.teamId ?? null,
+      teamName: a.team?.name ?? 'Unassigned',
+      teamDailyCapacityKw: Number(a.team?.dailyCapacityKw ?? 0),
       staffUserId: a.staffUserId,
       scheduledDate: a.scheduledDate,
       slot: a.slot,
@@ -156,6 +156,7 @@ export class ScheduleService {
 
     const dailyMap = new Map<string, ScheduleDailyTeamDto>();
     for (const it of items) {
+      if (!it.teamId) continue;
       const key = `${it.scheduledDate}|${it.teamId}`;
       const cur = dailyMap.get(key);
       if (cur) {

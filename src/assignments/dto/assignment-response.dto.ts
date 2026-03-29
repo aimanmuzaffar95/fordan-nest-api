@@ -3,7 +3,7 @@ import { Assignment } from '../entities/assignment.entity';
 export class AssignmentResponseDto {
   id: string;
   jobId: string;
-  teamId: string;
+  teamId: string | null;
   staffUserId: string;
   scheduledDate: string;
   slot: string;

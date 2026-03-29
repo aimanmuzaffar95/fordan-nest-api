@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsUUID } from 'class-validator';
+import { IsDateString, IsIn, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateAssignmentDto {
   @IsDateString()
@@ -7,8 +7,9 @@ export class CreateAssignmentDto {
   @IsIn(['AM', 'PM'])
   slot!: 'AM' | 'PM';
 
+  @IsOptional()
   @IsUUID()
-  teamId!: string;
+  teamId?: string;
 
   @IsUUID()
   staffUserId!: string;

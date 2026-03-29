@@ -48,11 +48,9 @@ export class AssignmentsService {
   ): Promise<AssignmentResponseDto> {
     const job = await this.jobsService.getOne(jobId, viewer);
 
-    const team = await this.teamsRepo.findOne({ where: { id: dto.teamId } });
-    if (!team) throw new NotFoundException('Team not found');
-
     const staff = await this.usersRepo.findOne({
       where: { id: dto.staffUserId },
+      select: ['id', 'teamId', 'active'],
     });
     if (!staff) throw new NotFoundException('Staff user not found');
     if (!staff.active) {
@@ -62,32 +60,65 @@ export class AssignmentsService {
       });
     }
 
-    const existingForJob = await this.assignmentRepo.findOne({
+    const effectiveTeamId = dto.teamId ?? staff.teamId ?? null;
+    let team: Team | null = null;
+    if (effectiveTeamId) {
+      team = await this.teamsRepo.findOne({ where: { id: effectiveTeamId } });
+      if (!team) throw new NotFoundException('Team not found');
+    }
+
+    const existingForJob = await this.assignmentRepo.find({
       where: { jobId },
+      order: { createdAt: 'ASC', id: 'ASC' },
     });
-    if (existingForJob) {
+    const duplicateInstaller = existingForJob.find(
+      (assignment) => assignment.staffUserId === dto.staffUserId,
+    );
+    if (duplicateInstaller) {
       throw new ConflictException({
-        message:
-          'This job already has a schedule assignment. Delete it before creating another.',
+        message: 'This installer is already assigned to this job.',
         code: 'CONFLICT',
       });
     }
 
-    const sameDay = await this.assignmentRepo.find({
-      where: { teamId: dto.teamId, scheduledDate: dto.scheduledDate },
-      relations: { job: true },
-    });
-    const usedKw = sameDay.reduce(
-      (sum, a) => sum + Number(a.job.systemSizeKw),
-      0,
-    );
-    const addKw = Number(job.job.systemSizeKw);
-    const capKw = Number(team.dailyCapacityKw);
-    if (usedKw + addKw > capKw + 1e-6) {
+    const primaryJobAssignment = existingForJob[0] ?? null;
+    if (
+      primaryJobAssignment &&
+      (primaryJobAssignment.scheduledDate !== dto.scheduledDate ||
+        primaryJobAssignment.slot !== dto.slot ||
+        (primaryJobAssignment.teamId ?? null) !== effectiveTeamId)
+    ) {
       throw new ConflictException({
-        message: `Team daily capacity (${capKw} kW) would be exceeded on ${dto.scheduledDate}.`,
+        message:
+          'All installers on a job must share the same date, slot, and team.',
         code: 'CONFLICT',
       });
+    }
+
+    if (team && effectiveTeamId) {
+      const sameDay = await this.assignmentRepo.find({
+        where: { teamId: effectiveTeamId, scheduledDate: dto.scheduledDate },
+        relations: { job: true },
+      });
+      const scheduledJobIds = new Set<string>();
+      const usedKw = sameDay.reduce((sum, assignment) => {
+        if (
+          scheduledJobIds.has(assignment.jobId) ||
+          assignment.jobId === jobId
+        ) {
+          return sum;
+        }
+        scheduledJobIds.add(assignment.jobId);
+        return sum + Number(assignment.job.systemSizeKw);
+      }, 0);
+      const addKw = primaryJobAssignment ? 0 : Number(job.job.systemSizeKw);
+      const capKw = Number(team.dailyCapacityKw);
+      if (usedKw + addKw > capKw + 1e-6) {
+        throw new ConflictException({
+          message: `Team daily capacity (${capKw} kW) would be exceeded on ${dto.scheduledDate}.`,
+          code: 'CONFLICT',
+        });
+      }
     }
 
     try {
@@ -97,7 +128,7 @@ export class AssignmentsService {
 
         const assignment = aRepo.create({
           jobId,
-          teamId: dto.teamId,
+          teamId: effectiveTeamId,
           staffUserId: dto.staffUserId,
           scheduledDate: dto.scheduledDate,
           slot: dto.slot,
@@ -108,16 +139,14 @@ export class AssignmentsService {
         });
         const saved = await aRepo.save(assignment);
 
-        await jRepo.update(
-          { id: jobId },
-          {
-            assignedTeamId: dto.teamId,
-            assignedStaffUserId: dto.staffUserId,
-            scheduledDate: dto.scheduledDate,
-            scheduledSlot: dto.slot,
-            installDate: dto.scheduledDate,
-          },
-        );
+        const primaryAssignment = primaryJobAssignment ?? saved;
+        await this.syncJobScheduleFields(jRepo, jobId, {
+          assignedTeamId: primaryAssignment.teamId,
+          assignedStaffUserId: primaryAssignment.staffUserId,
+          scheduledDate: primaryAssignment.scheduledDate,
+          scheduledSlot: primaryAssignment.slot,
+          installDate: primaryAssignment.scheduledDate,
+        });
 
         return AssignmentResponseDto.fromEntity(saved);
       });
@@ -160,20 +189,53 @@ export class AssignmentsService {
     }
 
     await this.dataSource.transaction(async (manager) => {
-      await manager.getRepository(Assignment).remove(row);
-      await manager.getRepository(Job).update(
-        { id: jobId },
-        {
-          assignedTeamId: null,
-          assignedStaffUserId: null,
-          scheduledDate: null,
-          scheduledSlot: null,
-          installDate: null,
-        },
+      const aRepo = manager.getRepository(Assignment);
+      const jRepo = manager.getRepository(Job);
+
+      await aRepo.remove(row);
+
+      const remainingAssignments = await aRepo.find({
+        where: { jobId },
+        order: { createdAt: 'ASC', id: 'ASC' },
+      });
+      const primaryAssignment = remainingAssignments[0] ?? null;
+
+      await this.syncJobScheduleFields(
+        jRepo,
+        jobId,
+        primaryAssignment
+          ? {
+              assignedTeamId: primaryAssignment.teamId,
+              assignedStaffUserId: primaryAssignment.staffUserId,
+              scheduledDate: primaryAssignment.scheduledDate,
+              scheduledSlot: primaryAssignment.slot,
+              installDate: primaryAssignment.scheduledDate,
+            }
+          : {
+              assignedTeamId: null,
+              assignedStaffUserId: null,
+              scheduledDate: null,
+              scheduledSlot: null,
+              installDate: null,
+            },
       );
     });
 
     return { id: assignmentId };
+  }
+
+  private async syncJobScheduleFields(
+    jobsRepo: Repository<Job>,
+    jobId: string,
+    values: {
+      assignedTeamId: string | null;
+      assignedStaffUserId: string | null;
+      scheduledDate: string | null;
+      scheduledSlot: string | null;
+      installDate: string | null;
+    },
+  ) {
+    await jobsRepo.update({ id: jobId }, values);
   }
 
   async setLock(

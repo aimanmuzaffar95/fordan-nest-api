@@ -103,13 +103,33 @@ export class JobsService {
         select: ['id', 'teamId'],
       });
       const teamId = user?.teamId ?? null;
+      const directAssignmentSubquery = qb
+        .subQuery()
+        .select('1')
+        .from(Assignment, 'assignment')
+        .where('assignment.jobId = job.id')
+        .andWhere('assignment.staffUserId = :installerUserId')
+        .getQuery();
       qb.andWhere(
         new Brackets((sub) => {
           sub.where('job.assignedStaffUserId = :installerUserId', {
             installerUserId: viewer.userId,
           });
+          sub.orWhere(`EXISTS ${directAssignmentSubquery}`, {
+            installerUserId: viewer.userId,
+          });
           if (teamId) {
+            const teamAssignmentSubquery = qb
+              .subQuery()
+              .select('1')
+              .from(Assignment, 'team_assignment')
+              .where('team_assignment.jobId = job.id')
+              .andWhere('team_assignment.teamId = :installerTeamId')
+              .getQuery();
             sub.orWhere('job.assignedTeamId = :installerTeamId', {
+              installerTeamId: teamId,
+            });
+            sub.orWhere(`EXISTS ${teamAssignmentSubquery}`, {
               installerTeamId: teamId,
             });
           }
@@ -1108,20 +1128,39 @@ export class JobsService {
     return Number(value).toString();
   }
 
-  /** Direct assignment or same team as `assignedTeamId` on the job. */
+  /** Direct assignment row or same-team assignment row on the job. */
   private async assertInstallerJobAccess(job: Job, userId: string) {
     if (job.assignedStaffUserId === userId) {
       return;
     }
+
     const user = await this.usersRepo.findOne({
       where: { id: userId },
       select: ['id', 'teamId'],
     });
+
     if (
       user?.teamId &&
       job.assignedTeamId &&
       job.assignedTeamId === user.teamId
     ) {
+      return;
+    }
+
+    const accessConditions: Array<{
+      jobId: string;
+      staffUserId?: string;
+      teamId?: string;
+    }> = [{ jobId: job.id, staffUserId: userId }];
+
+    if (user?.teamId) {
+      accessConditions.push({ jobId: job.id, teamId: user.teamId });
+    }
+
+    const hasAssignmentAccess = await this.assignmentsRepo.count({
+      where: accessConditions,
+    });
+    if (hasAssignmentAccess > 0) {
       return;
     }
     throw new NotFoundException('Job not found');
