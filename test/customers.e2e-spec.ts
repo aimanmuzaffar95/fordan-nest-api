@@ -600,7 +600,11 @@ describe('Customers (e2e)', () => {
       from: string;
       to: string;
       teamId: string | null;
-      items: Array<{ jobId: string; scheduledDate: string; systemSizeKw: number }>;
+      items: Array<{
+        jobId: string;
+        scheduledDate: string;
+        systemSizeKw: number;
+      }>;
       dailyKwByTeam: Array<{
         scheduledDate: string;
         bookedKw: number;

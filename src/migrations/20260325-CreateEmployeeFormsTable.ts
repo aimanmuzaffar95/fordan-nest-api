@@ -5,9 +5,7 @@ import {
   TableForeignKey,
 } from 'typeorm';
 
-export class CreateEmployeeFormsTable20260325_1700000000009
-  implements MigrationInterface
-{
+export class CreateEmployeeFormsTable20260325_1700000000009 implements MigrationInterface {
   private getDialectDefaults(queryRunner: QueryRunner) {
     const dialect = queryRunner.connection.options.type;
     const uuidDefault =
@@ -47,33 +45,113 @@ export class CreateEmployeeFormsTable20260325_1700000000009
             isNullable: false,
             isUnique: true,
           },
-          { name: 'firstName', type: 'varchar', length: '100', isNullable: false },
-          { name: 'surname', type: 'varchar', length: '100', isNullable: false },
-          { name: 'dateOfBirth', type: 'varchar', length: '20', isNullable: true },
-          { name: 'driversLicenseNo', type: 'varchar', length: '100', isNullable: true },
-          { name: 'phoneMobile', type: 'varchar', length: '30', isNullable: false },
-          { name: 'phoneHome', type: 'varchar', length: '30', isNullable: true },
+          {
+            name: 'firstName',
+            type: 'varchar',
+            length: '100',
+            isNullable: false,
+          },
+          {
+            name: 'surname',
+            type: 'varchar',
+            length: '100',
+            isNullable: false,
+          },
+          {
+            name: 'dateOfBirth',
+            type: 'varchar',
+            length: '20',
+            isNullable: true,
+          },
+          {
+            name: 'driversLicenseNo',
+            type: 'varchar',
+            length: '100',
+            isNullable: true,
+          },
+          {
+            name: 'phoneMobile',
+            type: 'varchar',
+            length: '30',
+            isNullable: false,
+          },
+          {
+            name: 'phoneHome',
+            type: 'varchar',
+            length: '30',
+            isNullable: true,
+          },
           { name: 'email', type: 'varchar', length: '255', isNullable: false },
-          { name: 'homeAddress', type: 'varchar', length: '255', isNullable: true },
+          {
+            name: 'homeAddress',
+            type: 'varchar',
+            length: '255',
+            isNullable: true,
+          },
           { name: 'suburb', type: 'varchar', length: '100', isNullable: true },
           { name: 'state', type: 'varchar', length: '100', isNullable: true },
           { name: 'postcode', type: 'varchar', length: '20', isNullable: true },
-          { name: 'accountName', type: 'varchar', length: '255', isNullable: true },
+          {
+            name: 'accountName',
+            type: 'varchar',
+            length: '255',
+            isNullable: true,
+          },
           { name: 'bsb', type: 'varchar', length: '20', isNullable: true },
-          { name: 'accountNo', type: 'varchar', length: '50', isNullable: true },
+          {
+            name: 'accountNo',
+            type: 'varchar',
+            length: '50',
+            isNullable: true,
+          },
           {
             name: 'hasSuperannuation',
             type: 'boolean',
             isNullable: false,
             default: boolFalseDefault,
           },
-          { name: 'superFundName', type: 'varchar', length: '255', isNullable: true },
-          { name: 'superMemberNumber', type: 'varchar', length: '255', isNullable: true },
-          { name: 'emergencyContactName', type: 'varchar', length: '100', isNullable: true },
-          { name: 'emergencyContactRelationship', type: 'varchar', length: '100', isNullable: true },
-          { name: 'emergencyContactPhoneMobile', type: 'varchar', length: '30', isNullable: true },
-          { name: 'emergencyContactPhoneHome', type: 'varchar', length: '30', isNullable: true },
-          { name: 'emergencyContactAddress', type: 'varchar', length: '255', isNullable: true },
+          {
+            name: 'superFundName',
+            type: 'varchar',
+            length: '255',
+            isNullable: true,
+          },
+          {
+            name: 'superMemberNumber',
+            type: 'varchar',
+            length: '255',
+            isNullable: true,
+          },
+          {
+            name: 'emergencyContactName',
+            type: 'varchar',
+            length: '100',
+            isNullable: true,
+          },
+          {
+            name: 'emergencyContactRelationship',
+            type: 'varchar',
+            length: '100',
+            isNullable: true,
+          },
+          {
+            name: 'emergencyContactPhoneMobile',
+            type: 'varchar',
+            length: '30',
+            isNullable: true,
+          },
+          {
+            name: 'emergencyContactPhoneHome',
+            type: 'varchar',
+            length: '30',
+            isNullable: true,
+          },
+          {
+            name: 'emergencyContactAddress',
+            type: 'varchar',
+            length: '255',
+            isNullable: true,
+          },
           {
             name: 'submittedAt',
             type: 'timestamp',

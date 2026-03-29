@@ -7,7 +7,10 @@ import { ScheduleService } from './schedule.service';
 import { RuntimeSettingsModule } from '../runtime-settings/runtime-settings.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Assignment, User]), RuntimeSettingsModule],
+  imports: [
+    TypeOrmModule.forFeature([Assignment, User]),
+    RuntimeSettingsModule,
+  ],
   controllers: [ScheduleController],
   providers: [ScheduleService],
   exports: [ScheduleService],

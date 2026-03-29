@@ -23,9 +23,7 @@ const JOB_AUDIT_ACTIONS = [
 
 const JOB_AUDIT_ACTIONS_SQL = JOB_AUDIT_ACTIONS.map((v) => `'${v}'`).join(', ');
 
-export class CreateJobAuditLogsTable20260328_1200000000010
-  implements MigrationInterface
-{
+export class CreateJobAuditLogsTable20260328_1200000000010 implements MigrationInterface {
   private getDialectDefaults(queryRunner: QueryRunner) {
     const dialect = queryRunner.connection.options.type;
     const uuidDefault =
@@ -71,9 +69,7 @@ export class CreateJobAuditLogsTable20260328_1200000000010
           {
             name: 'action',
             type:
-              dialect === 'postgres'
-                ? 'job_audit_logs_action_enum'
-                : 'varchar',
+              dialect === 'postgres' ? 'job_audit_logs_action_enum' : 'varchar',
             length: dialect === 'postgres' ? undefined : '64',
             isNullable: false,
           },

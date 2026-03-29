@@ -7,9 +7,7 @@ import {
   TableIndex,
 } from 'typeorm';
 
-export class AddEquipmentPricingAndProposalSelections20260326_1700000000012
-  implements MigrationInterface
-{
+export class AddEquipmentPricingAndProposalSelections20260326_1700000000012 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await this.addDefaultUnitPrice(queryRunner, 'solar_panels');
     await this.addDefaultUnitPrice(queryRunner, 'inverters');

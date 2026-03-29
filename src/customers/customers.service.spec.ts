@@ -144,11 +144,21 @@ describe('CustomersService', () => {
       getCount: jest.fn().mockResolvedValue(1),
     };
     filteredQb.clone
-      .mockReturnValueOnce(itemsQb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>)
-      .mockReturnValueOnce(countQb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>);
+      .mockReturnValueOnce(
+        itemsQb as unknown as ReturnType<
+          Repository<Customer>['createQueryBuilder']
+        >,
+      )
+      .mockReturnValueOnce(
+        countQb as unknown as ReturnType<
+          Repository<Customer>['createQueryBuilder']
+        >,
+      );
 
     repository.createQueryBuilder.mockReturnValue(
-      filteredQb as unknown as ReturnType<Repository<Customer>['createQueryBuilder']>,
+      filteredQb as unknown as ReturnType<
+        Repository<Customer>['createQueryBuilder']
+      >,
     );
 
     const result = await service.search('aiman', 1, 20);
@@ -234,7 +244,9 @@ describe('CustomersService', () => {
       .mockResolvedValueOnce(null);
 
     repository.save.mockRejectedValue(
-      new QueryFailedError('UPDATE customers', [], { code: '23505' } as unknown as Error),
+      new QueryFailedError('UPDATE customers', [], {
+        code: '23505',
+      } as unknown as Error),
     );
 
     await expect(

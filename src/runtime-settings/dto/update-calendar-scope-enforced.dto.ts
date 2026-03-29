@@ -4,4 +4,3 @@ export class UpdateCalendarScopeEnforcedDto {
   @IsBoolean()
   calendarScopeEnforced!: boolean;
 }
-
