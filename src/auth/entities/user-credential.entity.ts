@@ -18,6 +18,9 @@ export class UserCredential {
   @Column({ type: 'varchar', length: 255 })
   passwordHash: string;
 
+  @Column({ type: 'boolean', default: false })
+  mustChangePassword: boolean;
+
   @OneToOne(() => User, (user) => user.credential, {
     onDelete: 'CASCADE',
     eager: true,

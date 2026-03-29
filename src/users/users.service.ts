@@ -107,6 +107,7 @@ export class UsersService {
         this.credentialsRepository.create({
           username: defaultUser.username,
           passwordHash: await hashPassword(defaultUser.password, 10),
+          mustChangePassword: false,
           user,
         }),
       );
@@ -168,6 +169,7 @@ export class UsersService {
         credentialRepository.create({
           username: input.username,
           passwordHash: await hashPassword(input.password, 10),
+          mustChangePassword: true,
           user,
         }),
       );

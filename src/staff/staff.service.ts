@@ -138,6 +138,7 @@ export class StaffService {
         credentialRepository.create({
           username: payload.username,
           passwordHash: await hashPassword(payload.password, 10),
+          mustChangePassword: true,
           user,
         }),
       );

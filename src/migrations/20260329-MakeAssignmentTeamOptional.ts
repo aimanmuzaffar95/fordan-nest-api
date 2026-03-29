@@ -4,9 +4,7 @@ type JobIdRow = {
   jobId: string;
 };
 
-export class MakeAssignmentTeamOptional20260329_1700000000017
-  implements MigrationInterface
-{
+export class MakeAssignmentTeamOptional20260329_1700000000017 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable('assignments'))) return;
     if (!(await queryRunner.hasColumn('assignments', 'teamId'))) return;
@@ -40,9 +38,14 @@ export class MakeAssignmentTeamOptional20260329_1700000000017
     const jobIdColumn = this.escapeIdentifier('jobId', dialect);
     const teamIdColumnName = this.escapeIdentifier('teamId', dialect);
     const idColumn = this.escapeIdentifier('id', dialect);
-    const assignedTeamIdColumn = this.escapeIdentifier('assignedTeamId', dialect);
-    const assignedStaffUserIdColumn =
-      this.escapeIdentifier('assignedStaffUserId', dialect);
+    const assignedTeamIdColumn = this.escapeIdentifier(
+      'assignedTeamId',
+      dialect,
+    );
+    const assignedStaffUserIdColumn = this.escapeIdentifier(
+      'assignedStaffUserId',
+      dialect,
+    );
     const scheduledDateColumn = this.escapeIdentifier('scheduledDate', dialect);
     const scheduledSlotColumn = this.escapeIdentifier('scheduledSlot', dialect);
     const installDateColumn = this.escapeIdentifier('installDate', dialect);
