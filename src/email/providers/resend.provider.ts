@@ -13,11 +13,13 @@ import type { EmailOptions } from '../types/email-options.type';
 export class ResendProvider implements IEmailProvider {
   private readonly logger = new Logger(ResendProvider.name);
 
-  async send(_options: EmailOptions): Promise<void> {
+  send(options: EmailOptions): Promise<void> {
+    void options;
     // TODO: implement
     // import { Resend } from 'resend';
     // const resend = new Resend(process.env.RESEND_API_KEY);
     // await resend.emails.send({ from, to, subject, html, text });
     this.logger.warn('ResendProvider is not yet implemented');
+    return Promise.resolve();
   }
 }

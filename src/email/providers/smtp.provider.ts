@@ -57,6 +57,8 @@ export class SmtpProvider implements IEmailProvider {
     const recipient = Array.isArray(options.to)
       ? `${options.to.length} recipient(s)`
       : options.to;
-    this.logger.log(`Email sent via SMTP to ${recipient}: "${options.subject}"`);
+    this.logger.log(
+      `Email sent via SMTP to ${recipient}: "${options.subject}"`,
+    );
   }
 }

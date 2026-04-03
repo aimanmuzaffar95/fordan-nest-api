@@ -13,11 +13,13 @@ import type { EmailOptions } from '../types/email-options.type';
 export class PostmarkProvider implements IEmailProvider {
   private readonly logger = new Logger(PostmarkProvider.name);
 
-  async send(_options: EmailOptions): Promise<void> {
+  send(options: EmailOptions): Promise<void> {
+    void options;
     // TODO: implement
     // import { ServerClient } from 'postmark';
     // const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN!);
     // await client.sendEmail({ From, To, Subject, HtmlBody, TextBody });
     this.logger.warn('PostmarkProvider is not yet implemented');
+    return Promise.resolve();
   }
 }

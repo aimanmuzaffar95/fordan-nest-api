@@ -40,9 +40,7 @@ export function createEmailProvider(): IEmailProvider {
     case 'smtp':
     default:
       if (name !== 'smtp') {
-        logger.warn(
-          `Unknown EMAIL_PROVIDER "${raw}", falling back to SMTP`,
-        );
+        logger.warn(`Unknown EMAIL_PROVIDER "${raw}", falling back to SMTP`);
       } else {
         logger.log('Email provider: SMTP');
       }

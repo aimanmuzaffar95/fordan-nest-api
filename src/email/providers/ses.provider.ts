@@ -15,11 +15,13 @@ import type { EmailOptions } from '../types/email-options.type';
 export class SesProvider implements IEmailProvider {
   private readonly logger = new Logger(SesProvider.name);
 
-  async send(_options: EmailOptions): Promise<void> {
+  send(options: EmailOptions): Promise<void> {
+    void options;
     // TODO: implement
     // import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
     // const client = new SESClient({ region: process.env.AWS_SES_REGION });
     // await client.send(new SendEmailCommand({ ... }));
     this.logger.warn('SesProvider is not yet implemented');
+    return Promise.resolve();
   }
 }

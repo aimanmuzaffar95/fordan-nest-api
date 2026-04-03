@@ -4,7 +4,10 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { EMAIL_PROVIDER, type IEmailProvider } from './providers/email-provider.interface';
+import {
+  EMAIL_PROVIDER,
+  type IEmailProvider,
+} from './providers/email-provider.interface';
 import { renderTemplate, htmlToText } from './templates/template.renderer';
 import type { SendEmailDto } from './dto/send-email.dto';
 
@@ -40,7 +43,7 @@ export class EmailService {
         this.provider.constructor?.name.replace(/Provider$/, '') ??
         'EmailProvider';
       const details =
-        error instanceof Error ? error.stack ?? error.message : String(error);
+        error instanceof Error ? (error.stack ?? error.message) : String(error);
 
       this.logger.error(
         `Email delivery failed via ${providerName} to ${recipient}: "${dto.subject}"`,

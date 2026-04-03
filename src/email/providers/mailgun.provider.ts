@@ -13,12 +13,14 @@ import type { EmailOptions } from '../types/email-options.type';
 export class MailgunProvider implements IEmailProvider {
   private readonly logger = new Logger(MailgunProvider.name);
 
-  async send(_options: EmailOptions): Promise<void> {
+  send(options: EmailOptions): Promise<void> {
+    void options;
     // TODO: implement
     // import Mailgun from 'mailgun.js';
     // import FormData from 'form-data';
     // const mg = new Mailgun(FormData).client({ username: 'api', key: process.env.MAILGUN_API_KEY! });
     // await mg.messages.create(process.env.MAILGUN_DOMAIN!, { from, to, subject, html, text });
     this.logger.warn('MailgunProvider is not yet implemented');
+    return Promise.resolve();
   }
 }
