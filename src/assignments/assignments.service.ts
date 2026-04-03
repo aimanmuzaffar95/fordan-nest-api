@@ -145,7 +145,6 @@ export class AssignmentsService {
           assignedStaffUserId: primaryAssignment.staffUserId,
           scheduledDate: primaryAssignment.scheduledDate,
           scheduledSlot: primaryAssignment.slot,
-          installDate: primaryAssignment.scheduledDate,
         });
 
         return AssignmentResponseDto.fromEntity(saved);
@@ -209,14 +208,12 @@ export class AssignmentsService {
               assignedStaffUserId: primaryAssignment.staffUserId,
               scheduledDate: primaryAssignment.scheduledDate,
               scheduledSlot: primaryAssignment.slot,
-              installDate: primaryAssignment.scheduledDate,
             }
           : {
               assignedTeamId: null,
               assignedStaffUserId: null,
               scheduledDate: null,
               scheduledSlot: null,
-              installDate: null,
             },
       );
     });
@@ -232,7 +229,6 @@ export class AssignmentsService {
       assignedStaffUserId: string | null;
       scheduledDate: string | null;
       scheduledSlot: string | null;
-      installDate: string | null;
     },
   ) {
     await jobsRepo.update({ id: jobId }, values);

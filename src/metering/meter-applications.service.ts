@@ -24,7 +24,13 @@ export type MeterApplicationListItem = {
   dateSubmitted: string;
   approvalDate: string | null;
   submittedByUserId: string;
+  submittedByName: string | null;
   rejectionReason: string | null;
+};
+
+type MeterApplicationListRow = MeterApplicationListItem & {
+  submittedByFirstName: string | null;
+  submittedByLastName: string | null;
 };
 
 @Injectable()
@@ -41,6 +47,7 @@ export class MeterApplicationsService {
   ): Promise<{ items: MeterApplicationListItem[] }> {
     const qb = this.meterRepo
       .createQueryBuilder('meterApplication')
+      .leftJoin('meterApplication.submittedByUser', 'submittedByUser')
       .select([
         'meterApplication.id AS id',
         'meterApplication.jobId AS "jobId"',
@@ -49,6 +56,8 @@ export class MeterApplicationsService {
         'meterApplication.dateSubmitted AS "dateSubmitted"',
         'meterApplication.approvalDate AS "approvalDate"',
         'meterApplication.submittedByUserId AS "submittedByUserId"',
+        'submittedByUser.firstName AS "submittedByFirstName"',
+        'submittedByUser.lastName AS "submittedByLastName"',
         'meterApplication.rejectionReason AS "rejectionReason"',
       ])
       .orderBy('meterApplication.dateSubmitted', 'DESC')
@@ -56,8 +65,23 @@ export class MeterApplicationsService {
 
     this.applyViewerScope(qb, viewer);
 
+    const rows = await qb.getRawMany<MeterApplicationListRow>();
+
     return {
-      items: await qb.getRawMany<MeterApplicationListItem>(),
+      items: rows.map((row) => ({
+        id: row.id,
+        jobId: row.jobId,
+        type: row.type,
+        status: row.status,
+        dateSubmitted: row.dateSubmitted,
+        approvalDate: row.approvalDate,
+        submittedByUserId: row.submittedByUserId,
+        submittedByName: this.buildUserFullName(
+          row.submittedByFirstName,
+          row.submittedByLastName,
+        ),
+        rejectionReason: row.rejectionReason,
+      })),
     };
   }
 
@@ -145,5 +169,17 @@ export class MeterApplicationsService {
       'job_scope.id = meterApplication.jobId AND job_scope.managerId = :managerUserId',
       { managerUserId: viewer.userId },
     );
+  }
+
+  private buildUserFullName(
+    firstName: string | null | undefined,
+    lastName: string | null | undefined,
+  ) {
+    const joined = [firstName ?? '', lastName ?? '']
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .join(' ');
+
+    return joined.length > 0 ? joined : null;
   }
 }

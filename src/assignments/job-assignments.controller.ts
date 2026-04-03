@@ -66,7 +66,7 @@ export class JobAssignmentsController {
   @ApiOperation({
     summary: 'Create schedule assignment for a job',
     description:
-      'A job may have **multiple installer assignments**. Every installer row on the same job must share the same effective `teamId`, `scheduledDate`, and `slot`. `teamId` is optional: when omitted, the API uses the installer’s current `users.teamId` if available, otherwise stores the assignment as unassigned. Enforces **team daily kW** (`teams.dailyCapacityKw`) only when a team is present, plus DB unique `(staffUserId, scheduledDate, slot)`. Updates job denormalized schedule helper fields + `installDate` from the primary assignment row.',
+      'A job may have **multiple installer assignments**. Every installer row on the same job must share the same effective `teamId`, `scheduledDate`, and `slot`. `teamId` is optional: when omitted, the API uses the installer’s current `users.teamId` if available, otherwise stores the assignment as unassigned. Enforces **team daily kW** (`teams.dailyCapacityKw`) only when a team is present, plus DB unique `(staffUserId, scheduledDate, slot)`. Updates only the job denormalized assignment helper fields from the primary assignment row; `jobs.installDate` remains independently managed.',
   })
   @ApiCreatedResponse({ description: 'Assignment created (**201**).' })
   @ApiConflictResponse({
@@ -95,7 +95,7 @@ export class JobAssignmentsController {
   @ApiOperation({
     summary: 'Delete an assignment',
     description:
-      'Removes one assignment row. If other installer rows remain, the API recalculates job denormalized `assignedTeamId`, `assignedStaffUserId`, `scheduledDate`, `scheduledSlot`, and `installDate` from the remaining primary assignment; otherwise it clears them. **409** if the assignment is **locked** — call **`POST /assignments/:id/lock`** with `locked: false` first.',
+      'Removes one assignment row. If other installer rows remain, the API recalculates job denormalized `assignedTeamId`, `assignedStaffUserId`, `scheduledDate`, and `scheduledSlot` from the remaining primary assignment; otherwise it clears those helper fields. `jobs.installDate` is not changed by assignment deletion. **409** if the assignment is **locked** — call **`POST /assignments/:id/lock`** with `locked: false` first.',
   })
   @ApiOkResponse({ description: '`data: { id }` of removed assignment.' })
   @ApiConflictResponse({

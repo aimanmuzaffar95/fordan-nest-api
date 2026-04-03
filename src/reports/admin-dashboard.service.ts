@@ -101,7 +101,6 @@ export class AdminDashboardReportsService {
       select: {
         id: true,
         pipelineStage: true,
-        scheduledDate: true,
         installDate: true,
       },
     });
@@ -138,16 +137,14 @@ export class AdminDashboardReportsService {
     const latestMeterStatusByJobId = this.buildLatestMeterStatusByJobId(
       scopedMeterApplications,
     );
-
     const totals = jobs.reduce(
       (acc, job) => {
         acc.totalJobs += 1;
 
-        const scheduledDate = job.scheduledDate ?? job.installDate;
         if (
-          scheduledDate &&
-          scheduledDate >= this.formatDateOnly(weekStart) &&
-          scheduledDate < this.formatDateOnly(weekEndExclusive)
+          job.installDate &&
+          job.installDate >= this.formatDateOnly(weekStart) &&
+          job.installDate < this.formatDateOnly(weekEndExclusive)
         ) {
           acc.scheduledThisWeek += 1;
         }
@@ -219,7 +216,6 @@ export class AdminDashboardReportsService {
       where: jobsWhere,
       select: {
         id: true,
-        scheduledDate: true,
         installDate: true,
         projectPrice: true,
         depositAmount: true,
@@ -228,19 +224,18 @@ export class AdminDashboardReportsService {
     });
 
     const jobsInWindow = jobs.filter((job) => {
-      const scheduledDate = job.scheduledDate ?? job.installDate;
       return Boolean(
-        scheduledDate &&
-        scheduledDate >= windowStart &&
-        scheduledDate <= windowEndInclusive,
+        job.installDate &&
+        job.installDate >= windowStart &&
+        job.installDate <= windowEndInclusive,
       );
     });
 
-    const jobIds = jobsInWindow.map((job) => job.id);
+    const jobIdsInWindow = jobsInWindow.map((job) => job.id);
     const invoices =
-      jobIds.length > 0
+      jobIdsInWindow.length > 0
         ? await this.invoicesRepo.find({
-            where: { jobId: In(jobIds) },
+            where: { jobId: In(jobIdsInWindow) },
             select: {
               id: true,
               jobId: true,
