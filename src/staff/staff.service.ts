@@ -2,12 +2,14 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { hash } from 'bcryptjs';
 import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 import { UserCredential } from '../auth/entities/user-credential.entity';
+import { EmailService } from '../email/email.service';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateStaffDto } from './dto/create-staff.dto';
@@ -44,6 +46,8 @@ const hashPassword = hash as unknown as HashPasswordFn;
 
 @Injectable()
 export class StaffService {
+  private readonly logger = new Logger(StaffService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
@@ -52,6 +56,7 @@ export class StaffService {
     @InjectRepository(StaffRole)
     private readonly staffRolesRepository: Repository<StaffRole>,
     private readonly dataSource: DataSource,
+    private readonly email: EmailService,
   ) {}
 
   async listRoles(): Promise<StaffRoleSummary[]> {
@@ -117,7 +122,7 @@ export class StaffService {
     await this.ensureEmailAvailable(payload.emailAddress);
     await this.ensureUsernameAvailable(payload.username);
 
-    return this.dataSource.transaction(async (manager) => {
+    const createdStaff = await this.dataSource.transaction(async (manager) => {
       const userRepository = manager.getRepository(User);
       const credentialRepository = manager.getRepository(UserCredential);
 
@@ -147,6 +152,10 @@ export class StaffService {
       user.staffRole = staffRole ?? null;
       return this.toStaffListItem(user);
     });
+
+    this.sendWelcomeEmail(createdStaff, payload.password);
+
+    return createdStaff;
   }
 
   async updateStaff(id: string, dto: UpdateStaffDto): Promise<StaffListItem> {
@@ -421,6 +430,53 @@ export class StaffService {
           ? dto.staffRoleId
           : dto.staffRoleId.trim(),
     };
+  }
+
+  private sendWelcomeEmail(
+    staff: StaffListItem,
+    temporaryPassword: string,
+  ): void {
+    this.email.fireAndForget({
+      to: staff.emailAddress,
+      subject: 'Welcome to Fordan Solar CRM',
+      template: 'welcome',
+      context: {
+        firstName: staff.firstName,
+        username: staff.username,
+        temporaryPassword,
+        loginUrl: this.getStaffLoginUrl(),
+        currentYear: new Date().getFullYear(),
+        staffTypeLabel: this.toStaffTypeLabel(staff.staffType),
+        staffRoleName: staff.staffRole?.name ?? null,
+      },
+    });
+  }
+
+  private getStaffLoginUrl(): string {
+    const fallbackUrl = 'http://localhost:5173/login';
+    const rawBaseUrl = process.env.WEB_APP_URL?.trim();
+
+    if (!rawBaseUrl) {
+      return fallbackUrl;
+    }
+
+    try {
+      const normalizedBaseUrl = rawBaseUrl.endsWith('/')
+        ? rawBaseUrl
+        : `${rawBaseUrl}/`;
+      return new URL('login', normalizedBaseUrl).toString();
+    } catch {
+      this.logger.warn(
+        `Invalid WEB_APP_URL "${rawBaseUrl}" — falling back to ${fallbackUrl}`,
+      );
+      return fallbackUrl;
+    }
+  }
+
+  private toStaffTypeLabel(
+    staffType: UserRole.MANAGER | UserRole.INSTALLER,
+  ): string {
+    return staffType === UserRole.MANAGER ? 'Manager' : 'Installer';
   }
 
   private archiveIdentificationNumber(
