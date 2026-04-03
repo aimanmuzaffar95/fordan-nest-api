@@ -33,7 +33,7 @@ import { ScheduleModule } from './schedule/schedule.module';
 import { MeteringModule } from './metering/metering.module';
 import { RuntimeSettingsModule } from './runtime-settings/runtime-settings.module';
 import { PublicLeadsModule } from './public-leads/public-leads.module';
-import { MailModule } from './mail/mail.module';
+import { EmailModule } from './email/email.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { EmployeeFormsModule } from './employee-forms/employee-forms.module';
 import { EmployeeForm } from './employee-forms/entities/employee-form.entity';
@@ -157,7 +157,7 @@ const publicLeadThrottleLimit = Number(
     SolarPanelsModule,
     InvertersModule,
     BatteriesModule,
-    MailModule,
+    EmailModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {

@@ -5,17 +5,18 @@ import {
 } from '@nestjs/common';
 import { CustomersService } from '../customers/customers.service';
 import { JobsService } from '../jobs/jobs.service';
-import { MailService } from '../mail/mail.service';
+import { EmailService } from '../email/email.service';
 import { SubmitPublicLeadDto } from './dto/submit-public-lead.dto';
 import { CreateJobDto } from '../jobs/dto/create-job.dto';
 import { UserRole } from '../users/entities/user-role.enum';
+import { envBool } from '../common/env.util';
 
 @Injectable()
 export class PublicLeadsService {
   constructor(
     private readonly customers: CustomersService,
     private readonly jobs: JobsService,
-    private readonly mail: MailService,
+    private readonly email: EmailService,
   ) {}
 
   async submit(
@@ -105,17 +106,42 @@ export class PublicLeadsService {
       actorId,
     );
 
-    this.mail.notifyPublicLeadCreated({
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      email: dto.email,
-      phone: dto.phone,
-      suburb: dto.suburb,
-      postcode: dto.postcode,
-      systemIntent: dto.systemIntent,
-      customerId: customer.id,
-      jobId: job.id,
-    });
+    const notifyEmails = (process.env.LEAD_NOTIFY_EMAILS ?? '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (notifyEmails.length > 0) {
+      this.email.fireAndForget({
+        to: notifyEmails,
+        subject: `New web lead: ${dto.firstName} ${dto.lastName}`,
+        template: 'public-lead-internal',
+        context: {
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          email: dto.email,
+          phone: dto.phone,
+          suburb: dto.suburb ?? '—',
+          postcode: dto.postcode ?? '',
+          systemIntent: dto.systemIntent,
+          customerId: customer.id,
+          jobId: job.id,
+        },
+      });
+    }
+
+    if (envBool(process.env.PUBLIC_LEAD_SEND_CONFIRMATION_EMAIL, false)) {
+      const subject =
+        process.env.PUBLIC_LEAD_CONFIRMATION_SUBJECT?.trim() ||
+        'We received your enquiry';
+
+      this.email.fireAndForget({
+        to: dto.email,
+        subject,
+        template: 'public-lead-confirmation',
+        context: { firstName: dto.firstName },
+      });
+    }
 
     return { customerId: customer.id, jobId: job.id };
   }
