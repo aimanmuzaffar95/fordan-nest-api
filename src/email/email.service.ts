@@ -35,32 +35,11 @@ export class EmailService {
     }
 
     const text = dto.text ?? (html ? htmlToText(html) : undefined);
-    const providerName =
-      this.provider.constructor?.name.replace(/Provider$/, '') ??
-      'EmailProvider';
-
-    if (!this.provider.capabilities.implemented) {
-      throw new ServiceUnavailableException({
-        message: `Email delivery is unavailable because the configured provider (${providerName}) is not implemented in this deployment.`,
-        code: 'EMAIL_DELIVERY_FAILED',
-      });
-    }
 
     if (!this.provider.capabilities.configured) {
       throw new ServiceUnavailableException({
         message:
-          'Email delivery is unavailable because the configured provider is missing required credentials or host settings.',
-        code: 'EMAIL_DELIVERY_FAILED',
-      });
-    }
-
-    if (
-      dto.attachments &&
-      dto.attachments.length > 0 &&
-      !this.provider.capabilities.attachments
-    ) {
-      throw new ServiceUnavailableException({
-        message: `Email attachments are not supported by the configured provider (${providerName}).`,
+          'Email delivery is unavailable because SMTP is not configured. Set SMTP_HOST and related credentials.',
         code: 'EMAIL_DELIVERY_FAILED',
       });
     }
@@ -80,13 +59,13 @@ export class EmailService {
         error instanceof Error ? (error.stack ?? error.message) : String(error);
 
       this.logger.error(
-        `Email delivery failed via ${providerName} to ${recipient}: "${dto.subject}"`,
+        `Email delivery failed via SMTP to ${recipient}: "${dto.subject}"`,
         details,
       );
 
       throw new ServiceUnavailableException({
         message:
-          'Email delivery failed. Check the configured email provider credentials, host, and connectivity.',
+          'Email delivery failed. Check SMTP credentials, sender identity, host, port, and connectivity.',
         code: 'EMAIL_DELIVERY_FAILED',
       });
     }

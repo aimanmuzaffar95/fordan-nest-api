@@ -9,7 +9,6 @@ export class SmtpProvider implements IEmailProvider {
   private readonly logger = new Logger(SmtpProvider.name);
   private transporter: Transporter | null = null;
   readonly capabilities = {
-    implemented: true,
     configured: Boolean(process.env.SMTP_HOST?.trim()),
     attachments: true,
   };
