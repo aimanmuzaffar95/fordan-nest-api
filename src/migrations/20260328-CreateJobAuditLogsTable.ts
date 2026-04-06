@@ -23,7 +23,7 @@ const JOB_AUDIT_ACTIONS = [
 
 const JOB_AUDIT_ACTIONS_SQL = JOB_AUDIT_ACTIONS.map((v) => `'${v}'`).join(', ');
 
-export class CreateJobAuditLogsTable20260328_1200000000010 implements MigrationInterface {
+export class CreateJobAuditLogsTable20260328_1700000000160 implements MigrationInterface {
   private getDialectDefaults(queryRunner: QueryRunner) {
     const dialect = queryRunner.connection.options.type;
     const uuidDefault =

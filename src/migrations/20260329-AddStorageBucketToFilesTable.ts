@@ -1,7 +1,9 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddStorageBucketToFilesTable20260329 implements MigrationInterface {
-  name = 'AddStorageBucketToFilesTable20260329';
+export class AddStorageBucketToFilesTable20260329_1700000000019
+  implements MigrationInterface
+{
+  name = 'AddStorageBucketToFilesTable20260329_1700000000019';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const hasFilesTable = await queryRunner.hasTable('files');

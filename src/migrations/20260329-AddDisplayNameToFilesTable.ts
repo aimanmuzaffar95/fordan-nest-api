@@ -1,7 +1,9 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddDisplayNameToFilesTable20260329 implements MigrationInterface {
-  name = 'AddDisplayNameToFilesTable20260329';
+export class AddDisplayNameToFilesTable20260329_1700000000020
+  implements MigrationInterface
+{
+  name = 'AddDisplayNameToFilesTable20260329_1700000000020';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const hasFilesTable = await queryRunner.hasTable('files');
