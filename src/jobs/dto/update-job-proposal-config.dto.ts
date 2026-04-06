@@ -6,8 +6,13 @@ import {
   IsEnum,
   IsInt,
   IsNumber,
+  IsOptional,
+  IsString,
   IsUUID,
+  MaxLength,
   Min,
+  MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { JobProposalEquipmentType } from '../job-proposal-equipment-type.enum';
@@ -26,6 +31,20 @@ export class UpdateJobProposalConfigItemDto {
   @IsNumber()
   @Min(0)
   proposalUnitPrice!: number;
+
+  @ValidateIf(
+    (item: UpdateJobProposalConfigItemDto) =>
+      item.equipmentType === JobProposalEquipmentType.MISC,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  subtitle?: string;
 }
 
 export class UpdateJobProposalConfigDto {

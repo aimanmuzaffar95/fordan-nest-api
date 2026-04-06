@@ -12,6 +12,11 @@ import type { EmailOptions } from '../types/email-options.type';
  */
 export class ResendProvider implements IEmailProvider {
   private readonly logger = new Logger(ResendProvider.name);
+  readonly capabilities = {
+    implemented: false,
+    configured: Boolean(process.env.RESEND_API_KEY?.trim()),
+    attachments: false,
+  };
 
   send(options: EmailOptions): Promise<void> {
     void options;

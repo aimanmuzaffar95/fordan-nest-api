@@ -52,6 +52,14 @@ import { JobAuditValue } from './types/job-audit-value.type';
 
 export type JobListViewer = { userId: string; role: UserRole };
 
+type ProposalSummarySyncInput = {
+  equipmentType: JobProposalEquipmentType;
+  quantity: number;
+  proposalUnitPrice: number;
+  wattage: number | null;
+  batteryCapacityKwh: number | null;
+};
+
 @Injectable()
 export class JobsService {
   private static readonly ORDER_NUMBER_PREFIX = 'ORD-';
@@ -241,21 +249,68 @@ export class JobsService {
     dto: UpdateJobDto,
     viewer: JobListViewer,
   ): Promise<JobDetailResponseDto> {
-    const hasManagerIdUpdate = Object.hasOwn(dto, 'managerId');
-    if (!hasManagerIdUpdate) {
-      return this.getOne(id, viewer);
+    if (Object.keys(dto).length === 0) {
+      throw new BadRequestException('At least one job field is required');
     }
 
     await this.dataSource.transaction(async (manager) => {
       const jobsRepo = manager.getRepository(Job);
       const usersRepo = manager.getRepository(User);
+      const timelineRepository = manager.getRepository(TimelineEvent);
       const job = await this.findOneOrFail(jobsRepo, id, viewer);
+
+      const hasManagerIdUpdate = Object.hasOwn(dto, 'managerId');
+      const hasSystemSizeUpdate = Object.hasOwn(dto, 'systemSizeKw');
+      const hasBatterySizeUpdate = Object.hasOwn(dto, 'batterySizeKwh');
 
       const nextManagerId =
         dto.managerId === undefined ? job.managerId : dto.managerId;
+      const nextSystemType = (dto.systemType ??
+        job.systemType) as JobSystemType;
+      const nextSystemSizeKw = this.normalizeSystemSize(
+        nextSystemType,
+        hasSystemSizeUpdate
+          ? (dto.systemSizeKw ?? undefined)
+          : job.systemSizeKw !== null
+            ? Number(job.systemSizeKw)
+            : undefined,
+      );
+      const nextBatterySizeKwh = this.normalizeBatterySize(
+        nextSystemType,
+        hasBatterySizeUpdate
+          ? (dto.batterySizeKwh ?? undefined)
+          : job.batterySizeKwh !== null
+            ? Number(job.batterySizeKwh)
+            : undefined,
+      );
+      const nextProjectPrice =
+        dto.projectPrice !== undefined
+          ? dto.projectPrice.toFixed(2)
+          : (job.projectPrice ?? '0.00');
+      const nextContractSigned = dto.contractSigned ?? job.contractSigned;
+      const nextDepositPaid = dto.depositPaid ?? job.depositPaid;
+      const nextDepositAmount =
+        dto.depositAmount !== undefined
+          ? dto.depositAmount.toFixed(2)
+          : job.depositAmount;
+      const nextInstallDate =
+        dto.installDate === undefined ? job.installDate : dto.installDate;
+      const nextEtaCompletionDate =
+        dto.etaCompletionDate === undefined
+          ? job.etaCompletionDate
+          : dto.etaCompletionDate;
+      const nextDepositDate = nextDepositPaid
+        ? (job.depositDate ?? new Date().toISOString().slice(0, 10))
+        : null;
 
-      if (nextManagerId === job.managerId) {
-        return;
+      if (
+        viewer.role !== UserRole.ADMIN &&
+        hasManagerIdUpdate &&
+        nextManagerId !== job.managerId
+      ) {
+        throw new ForbiddenException(
+          'Only admins can update manager assignment',
+        );
       }
 
       let validatedManagerId: string | null = null;
@@ -272,21 +327,139 @@ export class JobsService {
         validatedManagerId = managerUser.id;
       }
 
+      const changedSummaryFields: string[] = [];
+
+      const markChanged = (
+        field: string,
+        oldValue: string | number | boolean | null | undefined,
+        newValue: string | number | boolean | null | undefined,
+      ) => {
+        const normalize = (v: string | number | boolean | null | undefined) => {
+          if (v === null || v === undefined) return null;
+          const n = Number(v);
+          return Number.isFinite(n) ? n.toString() : String(v);
+        };
+        if (normalize(oldValue) !== normalize(newValue)) {
+          changedSummaryFields.push(field);
+        }
+      };
+
+      markChanged('systemType', job.systemType, nextSystemType);
+      markChanged('systemSizeKw', job.systemSizeKw, nextSystemSizeKw);
+      markChanged('batterySizeKwh', job.batterySizeKwh, nextBatterySizeKwh);
+      markChanged('projectPrice', job.projectPrice, nextProjectPrice);
+      markChanged('contractSigned', job.contractSigned, nextContractSigned);
+      markChanged('depositPaid', job.depositPaid, nextDepositPaid);
+      markChanged('depositAmount', job.depositAmount, nextDepositAmount);
+      markChanged('installDate', job.installDate, nextInstallDate);
+      markChanged(
+        'etaCompletionDate',
+        job.etaCompletionDate,
+        nextEtaCompletionDate,
+      );
+      markChanged('managerId', job.managerId, validatedManagerId);
+
+      if (changedSummaryFields.length === 0) {
+        return;
+      }
+
       const previousManagerId = job.managerId;
+      const previousContractSigned = job.contractSigned;
+      const previousDepositPaid = job.depositPaid;
+      const previousInstallDate = job.installDate;
+
+      job.systemType = nextSystemType;
+      job.systemSizeKw = nextSystemSizeKw;
+      job.batterySizeKwh = nextBatterySizeKwh;
+      job.projectPrice = nextProjectPrice;
+      job.contractSigned = nextContractSigned;
+      job.depositPaid = nextDepositPaid;
+      job.depositAmount = nextDepositAmount;
+      job.depositDate = nextDepositDate;
+      job.installDate = nextInstallDate;
+      job.etaCompletionDate = nextEtaCompletionDate;
       job.managerId = validatedManagerId;
+
       await jobsRepo.save(job);
 
-      await this.jobAuditLogs.logWithManager(manager, {
-        jobId: job.id,
-        performedById: viewer.userId,
-        action: JobAuditAction.MANAGER_ASSIGNMENT_CHANGED,
-        field: 'managerId',
-        oldValue: previousManagerId,
-        newValue: validatedManagerId,
-        metadata: {
-          source: 'job_detail_summary',
-        },
-      });
+      if (previousManagerId !== validatedManagerId) {
+        await this.jobAuditLogs.logWithManager(manager, {
+          jobId: job.id,
+          performedById: viewer.userId,
+          action: JobAuditAction.MANAGER_ASSIGNMENT_CHANGED,
+          field: 'managerId',
+          oldValue: previousManagerId,
+          newValue: validatedManagerId,
+          metadata: {
+            source: 'job_detail_summary',
+          },
+        });
+      }
+
+      if (previousContractSigned !== nextContractSigned) {
+        await this.jobAuditLogs.logWithManager(manager, {
+          jobId: job.id,
+          performedById: viewer.userId,
+          action: JobAuditAction.CONTRACT_SIGNED_CHANGED,
+          field: 'contractSigned',
+          oldValue: previousContractSigned,
+          newValue: nextContractSigned,
+          metadata: {
+            source: 'job_detail_summary',
+          },
+        });
+      }
+
+      if (previousDepositPaid !== nextDepositPaid) {
+        await this.jobAuditLogs.logWithManager(manager, {
+          jobId: job.id,
+          performedById: viewer.userId,
+          action: JobAuditAction.DEPOSIT_PAID_CHANGED,
+          field: 'depositPaid',
+          oldValue: previousDepositPaid,
+          newValue: nextDepositPaid,
+          metadata: {
+            source: 'job_detail_summary',
+          },
+        });
+      }
+
+      if (previousInstallDate !== nextInstallDate) {
+        await this.jobAuditLogs.logWithManager(manager, {
+          jobId: job.id,
+          performedById: viewer.userId,
+          action: JobAuditAction.INSTALL_DATE_CHANGED,
+          field: 'installDate',
+          oldValue: previousInstallDate,
+          newValue: nextInstallDate,
+          metadata: {
+            source: 'job_detail_summary',
+          },
+        });
+      }
+
+      const genericChangedFields = changedSummaryFields.filter(
+        (field) =>
+          ![
+            'managerId',
+            'contractSigned',
+            'depositPaid',
+            'installDate',
+          ].includes(field),
+      );
+
+      if (genericChangedFields.length > 0) {
+        await timelineRepository.save(
+          timelineRepository.create({
+            jobId: job.id,
+            type: 'job_summary_updated',
+            payload: {
+              fields: genericChangedFields,
+            },
+            createdByUserId: viewer.userId,
+          }),
+        );
+      }
     });
 
     return this.getOne(id, viewer);
@@ -369,11 +542,12 @@ export class JobsService {
     dto: UpdateJobProposalConfigDto,
     viewer: JobListViewer,
   ): Promise<JobProposalConfigResponseDto> {
-    await this.findOneOrFail(this.jobsRepo, jobId, viewer);
-
     return this.dataSource.transaction(async (manager) => {
+      const jobsRepo = manager.getRepository(Job);
       const proposalSelectionsRepo =
         manager.getRepository(JobProposalSelection);
+      const timelineRepository = manager.getRepository(TimelineEvent);
+      const job = await this.findOneOrFail(jobsRepo, jobId, viewer);
       const normalizedItems = await this.normalizeProposalItems(dto.items);
 
       await proposalSelectionsRepo.delete({ jobId });
@@ -396,6 +570,63 @@ export class JobsService {
                 }),
               ),
             );
+
+      const syncedSummary = this.deriveJobSummaryFromProposalItems(
+        normalizedItems,
+        job.systemType,
+      );
+      const nextSystemType = syncedSummary.systemType;
+      const nextSystemSizeKw = this.normalizeSystemSize(
+        nextSystemType,
+        syncedSummary.systemSizeKw,
+      );
+      const nextBatterySizeKwh = this.normalizeBatterySize(
+        nextSystemType,
+        syncedSummary.batterySizeKwh,
+      );
+      const nextProjectPrice = syncedSummary.projectPrice.toFixed(2);
+
+      const changedSummaryFields: string[] = [];
+
+      const markChanged = (
+        field: string,
+        oldValue: string | number | boolean | null | undefined,
+        newValue: string | number | boolean | null | undefined,
+      ) => {
+        const normalize = (v: string | number | boolean | null | undefined) => {
+          if (v === null || v === undefined) return null;
+          const n = Number(v);
+          return Number.isFinite(n) ? n.toString() : String(v);
+        };
+        if (normalize(oldValue) !== normalize(newValue)) {
+          changedSummaryFields.push(field);
+        }
+      };
+
+      markChanged('systemType', job.systemType, nextSystemType);
+      markChanged('systemSizeKw', job.systemSizeKw, nextSystemSizeKw);
+      markChanged('batterySizeKwh', job.batterySizeKwh, nextBatterySizeKwh);
+      markChanged('projectPrice', job.projectPrice, nextProjectPrice);
+
+      if (changedSummaryFields.length > 0) {
+        job.systemType = nextSystemType;
+        job.systemSizeKw = nextSystemSizeKw;
+        job.batterySizeKwh = nextBatterySizeKwh;
+        job.projectPrice = nextProjectPrice;
+
+        await jobsRepo.save(job);
+        await timelineRepository.save(
+          timelineRepository.create({
+            jobId,
+            type: 'job_summary_updated',
+            payload: {
+              fields: changedSummaryFields,
+              source: 'proposal_config',
+            },
+            createdByUserId: viewer.userId,
+          }),
+        );
+      }
 
       return this.buildProposalConfigResponse(jobId, savedSelections);
     });
@@ -552,6 +783,55 @@ export class JobsService {
     return typeof batterySizeKwh === 'number'
       ? batterySizeKwh.toFixed(2)
       : null;
+  }
+
+  private deriveJobSummaryFromProposalItems(
+    items: ProposalSummarySyncInput[],
+    fallbackSystemType: JobSystemType,
+  ) {
+    const totalSolarWattage = items.reduce((sum, item) => {
+      if (
+        item.equipmentType !== JobProposalEquipmentType.PANEL ||
+        item.wattage === null
+      ) {
+        return sum;
+      }
+
+      return sum + item.wattage * item.quantity;
+    }, 0);
+    const totalBatteryCapacityKwh = items.reduce((sum, item) => {
+      if (
+        item.equipmentType !== JobProposalEquipmentType.BATTERY ||
+        item.batteryCapacityKwh === null
+      ) {
+        return sum;
+      }
+
+      return sum + item.batteryCapacityKwh * item.quantity;
+    }, 0);
+    const projectPrice = items.reduce(
+      (sum, item) => sum + item.proposalUnitPrice * item.quantity,
+      0,
+    );
+
+    const hasSolar = totalSolarWattage > 0;
+    const hasBattery = totalBatteryCapacityKwh > 0;
+
+    let systemType = fallbackSystemType;
+    if (hasSolar && hasBattery) {
+      systemType = JobSystemType.BOTH;
+    } else if (hasSolar) {
+      systemType = JobSystemType.SOLAR;
+    } else if (hasBattery) {
+      systemType = JobSystemType.BATTERY;
+    }
+
+    return {
+      systemType,
+      systemSizeKw: hasSolar ? totalSolarWattage / 1000 : undefined,
+      batterySizeKwh: hasBattery ? totalBatteryCapacityKwh : undefined,
+      projectPrice,
+    };
   }
 
   private hasPreMeterApprovalForInstall(stage: JobPipelineStage): boolean {
@@ -930,6 +1210,33 @@ export class JobsService {
 
         return 'Assignment lock updated';
       }
+      case 'quotation_sent': {
+        const recipient =
+          this.readTimelinePayloadString(payload, 'recipientEmail') ||
+          'customer';
+        return `Quotation sent to ${recipient}`;
+      }
+      case 'job_summary_updated': {
+        const source = this.readTimelinePayloadString(payload, 'source');
+        const fields =
+          payload &&
+          typeof payload === 'object' &&
+          !Array.isArray(payload) &&
+          Array.isArray(payload.fields)
+            ? payload.fields.filter(
+                (value): value is string => typeof value === 'string',
+              )
+            : [];
+        const prefix =
+          source === 'proposal_config'
+            ? 'Job summary synced from proposal configuration'
+            : 'Job summary updated';
+        if (fields.length === 0) {
+          return prefix;
+        }
+        const labels = fields.map((field) => this.humanizeToken(field));
+        return `${prefix}: ${labels.join(', ')}`;
+      }
       default:
         return this.humanizeToken(entry.type);
     }
@@ -1011,11 +1318,22 @@ export class JobsService {
 
   private async normalizeProposalItems(
     items: UpdateJobProposalConfigItemDto[],
-  ) {
+  ): Promise<
+    Array<
+      UpdateJobProposalConfigItemDto & {
+        name: string;
+        subtitle: string;
+        defaultUnitPrice: number;
+        wattage: number | null;
+        batteryCapacityKwh: number | null;
+      }
+    >
+  > {
     const requestedByType = {
       [JobProposalEquipmentType.PANEL]: [] as string[],
       [JobProposalEquipmentType.INVERTER]: [] as string[],
       [JobProposalEquipmentType.BATTERY]: [] as string[],
+      [JobProposalEquipmentType.MISC]: [] as string[],
     };
 
     items.forEach((item) => {
@@ -1057,6 +1375,24 @@ export class JobsService {
     );
 
     return items.map((item) => {
+      if (item.equipmentType === JobProposalEquipmentType.MISC) {
+        const trimmedName = item.name?.trim() ?? '';
+        if (!trimmedName) {
+          throw new BadRequestException(
+            'Miscellaneous proposal items require a name',
+          );
+        }
+
+        return {
+          ...item,
+          name: trimmedName,
+          subtitle: item.subtitle?.trim() ?? '',
+          defaultUnitPrice: item.proposalUnitPrice,
+          wattage: null,
+          batteryCapacityKwh: null,
+        };
+      }
+
       if (item.equipmentType === JobProposalEquipmentType.PANEL) {
         const panel = panelMap.get(item.equipmentId);
         if (!panel) {
@@ -1070,6 +1406,8 @@ export class JobsService {
           name: buildEquipmentCatalogName(panel.brand, panel.model),
           subtitle: `${this.formatNumeric(panel.wattage)} W panel`,
           defaultUnitPrice: Number(panel.defaultUnitPrice),
+          wattage: Number(panel.wattage),
+          batteryCapacityKwh: null,
         };
       }
 
@@ -1084,6 +1422,8 @@ export class JobsService {
           name: buildEquipmentCatalogName(inverter.brand, inverter.model),
           subtitle: `${this.formatNumeric(inverter.capacityKw)} kW inverter`,
           defaultUnitPrice: Number(inverter.defaultUnitPrice),
+          wattage: null,
+          batteryCapacityKwh: null,
         };
       }
 
@@ -1097,6 +1437,8 @@ export class JobsService {
         name: buildEquipmentCatalogName(battery.brand, battery.model),
         subtitle: `${this.formatNumeric(battery.capacityKwh)} kWh battery`,
         defaultUnitPrice: Number(battery.defaultUnitPrice),
+        wattage: null,
+        batteryCapacityKwh: Number(battery.capacityKwh),
       };
     });
   }
@@ -1159,6 +1501,25 @@ export class JobsService {
   ) {
     const proposalUnitPrice = Number(selection.proposalUnitPrice);
     const defaultUnitPrice = Number(selection.defaultUnitPriceSnapshot);
+
+    if (selection.equipmentType === JobProposalEquipmentType.MISC) {
+      return {
+        id: selection.id,
+        equipmentType: selection.equipmentType,
+        equipmentId: selection.equipmentId,
+        name: selection.equipmentNameSnapshot,
+        subtitle: selection.equipmentSubtitleSnapshot,
+        quantity: selection.quantity,
+        defaultUnitPrice,
+        proposalUnitPrice,
+        lineTotal: proposalUnitPrice * selection.quantity,
+        stockStatus: null,
+        wattage: null,
+        inverterCapacityKw: null,
+        batteryCapacityKwh: null,
+        efficiency: null,
+      };
+    }
 
     if (selection.equipmentType === JobProposalEquipmentType.PANEL) {
       const panel = catalogMaps.panels.get(selection.equipmentId);

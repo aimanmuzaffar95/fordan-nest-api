@@ -50,6 +50,8 @@ import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
 import { UpdateJobProposalConfigDto } from './dto/update-job-proposal-config.dto';
 import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.service';
 import { JobsService } from './jobs.service';
+import { JobQuotationService } from './job-quotation.service';
+import { SendJobQuotationResponseDto } from './dto/send-job-quotation-response.dto';
 
 @ApiTags('Jobs')
 @ApiBearerAuth('JWT')
@@ -61,6 +63,7 @@ import { JobsService } from './jobs.service';
 export class JobsController {
   constructor(
     private readonly jobs: JobsService,
+    private readonly jobQuotation: JobQuotationService,
     private readonly filesService: FilesService,
     private readonly leadCaptureInsightsService: LeadCaptureInsightsService,
   ) {}
@@ -290,7 +293,7 @@ export class JobsController {
   @ApiOperation({
     summary: 'Update non-pipeline job fields',
     description:
-      'Currently supports manager assignment updates for the live job detail summary card. Returns the refreshed job detail payload.',
+      'Updates live job detail summary fields such as system details, pricing, deposit/contract state, scheduling dates, and manager assignment. Returns the refreshed job detail payload.',
   })
   updateJob(
     @Param('id', ParseUUIDPipe) id: string,
@@ -369,7 +372,7 @@ export class JobsController {
   @ApiOperation({
     summary: 'Replace job proposal configuration',
     description:
-      'Persists the proposal-only equipment selection set for the job. Existing proposal selections are replaced atomically.',
+      'Persists the proposal-only equipment selection set for the job. Existing proposal selections are replaced atomically, and the live job summary fields are re-derived from the saved proposal equipment and pricing.',
   })
   updateProposalConfig(
     @Param('id', ParseUUIDPipe) id: string,
@@ -382,6 +385,31 @@ export class JobsController {
       throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.jobs.updateProposalConfig(id, dto, { userId, role });
+  }
+
+  @Post(':id/send-quotation')
+  @HttpCode(HttpStatus.OK)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Send quotation email to the job customer',
+    description:
+      'Builds the quotation email and PDF attachment from the persisted proposal configuration, sends it to the customer email on file, and records a `quotation_sent` timeline event. **Manager:** only within your job scope.',
+  })
+  @ApiOkResponse({
+    description: 'Quotation sent successfully',
+    type: SendJobQuotationResponseDto,
+  })
+  sendQuotation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+
+    return this.jobQuotation.sendQuotation(id, { userId, role });
   }
 
   @Patch(':id/pipeline')

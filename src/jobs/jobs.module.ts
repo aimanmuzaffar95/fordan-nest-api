@@ -24,6 +24,8 @@ import { Invoice } from '../invoices/entities/invoice.entity';
 import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.service';
 import { AdminDashboardController } from '../reports/admin-dashboard.controller';
 import { AdminDashboardReportsService } from '../reports/admin-dashboard.service';
+import { JobQuotationPdfService } from './job-quotation-pdf.service';
+import { JobQuotationService } from './job-quotation.service';
 
 @Module({
   imports: [
@@ -56,6 +58,8 @@ import { AdminDashboardReportsService } from '../reports/admin-dashboard.service
   ],
   providers: [
     JobsService,
+    JobQuotationPdfService,
+    JobQuotationService,
     JobAuditLogsService,
     LeadCaptureInsightsService,
     AdminDashboardReportsService,

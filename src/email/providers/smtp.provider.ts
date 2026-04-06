@@ -8,6 +8,11 @@ import { envBool } from '../../common/env.util';
 export class SmtpProvider implements IEmailProvider {
   private readonly logger = new Logger(SmtpProvider.name);
   private transporter: Transporter | null = null;
+  readonly capabilities = {
+    implemented: true,
+    configured: Boolean(process.env.SMTP_HOST?.trim()),
+    attachments: true,
+  };
 
   private getTransporter(): Transporter | null {
     const host = process.env.SMTP_HOST?.trim();
@@ -41,8 +46,7 @@ export class SmtpProvider implements IEmailProvider {
   async send(options: EmailOptions): Promise<void> {
     const tx = this.getTransporter();
     if (!tx) {
-      this.logger.warn('SMTP not configured — email skipped');
-      return;
+      throw new Error('SMTP is not configured');
     }
 
     await tx.sendMail({
@@ -52,6 +56,11 @@ export class SmtpProvider implements IEmailProvider {
       html: options.html,
       text: options.text,
       replyTo: options.replyTo,
+      attachments: options.attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        content: attachment.content,
+        contentType: attachment.contentType,
+      })),
     });
 
     const recipient = Array.isArray(options.to)

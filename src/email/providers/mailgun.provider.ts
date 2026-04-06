@@ -12,6 +12,13 @@ import type { EmailOptions } from '../types/email-options.type';
  */
 export class MailgunProvider implements IEmailProvider {
   private readonly logger = new Logger(MailgunProvider.name);
+  readonly capabilities = {
+    implemented: false,
+    configured: Boolean(
+      process.env.MAILGUN_API_KEY?.trim() && process.env.MAILGUN_DOMAIN?.trim(),
+    ),
+    attachments: false,
+  };
 
   send(options: EmailOptions): Promise<void> {
     void options;

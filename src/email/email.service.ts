@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -27,7 +28,42 @@ export class EmailService {
       html = renderTemplate(dto.template, dto.context ?? {});
     }
 
+    if (dto.attachments && dto.attachments.length > 10) {
+      throw new BadRequestException(
+        'A maximum of 10 attachments are allowed per email',
+      );
+    }
+
     const text = dto.text ?? (html ? htmlToText(html) : undefined);
+    const providerName =
+      this.provider.constructor?.name.replace(/Provider$/, '') ??
+      'EmailProvider';
+
+    if (!this.provider.capabilities.implemented) {
+      throw new ServiceUnavailableException({
+        message: `Email delivery is unavailable because the configured provider (${providerName}) is not implemented in this deployment.`,
+        code: 'EMAIL_DELIVERY_FAILED',
+      });
+    }
+
+    if (!this.provider.capabilities.configured) {
+      throw new ServiceUnavailableException({
+        message:
+          'Email delivery is unavailable because the configured provider is missing required credentials or host settings.',
+        code: 'EMAIL_DELIVERY_FAILED',
+      });
+    }
+
+    if (
+      dto.attachments &&
+      dto.attachments.length > 0 &&
+      !this.provider.capabilities.attachments
+    ) {
+      throw new ServiceUnavailableException({
+        message: `Email attachments are not supported by the configured provider (${providerName}).`,
+        code: 'EMAIL_DELIVERY_FAILED',
+      });
+    }
 
     try {
       await this.provider.send({
@@ -36,12 +72,10 @@ export class EmailService {
         html,
         text,
         replyTo: dto.replyTo,
+        attachments: dto.attachments,
       });
     } catch (error: unknown) {
       const recipient = Array.isArray(dto.to) ? dto.to.join(', ') : dto.to;
-      const providerName =
-        this.provider.constructor?.name.replace(/Provider$/, '') ??
-        'EmailProvider';
       const details =
         error instanceof Error ? (error.stack ?? error.message) : String(error);
 

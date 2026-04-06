@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddDisplayNameToFilesTable20260329_1700000000020
-  implements MigrationInterface
-{
+export class AddDisplayNameToFilesTable20260329_1700000000020 implements MigrationInterface {
   name = 'AddDisplayNameToFilesTable20260329_1700000000020';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

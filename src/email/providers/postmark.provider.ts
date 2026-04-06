@@ -12,6 +12,11 @@ import type { EmailOptions } from '../types/email-options.type';
  */
 export class PostmarkProvider implements IEmailProvider {
   private readonly logger = new Logger(PostmarkProvider.name);
+  readonly capabilities = {
+    implemented: false,
+    configured: Boolean(process.env.POSTMARK_SERVER_TOKEN?.trim()),
+    attachments: false,
+  };
 
   send(options: EmailOptions): Promise<void> {
     void options;

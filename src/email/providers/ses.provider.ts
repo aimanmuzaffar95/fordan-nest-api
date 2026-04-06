@@ -14,6 +14,11 @@ import type { EmailOptions } from '../types/email-options.type';
  */
 export class SesProvider implements IEmailProvider {
   private readonly logger = new Logger(SesProvider.name);
+  readonly capabilities = {
+    implemented: false,
+    configured: Boolean(process.env.AWS_SES_REGION?.trim()),
+    attachments: false,
+  };
 
   send(options: EmailOptions): Promise<void> {
     void options;

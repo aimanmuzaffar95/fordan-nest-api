@@ -1,3 +1,5 @@
+import type { EmailAttachment } from '../types/email-attachment.type';
+
 export interface SendEmailDto {
   to: string | string[];
   subject: string;
@@ -10,4 +12,5 @@ export interface SendEmailDto {
   /** Plain text fallback — auto-generated from html if omitted */
   text?: string;
   replyTo?: string;
+  attachments?: EmailAttachment[];
 }
