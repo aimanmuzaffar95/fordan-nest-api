@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 import { Assignment } from '../assignments/entities/assignment.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
+import { InvoicePayment } from '../invoices/entities/invoice-payment.entity';
 import { InvoiceStatus } from '../invoices/entities/invoice-status.enum';
 import { JobAuditAction } from '../jobs/job-audit-action.enum';
 import { JobAuditLog } from '../jobs/entities/job-audit-log.entity';
@@ -11,6 +12,7 @@ import { MeterApplication } from '../metering/entities/meter-application.entity'
 import { Customer } from '../customers/entities/customer.entity';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
+import { ReportsRevenueQueryDto } from './dto/reports-revenue-query.dto';
 
 type DashboardSummaryResponse = {
   generatedAt: string;
@@ -68,6 +70,64 @@ type DashboardViewer = {
   role: UserRole;
 };
 
+type ReportsKpisResponse = {
+  generatedAt: string;
+  range: {
+    from: string;
+    to: string;
+    rangeDays: number;
+  };
+  conversionRateQuotedToWon: number;
+  avgDepositToInstallDays: number;
+  totalRevenuePaid: number;
+  totalCustomers: number;
+};
+
+type ReportsPipelineResponse = {
+  generatedAt: string;
+  range: {
+    from: string;
+    to: string;
+    rangeDays: number;
+  };
+  jobsCompletedByMonth: Array<{
+    month: string;
+    count: number;
+  }>;
+  managerPortfolioMix: Array<{
+    managerUserId: string | null;
+    managerName: string;
+    totalJobs: number;
+    totalProjectValue: number;
+    preInstall: number;
+    installed: number;
+    invoiced: number;
+    paid: number;
+  }>;
+  pipelineDistribution: Array<{
+    name: 'Pre-Install' | 'Installed' | 'Invoiced' | 'Paid';
+    value: number;
+  }>;
+};
+
+type ReportsRevenueResponse = {
+  generatedAt: string;
+  currency: string;
+  range: {
+    from: string;
+    to: string;
+  };
+  monthly: Array<{
+    month: string;
+    invoicedTotal: number;
+    paidTotal: number;
+  }>;
+  totals: {
+    invoicedTotal: number;
+    paidTotal: number;
+  };
+};
+
 @Injectable()
 export class AdminDashboardReportsService {
   constructor(
@@ -75,6 +135,8 @@ export class AdminDashboardReportsService {
     private readonly jobsRepo: Repository<Job>,
     @InjectRepository(Invoice)
     private readonly invoicesRepo: Repository<Invoice>,
+    @InjectRepository(InvoicePayment)
+    private readonly invoicePaymentsRepo: Repository<InvoicePayment>,
     @InjectRepository(MeterApplication)
     private readonly meterApplicationsRepo: Repository<MeterApplication>,
     @InjectRepository(JobAuditLog)
@@ -84,6 +146,356 @@ export class AdminDashboardReportsService {
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
   ) {}
+
+  async getKpis(
+    rangeDays = 90,
+    viewer?: DashboardViewer,
+  ): Promise<ReportsKpisResponse> {
+    const now = new Date();
+    const window = this.resolveRangeWindow({
+      rangeDays,
+      now,
+    });
+    const jobs = await this.getScopedJobsForReports(viewer);
+    const jobsInRange = jobs.filter((job) =>
+      this.isDateWithinWindow(job.createdAt, window.from, window.to),
+    );
+    const quotedCount = jobsInRange.filter(
+      (job) => job.pipelineStage !== 'lead',
+    ).length;
+    const wonCount = jobsInRange.filter(
+      (job) => !['lead', 'quoted'].includes(job.pipelineStage),
+    ).length;
+    const conversionRateQuotedToWon =
+      quotedCount > 0 ? Math.round((wonCount / quotedCount) * 100) : 0;
+    const depositToInstallDays = jobs
+      .map((job) => {
+        const depositMs = this.parseDateOnlyToUtcMs(job.depositDate);
+        const installMs = this.parseDateOnlyToUtcMs(job.installDate);
+        if (depositMs === null || installMs === null || installMs < depositMs) {
+          return null;
+        }
+        return Math.floor((installMs - depositMs) / 86400000);
+      })
+      .filter((value): value is number => value !== null);
+    const avgDepositToInstallDays =
+      depositToInstallDays.length > 0
+        ? Math.round(
+            depositToInstallDays.reduce((sum, days) => sum + days, 0) /
+              depositToInstallDays.length,
+          )
+        : 0;
+    const scopedJobIds = jobs.map((job) => job.id);
+    const invoices =
+      scopedJobIds.length > 0
+        ? await this.invoicesRepo.find({
+            where: {
+              jobId: In(scopedJobIds),
+            },
+            select: {
+              id: true,
+              status: true,
+              amountPaid: true,
+            },
+          })
+        : [];
+    const totalRevenuePaid = Number(
+      invoices
+        .filter((invoice) => invoice.status !== InvoiceStatus.CANCELLED)
+        .reduce((sum, invoice) => sum + Number(invoice.amountPaid ?? 0), 0)
+        .toFixed(2),
+    );
+
+    return {
+      generatedAt: now.toISOString(),
+      range: {
+        from: window.from,
+        to: window.to,
+        rangeDays: window.rangeDays,
+      },
+      conversionRateQuotedToWon,
+      avgDepositToInstallDays,
+      totalRevenuePaid,
+      totalCustomers: new Set(jobs.map((job) => job.customerId)).size,
+    };
+  }
+
+  async getPipeline(
+    rangeDays = 90,
+    viewer?: DashboardViewer,
+  ): Promise<ReportsPipelineResponse> {
+    const now = new Date();
+    const window = this.resolveRangeWindow({ rangeDays, now });
+    const jobs = await this.getScopedJobsForReports(viewer);
+    const completedByMonthMap = new Map<string, number>();
+
+    jobs.forEach((job) => {
+      const isCompletedStage = ['completed', 'invoiced', 'paid'].includes(
+        job.pipelineStage,
+      );
+      if (
+        !isCompletedStage ||
+        !this.isDateWithinWindow(job.installDate, window.from, window.to)
+      ) {
+        return;
+      }
+      const month = this.toMonthLabel(job.installDate as string);
+      completedByMonthMap.set(month, (completedByMonthMap.get(month) ?? 0) + 1);
+    });
+
+    const jobsCompletedByMonth = Array.from(completedByMonthMap.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([month, count]) => ({ month, count }));
+
+    const managerIds = Array.from(
+      new Set(
+        jobs
+          .map((job) => job.managerId)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+    const managers =
+      managerIds.length > 0
+        ? await this.usersRepo.find({
+            where: {
+              id: In(managerIds),
+              role: UserRole.MANAGER,
+            },
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              role: true,
+            },
+          })
+        : [];
+    const managerNameById = new Map(
+      managers.map((manager) => [manager.id, this.getUserFullName(manager)]),
+    );
+    const managerPortfolioByKey = new Map<
+      string,
+      {
+        managerUserId: string | null;
+        managerName: string;
+        totalJobs: number;
+        totalProjectValue: number;
+        preInstall: number;
+        installed: number;
+        invoiced: number;
+        paid: number;
+      }
+    >();
+    jobs.forEach((job) => {
+      const managerUserId = job.managerId ?? null;
+      const key = managerUserId ?? 'unassigned';
+      const managerName = managerUserId
+        ? (managerNameById.get(managerUserId) ?? 'Unknown manager')
+        : 'Unassigned';
+      const current = managerPortfolioByKey.get(key) ?? {
+        managerUserId,
+        managerName,
+        totalJobs: 0,
+        totalProjectValue: 0,
+        preInstall: 0,
+        installed: 0,
+        invoiced: 0,
+        paid: 0,
+      };
+      current.totalJobs += 1;
+      current.totalProjectValue += Number(job.projectPrice ?? 0);
+      if (
+        [
+          'lead',
+          'quoted',
+          'won',
+          'pre_meter_submitted',
+          'pre_meter_approved',
+          'scheduled',
+        ].includes(job.pipelineStage)
+      ) {
+        current.preInstall += 1;
+      } else if (
+        ['installed', 'post_meter_submitted', 'completed'].includes(
+          job.pipelineStage,
+        )
+      ) {
+        current.installed += 1;
+      } else if (job.pipelineStage === 'invoiced') {
+        current.invoiced += 1;
+      } else if (job.pipelineStage === 'paid') {
+        current.paid += 1;
+      }
+      managerPortfolioByKey.set(key, current);
+    });
+
+    const managerPortfolioMix = Array.from(managerPortfolioByKey.values())
+      .map((row) => ({
+        ...row,
+        totalProjectValue: Number(row.totalProjectValue.toFixed(2)),
+      }))
+      .sort((left, right) => right.totalProjectValue - left.totalProjectValue);
+
+    const pipelineDistribution: ReportsPipelineResponse['pipelineDistribution'] =
+      [
+        {
+          name: 'Pre-Install',
+          value: jobs.filter((job) =>
+            [
+              'lead',
+              'quoted',
+              'won',
+              'pre_meter_submitted',
+              'pre_meter_approved',
+              'scheduled',
+            ].includes(job.pipelineStage),
+          ).length,
+        },
+        {
+          name: 'Installed',
+          value: jobs.filter((job) =>
+            ['installed', 'post_meter_submitted', 'completed'].includes(
+              job.pipelineStage,
+            ),
+          ).length,
+        },
+        {
+          name: 'Invoiced',
+          value: jobs.filter((job) => job.pipelineStage === 'invoiced').length,
+        },
+        {
+          name: 'Paid',
+          value: jobs.filter((job) => job.pipelineStage === 'paid').length,
+        },
+      ];
+
+    return {
+      generatedAt: now.toISOString(),
+      range: {
+        from: window.from,
+        to: window.to,
+        rangeDays: window.rangeDays,
+      },
+      jobsCompletedByMonth,
+      managerPortfolioMix,
+      pipelineDistribution,
+    };
+  }
+
+  async getRevenue(
+    query: ReportsRevenueQueryDto,
+    viewer?: DashboardViewer,
+  ): Promise<ReportsRevenueResponse> {
+    const now = new Date();
+    const window = this.resolveRangeWindow({
+      rangeDays: query.rangeDays ?? 90,
+      from: query.from,
+      to: query.to,
+      now,
+    });
+    const jobs = await this.getScopedJobsForReports(viewer);
+    const scopedJobIds = jobs.map((job) => job.id);
+    if (scopedJobIds.length === 0) {
+      return {
+        generatedAt: now.toISOString(),
+        currency: 'USD',
+        range: {
+          from: window.from,
+          to: window.to,
+        },
+        monthly: this.buildMonthLabelsBetween(window.from, window.to).map(
+          (month) => ({
+            month,
+            invoicedTotal: 0,
+            paidTotal: 0,
+          }),
+        ),
+        totals: {
+          invoicedTotal: 0,
+          paidTotal: 0,
+        },
+      };
+    }
+
+    const invoices = await this.invoicesRepo.find({
+      where: {
+        jobId: In(scopedJobIds),
+      },
+      select: {
+        id: true,
+        status: true,
+        issueDate: true,
+        total: true,
+      },
+    });
+    const activeInvoiceIds = invoices
+      .filter((invoice) => invoice.status !== InvoiceStatus.CANCELLED)
+      .map((invoice) => invoice.id);
+    const payments =
+      activeInvoiceIds.length > 0
+        ? await this.invoicePaymentsRepo.find({
+            where: {
+              invoiceId: In(activeInvoiceIds),
+              paymentDate: Between(window.from, window.to),
+            },
+            select: {
+              invoiceId: true,
+              paymentDate: true,
+              amount: true,
+            },
+          })
+        : [];
+    const invoicedByMonth = new Map<string, number>();
+    invoices.forEach((invoice) => {
+      if (
+        invoice.status === InvoiceStatus.CANCELLED ||
+        !this.isDateWithinWindow(invoice.issueDate, window.from, window.to)
+      ) {
+        return;
+      }
+      const month = this.toMonthLabel(invoice.issueDate);
+      invoicedByMonth.set(
+        month,
+        (invoicedByMonth.get(month) ?? 0) + Number(invoice.total ?? 0),
+      );
+    });
+
+    const paidByMonth = new Map<string, number>();
+    payments.forEach((payment) => {
+      const month = this.toMonthLabel(payment.paymentDate);
+      paidByMonth.set(
+        month,
+        (paidByMonth.get(month) ?? 0) + Number(payment.amount ?? 0),
+      );
+    });
+
+    const monthly = this.buildMonthLabelsBetween(window.from, window.to).map(
+      (month) => ({
+        month,
+        invoicedTotal: Number((invoicedByMonth.get(month) ?? 0).toFixed(2)),
+        paidTotal: Number((paidByMonth.get(month) ?? 0).toFixed(2)),
+      }),
+    );
+    const totals = monthly.reduce(
+      (acc, row) => ({
+        invoicedTotal: Number(
+          (acc.invoicedTotal + row.invoicedTotal).toFixed(2),
+        ),
+        paidTotal: Number((acc.paidTotal + row.paidTotal).toFixed(2)),
+      }),
+      { invoicedTotal: 0, paidTotal: 0 },
+    );
+
+    return {
+      generatedAt: now.toISOString(),
+      currency: 'USD',
+      range: {
+        from: window.from,
+        to: window.to,
+      },
+      monthly,
+      totals,
+    };
+  }
 
   async getSummary(
     viewer?: DashboardViewer,
@@ -617,5 +1029,143 @@ export class AdminDashboardReportsService {
     const month = String(value.getMonth() + 1).padStart(2, '0');
     const day = String(value.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  private async getScopedJobsForReports(viewer?: DashboardViewer) {
+    const jobsWhere =
+      viewer?.role === UserRole.MANAGER
+        ? { managerId: viewer.userId }
+        : undefined;
+
+    return this.jobsRepo.find({
+      where: jobsWhere,
+      select: {
+        id: true,
+        customerId: true,
+        managerId: true,
+        pipelineStage: true,
+        installDate: true,
+        depositDate: true,
+        createdAt: true,
+        projectPrice: true,
+        systemSizeKw: true,
+      },
+    });
+  }
+
+  private resolveRangeWindow(params: {
+    rangeDays: number;
+    now: Date;
+    from?: string;
+    to?: string;
+  }) {
+    const { now, from, to } = params;
+    const safeRangeDays = Number.isFinite(params.rangeDays)
+      ? Math.max(1, Math.min(365, params.rangeDays))
+      : 90;
+    if ((from && !to) || (!from && to)) {
+      throw new BadRequestException(
+        'Both `from` and `to` are required when filtering by explicit dates.',
+      );
+    }
+
+    const explicitFrom = from ? this.parseDateOnlyToUtcMs(from) : null;
+    const explicitTo = to ? this.parseDateOnlyToUtcMs(to) : null;
+    if (from && explicitFrom === null) {
+      throw new BadRequestException('Invalid `from` date.');
+    }
+    if (to && explicitTo === null) {
+      throw new BadRequestException('Invalid `to` date.');
+    }
+    if (
+      explicitFrom !== null &&
+      explicitTo !== null &&
+      explicitFrom > explicitTo
+    ) {
+      throw new BadRequestException('`from` must be on or before `to`.');
+    }
+
+    if (from && to) {
+      return {
+        from,
+        to,
+        rangeDays:
+          explicitFrom !== null && explicitTo !== null
+            ? Math.max(
+                1,
+                Math.floor((explicitTo - explicitFrom) / 86400000) + 1,
+              )
+            : safeRangeDays,
+      };
+    }
+
+    const rangeEnd = this.formatDateOnly(now);
+    const rangeStartDate = this.addDays(now, -(safeRangeDays - 1));
+    return {
+      from: this.formatDateOnly(rangeStartDate),
+      to: rangeEnd,
+      rangeDays: safeRangeDays,
+    };
+  }
+
+  private parseDateOnlyToUtcMs(
+    value: string | null | undefined,
+  ): number | null {
+    if (!value || value.trim().length < 10) {
+      return null;
+    }
+    const normalized = value.slice(0, 10);
+    const parsed = new Date(`${normalized}T00:00:00Z`).getTime();
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  private isDateWithinWindow(
+    value: string | Date | null | undefined,
+    from: string,
+    to: string,
+  ) {
+    if (!value) {
+      return false;
+    }
+
+    if (value instanceof Date) {
+      const valueDate = this.formatDateOnly(value);
+      return valueDate >= from && valueDate <= to;
+    }
+
+    const normalized = value.slice(0, 10);
+    return normalized >= from && normalized <= to;
+  }
+
+  private toMonthLabel(value: string) {
+    return value.slice(0, 7);
+  }
+
+  private buildMonthLabelsBetween(from: string, to: string) {
+    const fromParts = from.split('-').map((part) => Number(part));
+    const toParts = to.split('-').map((part) => Number(part));
+    if (fromParts.length < 2 || toParts.length < 2) {
+      return [];
+    }
+
+    const fromYear = fromParts[0];
+    const fromMonth = fromParts[1];
+    const toYear = toParts[0];
+    const toMonth = toParts[1];
+
+    const labels: string[] = [];
+    let year = fromYear;
+    let month = fromMonth;
+
+    while (year < toYear || (year === toYear && month <= toMonth)) {
+      labels.push(`${year}-${String(month).padStart(2, '0')}`);
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+    }
+
+    return labels;
   }
 }

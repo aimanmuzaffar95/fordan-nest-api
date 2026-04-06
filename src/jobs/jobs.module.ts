@@ -21,9 +21,11 @@ import { Note } from '../notes/entities/note.entity';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
 import { Invoice } from '../invoices/entities/invoice.entity';
+import { InvoicePayment } from '../invoices/entities/invoice-payment.entity';
 import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.service';
 import { AdminDashboardController } from '../reports/admin-dashboard.controller';
 import { AdminDashboardReportsService } from '../reports/admin-dashboard.service';
+import { ReportsController } from '../reports/reports.controller';
 import { JobQuotationPdfService } from './job-quotation-pdf.service';
 import { JobQuotationService } from './job-quotation.service';
 
@@ -46,6 +48,7 @@ import { JobQuotationService } from './job-quotation.service';
       User,
       Note,
       Invoice,
+      InvoicePayment,
       SolarPanel,
       Inverter,
       Battery,
@@ -55,6 +58,7 @@ import { JobQuotationService } from './job-quotation.service';
     JobsController,
     CustomerJobsController,
     AdminDashboardController,
+    ReportsController,
   ],
   providers: [
     JobsService,
