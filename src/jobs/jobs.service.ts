@@ -49,6 +49,8 @@ import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 import { JobAuditValue } from './types/job-audit-value.type';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
 
 export type JobListViewer = { userId: string; role: UserRole };
 
@@ -92,6 +94,7 @@ export class JobsService {
     private readonly invertersRepo: Repository<Inverter>,
     @InjectRepository(Battery)
     private readonly batteriesRepo: Repository<Battery>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async list(query: FindJobsQueryDto, viewer?: JobListViewer) {
@@ -252,6 +255,12 @@ export class JobsService {
     if (Object.keys(dto).length === 0) {
       throw new BadRequestException('At least one job field is required');
     }
+
+    let managerAssignmentNotificationManagerId: string | null = null;
+    let managerAssignmentNotificationJobId: string | null = null;
+    let managerAssignmentNotificationOrderNumber: string | null = null;
+    let managerAssignmentNotificationCustomerName: string | null = null;
+    let managerAssignmentNotificationAssignedByUserId: string | null = null;
 
     await this.dataSource.transaction(async (manager) => {
       const jobsRepo = manager.getRepository(Job);
@@ -460,7 +469,44 @@ export class JobsService {
           }),
         );
       }
+
+      if (previousManagerId !== validatedManagerId && validatedManagerId) {
+        managerAssignmentNotificationManagerId = validatedManagerId;
+        managerAssignmentNotificationJobId = job.id;
+        managerAssignmentNotificationOrderNumber = job.orderNumber;
+        managerAssignmentNotificationCustomerName = job.customer
+          ? `${job.customer.firstName} ${job.customer.lastName}`.trim()
+          : null;
+        managerAssignmentNotificationAssignedByUserId = viewer.userId;
+      }
     });
+
+    if (
+      managerAssignmentNotificationManagerId &&
+      managerAssignmentNotificationJobId &&
+      managerAssignmentNotificationOrderNumber &&
+      managerAssignmentNotificationAssignedByUserId
+    ) {
+      const assignedManagerId = String(managerAssignmentNotificationManagerId);
+      const assignedJobId = String(managerAssignmentNotificationJobId);
+      const assignedOrderNumber = String(
+        managerAssignmentNotificationOrderNumber,
+      );
+
+      await this.notificationsService.sendToUser(assignedManagerId, {
+        type: NOTIFICATION_TYPE.JOB_ASSIGNED_TO_MANAGER,
+        title: 'New manager assignment',
+        body: `You were assigned to job ${assignedOrderNumber}.`,
+        metadata: {
+          jobId: assignedJobId,
+          orderNumber: assignedOrderNumber,
+          customerName: managerAssignmentNotificationCustomerName,
+          assignedByUserId: managerAssignmentNotificationAssignedByUserId,
+          managerId: assignedManagerId,
+        },
+        dedupeKey: `manager-assignment:${assignedJobId}:${assignedManagerId}`,
+      });
+    }
 
     return this.getOne(id, viewer);
   }
@@ -1735,7 +1781,7 @@ export class JobsService {
     const clamp = (value: number, min: number, max: number) =>
       Math.max(min, Math.min(max, value));
 
-    return this.dataSource.transaction(async (manager) => {
+    const updated = await this.dataSource.transaction(async (manager) => {
       const jobRepo = manager.getRepository(Job);
       const timelineRepository = manager.getRepository(TimelineEvent);
 
@@ -1835,10 +1881,16 @@ export class JobsService {
         }),
       );
 
-      const updated = await jobRepo.findOne({ where: { id: jobId } });
+      const updated = await jobRepo.findOne({
+        where: { id: jobId },
+        relations: { customer: true },
+      });
       if (!updated) throw new NotFoundException('Job not found');
       return updated;
     });
+
+    await this.notifyNeedsAssignmentIfApplicable(updated);
+    return updated;
   }
 
   async createJob(
@@ -1876,7 +1928,7 @@ export class JobsService {
       assignedStaffUserId = assignee.id;
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const savedJob = await this.dataSource.transaction(async (manager) => {
       const jobRepo = manager.getRepository(Job);
       const meterRepo = manager.getRepository(MeterApplication);
       const timelineRepository = manager.getRepository(TimelineEvent);
@@ -1963,6 +2015,60 @@ export class JobsService {
       );
 
       return savedJob;
+    });
+
+    const createdJob = await this.jobsRepo.findOne({
+      where: { id: savedJob.id },
+      relations: { customer: true },
+    });
+
+    if (!createdJob) {
+      throw new NotFoundException('Job not found');
+    }
+
+    await this.notifyNeedsAssignmentIfApplicable(createdJob);
+
+    return createdJob;
+  }
+
+  private async notifyNeedsAssignmentIfApplicable(job: Job): Promise<void> {
+    if (
+      !['scheduled', 'pre_meter_approved'].includes(job.pipelineStage) ||
+      !!job.assignedStaffUserId
+    ) {
+      return;
+    }
+
+    if (job.managerId) {
+      await this.notificationsService.sendToUser(job.managerId, {
+        type: NOTIFICATION_TYPE.JOB_NEEDS_ASSIGNMENT,
+        title: 'Job needs installer assignment',
+        body: `Job ${job.orderNumber} is ready to be assigned.`,
+        metadata: {
+          jobId: job.id,
+          orderNumber: job.orderNumber,
+          customerName: job.customer
+            ? `${job.customer.firstName} ${job.customer.lastName}`.trim()
+            : null,
+          managerId: job.managerId,
+        },
+        dedupeKey: `needs-assignment:${job.id}:${job.managerId}`,
+      });
+      return;
+    }
+
+    await this.notificationsService.sendToRole(UserRole.ADMIN, {
+      type: NOTIFICATION_TYPE.JOB_NEEDS_ASSIGNMENT,
+      title: 'Job needs installer assignment',
+      body: `Job ${job.orderNumber} is ready to be assigned.`,
+      metadata: {
+        jobId: job.id,
+        orderNumber: job.orderNumber,
+        customerName: job.customer
+          ? `${job.customer.firstName} ${job.customer.lastName}`.trim()
+          : null,
+      },
+      dedupeKey: `needs-assignment:${job.id}:admins`,
     });
   }
 

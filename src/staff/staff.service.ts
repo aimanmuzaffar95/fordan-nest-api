@@ -10,6 +10,8 @@ import { hash } from 'bcryptjs';
 import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateStaffDto } from './dto/create-staff.dto';
@@ -57,6 +59,7 @@ export class StaffService {
     private readonly staffRolesRepository: Repository<StaffRole>,
     private readonly dataSource: DataSource,
     private readonly email: EmailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async listRoles(): Promise<StaffRoleSummary[]> {
@@ -154,6 +157,21 @@ export class StaffService {
     });
 
     this.sendWelcomeEmail(createdStaff, payload.password);
+    await this.notificationsService.sendToRole(
+      UserRole.ADMIN,
+      {
+        type: NOTIFICATION_TYPE.STAFF_ACCOUNT_CREATED,
+        title: 'New staff account created',
+        body: `${createdStaff.firstName} ${createdStaff.lastName} was added as ${createdStaff.staffType}.`,
+        metadata: {
+          staffUserId: createdStaff.id,
+          staffType: createdStaff.staffType,
+          emailAddress: createdStaff.emailAddress,
+        },
+        dedupeKey: `staff-created:${createdStaff.id}`,
+      },
+      { excludeUserIds: [createdStaff.id] },
+    );
 
     return createdStaff;
   }

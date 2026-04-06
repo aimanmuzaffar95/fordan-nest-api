@@ -10,6 +10,7 @@ import {
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { User } from '../users/entities/user.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { StaffRole } from './entities/staff-role.entity';
 import { StaffController } from './staff.controller';
 import { StaffService } from './staff.service';
@@ -20,6 +21,7 @@ import { StaffService } from './staff.service';
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'development-secret',
     }),
+    NotificationsModule,
   ],
   controllers: [StaffController],
   providers: [

@@ -44,6 +44,9 @@ import { Inverter } from './inverters/entities/inverter.entity';
 import { BatteriesModule } from './batteries/batteries.module';
 import { Battery } from './batteries/entities/battery.entity';
 import { AdminSettings } from './runtime-settings/admin-settings.entity';
+import { AlertsModule } from './alerts/alerts.module';
+import { Notification } from './notifications/entities/notification.entity';
+import { NotificationsModule } from './notifications/notifications.module';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -139,6 +142,7 @@ const publicLeadThrottleLimit = Number(
         Inverter,
         Battery,
         AdminSettings,
+        Notification,
       ],
       synchronize: SYNCHRONIZE,
     }),
@@ -167,6 +171,8 @@ const publicLeadThrottleLimit = Number(
       ],
     }),
     PublicLeadsModule,
+    AlertsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -15,6 +15,9 @@ import { Assignment } from './entities/assignment.entity';
 import { AssignmentResponseDto } from './dto/assignment-response.dto';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { LockAssignmentDto } from './dto/lock-assignment.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
+import { UserRole } from '../users/entities/user-role.enum';
 
 @Injectable()
 export class AssignmentsService {
@@ -27,6 +30,7 @@ export class AssignmentsService {
     private readonly usersRepo: Repository<User>,
     private readonly jobsService: JobsService,
     private readonly dataSource: DataSource,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async listForJob(
@@ -122,33 +126,54 @@ export class AssignmentsService {
     }
 
     try {
-      return await this.dataSource.transaction(async (manager) => {
-        const aRepo = manager.getRepository(Assignment);
-        const jRepo = manager.getRepository(Job);
+      const createdAssignment = await this.dataSource.transaction(
+        async (manager) => {
+          const aRepo = manager.getRepository(Assignment);
+          const jRepo = manager.getRepository(Job);
 
-        const assignment = aRepo.create({
+          const assignment = aRepo.create({
+            jobId,
+            teamId: effectiveTeamId,
+            staffUserId: dto.staffUserId,
+            scheduledDate: dto.scheduledDate,
+            slot: dto.slot,
+            locked: false,
+            lockedAt: null,
+            lockedByUserId: null,
+            lockReason: null,
+          });
+          const saved = await aRepo.save(assignment);
+
+          const primaryAssignment = primaryJobAssignment ?? saved;
+          await this.syncJobScheduleFields(jRepo, jobId, {
+            assignedTeamId: primaryAssignment.teamId,
+            assignedStaffUserId: primaryAssignment.staffUserId,
+            scheduledDate: primaryAssignment.scheduledDate,
+            scheduledSlot: primaryAssignment.slot,
+          });
+
+          return AssignmentResponseDto.fromEntity(saved);
+        },
+      );
+
+      await this.notificationsService.sendToUser(dto.staffUserId, {
+        type: NOTIFICATION_TYPE.JOB_ASSIGNED_TO_INSTALLER,
+        title: 'New installer assignment',
+        body: `You were assigned to job ${job.job.orderNumber}.`,
+        metadata: {
           jobId,
+          orderNumber: job.job.orderNumber,
+          customerName:
+            job.customer &&
+            `${job.customer.firstName} ${job.customer.lastName}`.trim(),
+          assignedByUserId: viewer.userId,
+          assignedStaffUserId: dto.staffUserId,
           teamId: effectiveTeamId,
-          staffUserId: dto.staffUserId,
-          scheduledDate: dto.scheduledDate,
-          slot: dto.slot,
-          locked: false,
-          lockedAt: null,
-          lockedByUserId: null,
-          lockReason: null,
-        });
-        const saved = await aRepo.save(assignment);
-
-        const primaryAssignment = primaryJobAssignment ?? saved;
-        await this.syncJobScheduleFields(jRepo, jobId, {
-          assignedTeamId: primaryAssignment.teamId,
-          assignedStaffUserId: primaryAssignment.staffUserId,
-          scheduledDate: primaryAssignment.scheduledDate,
-          scheduledSlot: primaryAssignment.slot,
-        });
-
-        return AssignmentResponseDto.fromEntity(saved);
+        },
+        dedupeKey: `installer-assignment:${jobId}:${dto.staffUserId}:${dto.scheduledDate}:${dto.slot}`,
       });
+
+      return createdAssignment;
     } catch (e) {
       if (e instanceof QueryFailedError) {
         const driver = e.driverError as { code?: string; errno?: number };
@@ -217,6 +242,55 @@ export class AssignmentsService {
             },
       );
     });
+
+    await this.notificationsService.sendToUser(row.staffUserId, {
+      type: NOTIFICATION_TYPE.JOB_UNASSIGNED_FROM_INSTALLER,
+      title: 'Installer assignment removed',
+      body: `You were unassigned from job ${jobId}.`,
+      metadata: {
+        jobId,
+        assignmentId,
+        removedByUserId: viewer.userId,
+        assignedStaffUserId: row.staffUserId,
+      },
+      dedupeKey: `installer-unassigned:${assignmentId}`,
+    });
+
+    const jobAfterRemoval = await this.jobsService.getOne(jobId, viewer);
+    if (
+      ['scheduled', 'pre_meter_approved'].includes(
+        jobAfterRemoval.job.pipelineStage,
+      ) &&
+      !jobAfterRemoval.job.assignedStaffUserId
+    ) {
+      if (jobAfterRemoval.job.managerId) {
+        await this.notificationsService.sendToUser(
+          jobAfterRemoval.job.managerId,
+          {
+            type: NOTIFICATION_TYPE.JOB_NEEDS_ASSIGNMENT,
+            title: 'Job needs installer assignment',
+            body: `Job ${jobAfterRemoval.job.orderNumber} is ready to be assigned.`,
+            metadata: {
+              jobId,
+              orderNumber: jobAfterRemoval.job.orderNumber,
+              managerId: jobAfterRemoval.job.managerId,
+            },
+            dedupeKey: `needs-assignment:${jobId}:${jobAfterRemoval.job.managerId}`,
+          },
+        );
+      } else {
+        await this.notificationsService.sendToRole(UserRole.ADMIN, {
+          type: NOTIFICATION_TYPE.JOB_NEEDS_ASSIGNMENT,
+          title: 'Job needs installer assignment',
+          body: `Job ${jobAfterRemoval.job.orderNumber} is ready to be assigned.`,
+          metadata: {
+            jobId,
+            orderNumber: jobAfterRemoval.job.orderNumber,
+          },
+          dedupeKey: `needs-assignment:${jobId}:admins`,
+        });
+      }
+    }
 
     return { id: assignmentId };
   }

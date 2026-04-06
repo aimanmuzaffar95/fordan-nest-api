@@ -130,7 +130,8 @@ describe('AuthService', () => {
       throw new Error('Expected credential to be saved');
     }
 
-    const savedPasswordHash = String(savedCredential.passwordHash);
+    const finalizedCredential = savedCredential as UserCredential;
+    const savedPasswordHash = String(finalizedCredential.passwordHash);
 
     await expect(
       comparePassword('new-password-123', savedPasswordHash),

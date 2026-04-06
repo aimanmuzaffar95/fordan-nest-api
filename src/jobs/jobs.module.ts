@@ -28,6 +28,7 @@ import { AdminDashboardReportsService } from '../reports/admin-dashboard.service
 import { ReportsController } from '../reports/reports.controller';
 import { JobQuotationPdfService } from './job-quotation-pdf.service';
 import { JobQuotationService } from './job-quotation.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { JobQuotationService } from './job-quotation.service';
       secret: process.env.JWT_SECRET ?? 'development-secret',
     }),
     FilesModule,
+    NotificationsModule,
     TypeOrmModule.forFeature([
       Job,
       JobAuditLog,
