@@ -46,8 +46,10 @@ import { Battery } from './batteries/entities/battery.entity';
 import { AdminSettings } from './runtime-settings/admin-settings.entity';
 import { AttendanceModule } from './attendance/attendance.module';
 import { AvailabilityModule } from './availability/availability.module';
+import { FilesModule } from './files/files.module';
 import { AttendanceSession } from './attendance/entities/attendance-session.entity';
 import { StaffAvailability } from './availability/entities/staff-availability.entity';
+import { StaffMobileFixturesModule } from './staff-mobile-fixtures/staff-mobile-fixtures.module';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -94,6 +96,11 @@ const publicLeadThrottleTtl = Number(
 );
 const publicLeadThrottleLimit = Number(
   process.env.PUBLIC_LEAD_THROTTLE_LIMIT ?? '12',
+);
+
+const STAFF_MOBILE_FIXTURES_ENABLED = envBool(
+  process.env.STAFF_MOBILE_FIXTURES_ENABLED,
+  false,
 );
 
 @Module({
@@ -158,6 +165,7 @@ const publicLeadThrottleLimit = Number(
     AssignmentsModule,
     ScheduleModule,
     MeteringModule,
+    FilesModule,
     RuntimeSettingsModule,
     AttendanceModule,
     AvailabilityModule,
@@ -175,6 +183,7 @@ const publicLeadThrottleLimit = Number(
       ],
     }),
     PublicLeadsModule,
+    ...(STAFF_MOBILE_FIXTURES_ENABLED ? [StaffMobileFixturesModule] : []),
   ],
   controllers: [AppController],
   providers: [AppService],

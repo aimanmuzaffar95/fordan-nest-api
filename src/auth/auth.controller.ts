@@ -36,6 +36,7 @@ export class AuthController {
     lastName: string;
     emailAddress: string;
     phoneNumber: string;
+    teamId: string | null;
   }> {
     const userId = req.user?.sub;
     if (!userId) {
@@ -50,6 +51,7 @@ export class AuthController {
       lastName: user.lastName,
       emailAddress: user.emailAddress,
       phoneNumber: user.phoneNumber,
+      teamId: user.teamId,
     };
   }
 }

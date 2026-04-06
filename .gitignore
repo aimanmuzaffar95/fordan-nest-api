@@ -46,6 +46,9 @@ lerna-debug.log*
 .temp
 .tmp
 
+# Local file uploads (FL-01)
+/uploads
+
 # Runtime data
 pids
 *.pid

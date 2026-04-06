@@ -9,23 +9,61 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('Bootstrap');
 
+  const corsExtra =
+    process.env.CORS_EXTRA_ORIGINS?.split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0) ?? [];
+
+  const staticOrigins = [
+    'http://localhost:8080', // docker dev web
+    'http://localhost:8081', // local staging (vite preview)
+    'http://localhost:5173', // host dev web (common vite default)
+    'http://localhost:8090', // Flutter staff app web (see apps/staff_mobile README)
+    'http://127.0.0.1:8090',
+    'https://crm.fordan.com.au',
+    'https://api.fordan.com.au',
+    'https://dbprovider.us-west-1.clawcloudrun.com',
+    ...corsExtra,
+  ];
+
+  const allowLocalhostPorts =
+    process.env.CORS_ALLOW_LOCALHOST_PORTS === 'true' ||
+    process.env.CORS_ALLOW_LOCALHOST_PORTS === '1';
+
   app.enableCors({
-    origin: [
-      'http://localhost:8080', // docker dev web
-      'http://localhost:8081', // local staging (vite preview)
-      'http://localhost:5173', // host dev web (common vite default)
-      'https://crm.fordan.com.au',
-      'https://api.fordan.com.au',
-      'https://dbprovider.us-west-1.clawcloudrun.com',
-    ],
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (staticOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      if (allowLocalhostPorts) {
+        try {
+          const { hostname } = new URL(origin);
+          if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            callback(null, true);
+            return;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      callback(null, false);
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',
+      'Accept',
+      'Origin',
       'X-Installer-Setup-Token',
       'X-Public-Lead-Secret',
     ],
     credentials: false,
+    optionsSuccessStatus: 204,
   });
 
   app.setGlobalPrefix('api');
