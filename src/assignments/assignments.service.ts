@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -21,6 +22,8 @@ import { UserRole } from '../users/entities/user-role.enum';
 
 @Injectable()
 export class AssignmentsService {
+  private readonly logger = new Logger(AssignmentsService.name);
+
   constructor(
     @InjectRepository(Assignment)
     private readonly assignmentRepo: Repository<Assignment>,
@@ -156,22 +159,26 @@ export class AssignmentsService {
         },
       );
 
-      await this.notificationsService.sendToUser(dto.staffUserId, {
-        type: NOTIFICATION_TYPE.JOB_ASSIGNED_TO_INSTALLER,
-        title: 'New installer assignment',
-        body: `You were assigned to job ${job.job.orderNumber}.`,
-        metadata: {
-          jobId,
-          orderNumber: job.job.orderNumber,
-          customerName:
-            job.customer &&
-            `${job.customer.firstName} ${job.customer.lastName}`.trim(),
-          assignedByUserId: viewer.userId,
-          assignedStaffUserId: dto.staffUserId,
-          teamId: effectiveTeamId,
-        },
-        dedupeKey: `installer-assignment:${jobId}:${dto.staffUserId}:${dto.scheduledDate}:${dto.slot}`,
-      });
+      await this.sendNotificationSafely(
+        () =>
+          this.notificationsService.sendToUser(dto.staffUserId, {
+            type: NOTIFICATION_TYPE.JOB_ASSIGNED_TO_INSTALLER,
+            title: 'New installer assignment',
+            body: `You were assigned to job ${job.job.orderNumber}.`,
+            metadata: {
+              jobId,
+              orderNumber: job.job.orderNumber,
+              customerName:
+                job.customer &&
+                `${job.customer.firstName} ${job.customer.lastName}`.trim(),
+              assignedByUserId: viewer.userId,
+              assignedStaffUserId: dto.staffUserId,
+              teamId: effectiveTeamId,
+            },
+            dedupeKey: `installer-assignment:${jobId}:${dto.staffUserId}:${dto.scheduledDate}:${dto.slot}`,
+          }),
+        `assignment-create:${jobId}:${dto.staffUserId}`,
+      );
 
       return createdAssignment;
     } catch (e) {
@@ -243,18 +250,22 @@ export class AssignmentsService {
       );
     });
 
-    await this.notificationsService.sendToUser(row.staffUserId, {
-      type: NOTIFICATION_TYPE.JOB_UNASSIGNED_FROM_INSTALLER,
-      title: 'Installer assignment removed',
-      body: `You were unassigned from job ${jobId}.`,
-      metadata: {
-        jobId,
-        assignmentId,
-        removedByUserId: viewer.userId,
-        assignedStaffUserId: row.staffUserId,
-      },
-      dedupeKey: `installer-unassigned:${assignmentId}`,
-    });
+    await this.sendNotificationSafely(
+      () =>
+        this.notificationsService.sendToUser(row.staffUserId, {
+          type: NOTIFICATION_TYPE.JOB_UNASSIGNED_FROM_INSTALLER,
+          title: 'Installer assignment removed',
+          body: `You were unassigned from job ${jobId}.`,
+          metadata: {
+            jobId,
+            assignmentId,
+            removedByUserId: viewer.userId,
+            assignedStaffUserId: row.staffUserId,
+          },
+          dedupeKey: `installer-unassigned:${assignmentId}`,
+        }),
+      `assignment-remove:${jobId}:${assignmentId}`,
+    );
 
     const jobAfterRemoval = await this.jobsService.getOne(jobId, viewer);
     if (
@@ -263,32 +274,41 @@ export class AssignmentsService {
       ) &&
       !jobAfterRemoval.job.assignedStaffUserId
     ) {
-      if (jobAfterRemoval.job.managerId) {
-        await this.notificationsService.sendToUser(
-          jobAfterRemoval.job.managerId,
-          {
-            type: NOTIFICATION_TYPE.JOB_NEEDS_ASSIGNMENT,
-            title: 'Job needs installer assignment',
-            body: `Job ${jobAfterRemoval.job.orderNumber} is ready to be assigned.`,
-            metadata: {
-              jobId,
-              orderNumber: jobAfterRemoval.job.orderNumber,
-              managerId: jobAfterRemoval.job.managerId,
-            },
-            dedupeKey: `needs-assignment:${jobId}:${jobAfterRemoval.job.managerId}`,
-          },
+      const managerId = jobAfterRemoval.job.managerId;
+      if (managerId) {
+        await this.sendNotificationSafely(
+          () =>
+            this.notificationsService.sendToUser(
+              managerId,
+              {
+                type: NOTIFICATION_TYPE.JOB_NEEDS_ASSIGNMENT,
+                title: 'Job needs installer assignment',
+                body: `Job ${jobAfterRemoval.job.orderNumber} is ready to be assigned.`,
+                metadata: {
+                  jobId,
+                  orderNumber: jobAfterRemoval.job.orderNumber,
+                  managerId,
+                },
+                dedupeKey: `needs-assignment:${jobId}:${managerId}`,
+              },
+            ),
+          `needs-assignment-manager:${jobId}:${managerId}`,
         );
       } else {
-        await this.notificationsService.sendToRole(UserRole.ADMIN, {
-          type: NOTIFICATION_TYPE.JOB_NEEDS_ASSIGNMENT,
-          title: 'Job needs installer assignment',
-          body: `Job ${jobAfterRemoval.job.orderNumber} is ready to be assigned.`,
-          metadata: {
-            jobId,
-            orderNumber: jobAfterRemoval.job.orderNumber,
-          },
-          dedupeKey: `needs-assignment:${jobId}:admins`,
-        });
+        await this.sendNotificationSafely(
+          () =>
+            this.notificationsService.sendToRole(UserRole.ADMIN, {
+              type: NOTIFICATION_TYPE.JOB_NEEDS_ASSIGNMENT,
+              title: 'Job needs installer assignment',
+              body: `Job ${jobAfterRemoval.job.orderNumber} is ready to be assigned.`,
+              metadata: {
+                jobId,
+                orderNumber: jobAfterRemoval.job.orderNumber,
+              },
+              dedupeKey: `needs-assignment:${jobId}:admins`,
+            }),
+          `needs-assignment-admins:${jobId}`,
+        );
       }
     }
 
@@ -306,6 +326,18 @@ export class AssignmentsService {
     },
   ) {
     await jobsRepo.update({ id: jobId }, values);
+  }
+
+  private async sendNotificationSafely(
+    action: () => Promise<unknown>,
+    context: string,
+  ): Promise<void> {
+    try {
+      await action();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Notification skipped for ${context}: ${message}`);
+    }
   }
 
   async setLock(
