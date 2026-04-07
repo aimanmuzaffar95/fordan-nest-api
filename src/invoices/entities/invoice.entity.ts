@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Job } from '../../jobs/entities/job.entity';
+import { InvoiceActivity } from './invoice-activity.entity';
 import { InvoiceItem } from './invoice-item.entity';
 import { InvoicePayment } from './invoice-payment.entity';
 import { InvoiceStatus } from './invoice-status.enum';
@@ -86,6 +87,9 @@ export class Invoice {
     cascade: ['insert'],
   })
   payments: InvoicePayment[];
+
+  @OneToMany(() => InvoiceActivity, (activity) => activity.invoice)
+  activities: InvoiceActivity[];
 
   @CreateDateColumn()
   createdAt: Date;

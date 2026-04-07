@@ -4,6 +4,7 @@ import { User } from '../users/entities/user.entity';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { Customer } from '../customers/entities/customer.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
+import { InvoiceActivity } from '../invoices/entities/invoice-activity.entity';
 import { InvoiceItem } from '../invoices/entities/invoice-item.entity';
 import { InvoicePayment } from '../invoices/entities/invoice-payment.entity';
 import { Job } from '../jobs/entities/job.entity';
@@ -100,6 +101,7 @@ export const AppDataSource = new DataSource({
     JobInternalComment,
     JobProposalSelection,
     Invoice,
+    InvoiceActivity,
     InvoiceItem,
     InvoicePayment,
     StaffRole,

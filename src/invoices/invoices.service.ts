@@ -7,19 +7,29 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Customer } from '../customers/entities/customer.entity';
 import { Job } from '../jobs/entities/job.entity';
+import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
+import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
+import { AddInvoiceNoteDto } from './dto/add-invoice-note.dto';
+import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
 import { Invoice } from './entities/invoice.entity';
+import { InvoiceActivity } from './entities/invoice-activity.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { InvoicePayment } from './entities/invoice-payment.entity';
 import { InvoiceStatus } from './entities/invoice-status.enum';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { RecordPaymentDto } from './dto/record-payment.dto';
-import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
 
 type InvoiceViewer = {
   userId: string;
   role: UserRole;
+};
+
+type InvoiceActivityInput = {
+  type: string;
+  description: string;
+  payload: Record<string, unknown>;
 };
 
 @Injectable()
@@ -27,14 +37,18 @@ export class InvoicesService {
   constructor(
     @InjectRepository(Invoice)
     private readonly invoicesRepo: Repository<Invoice>,
-    @InjectRepository(InvoiceItem)
-    private readonly itemsRepo: Repository<InvoiceItem>,
+    @InjectRepository(InvoiceActivity)
+    private readonly invoiceActivitiesRepo: Repository<InvoiceActivity>,
     @InjectRepository(InvoicePayment)
     private readonly paymentsRepo: Repository<InvoicePayment>,
     @InjectRepository(Customer)
     private readonly customersRepo: Repository<Customer>,
     @InjectRepository(Job)
     private readonly jobsRepo: Repository<Job>,
+    @InjectRepository(TimelineEvent)
+    private readonly timelineEventsRepo: Repository<TimelineEvent>,
+    @InjectRepository(User)
+    private readonly usersRepo: Repository<User>,
   ) {}
 
   async list(query: QueryInvoicesDto, viewer?: InvoiceViewer) {
@@ -89,8 +103,12 @@ export class InvoicesService {
       .leftJoinAndSelect('invoice.customer', 'customer')
       .leftJoinAndSelect('invoice.items', 'items')
       .leftJoinAndSelect('invoice.payments', 'payments')
+      .leftJoinAndSelect('invoice.activities', 'activities')
+      .leftJoinAndSelect('activities.createdByUser', 'activityActor')
       .where('invoice.id = :id', { id })
-      .orderBy('items.position', 'ASC');
+      .orderBy('items.position', 'ASC')
+      .addOrderBy('activities.createdAt', 'DESC')
+      .addOrderBy('payments.createdAt', 'DESC');
     this.applyViewerScope(qb, viewer);
     const invoice = await qb.getOne();
     if (!invoice) {
@@ -190,7 +208,23 @@ export class InvoicesService {
     invoice.amountPaid = '0.00';
     invoice.items = items;
 
-    return this.invoicesRepo.save(invoice);
+    const savedInvoice = await this.invoicesRepo.save(invoice);
+    await this.appendActivity(
+      savedInvoice,
+      {
+        type: 'invoice_created',
+        description: `Invoice ${savedInvoice.invoiceNumber} created as draft`,
+        payload: {
+          invoiceNumber: savedInvoice.invoiceNumber,
+          total: savedInvoice.total,
+          currency: savedInvoice.currency,
+          status: savedInvoice.status,
+        },
+      },
+      viewer?.userId,
+    );
+
+    return this.getOne(savedInvoice.id, viewer);
   }
 
   async recordPayment(
@@ -239,6 +273,44 @@ export class InvoicesService {
       status: updatedStatus,
     });
 
+    const activityInvoice = {
+      ...invoice,
+      amountPaid: updatedAmountPaid,
+      status: updatedStatus,
+    } as Invoice;
+    await this.appendActivity(
+      activityInvoice,
+      {
+        type: 'invoice_payment_recorded',
+        description: `Payment recorded (${dto.method}) for ${amount.toFixed(2)}`,
+        payload: {
+          paymentId: payment.id,
+          amount: payment.amount,
+          paymentDate: payment.paymentDate,
+          method: payment.method,
+          reference: payment.reference,
+          resultingAmountPaid: updatedAmountPaid,
+          resultingStatus: updatedStatus,
+        },
+      },
+      viewer?.userId,
+    );
+
+    if (updatedStatus === InvoiceStatus.PAID) {
+      await this.appendActivity(
+        activityInvoice,
+        {
+          type: 'invoice_paid',
+          description: `Invoice ${invoice.invoiceNumber} marked fully paid`,
+          payload: {
+            amountPaid: updatedAmountPaid,
+            paidAt: new Date().toISOString(),
+          },
+        },
+        viewer?.userId,
+      );
+    }
+
     // Re-fetch the full graph so the UI always gets items/payments/customer.
     return this.getOne(id, viewer);
   }
@@ -249,13 +321,26 @@ export class InvoicesService {
       throw new BadRequestException('Cannot send cancelled invoice');
     }
     if (invoice.status === InvoiceStatus.PAID) {
-      return invoice;
+      return this.getOne(id, viewer);
     }
 
     invoice.status = InvoiceStatus.SENT;
     invoice.sentAt = new Date();
+    await this.invoicesRepo.save(invoice);
+    await this.appendActivity(
+      invoice,
+      {
+        type: 'invoice_sent',
+        description: `Invoice ${invoice.invoiceNumber} marked as sent`,
+        payload: {
+          invoiceNumber: invoice.invoiceNumber,
+          sentAt: invoice.sentAt.toISOString(),
+        },
+      },
+      viewer?.userId,
+    );
 
-    return this.invoicesRepo.save(invoice);
+    return this.getOne(id, viewer);
   }
 
   async cancel(
@@ -265,14 +350,56 @@ export class InvoicesService {
   ): Promise<Invoice> {
     const invoice = await this.findInvoiceEntityOrFail(id, viewer);
     if (invoice.status === InvoiceStatus.CANCELLED) {
-      return invoice;
+      return this.getOne(id, viewer);
     }
 
     invoice.status = InvoiceStatus.CANCELLED;
     invoice.cancelledAt = new Date();
     invoice.cancelReason = dto.reason;
+    await this.invoicesRepo.save(invoice);
+    await this.appendActivity(
+      invoice,
+      {
+        type: 'invoice_cancelled',
+        description: `Invoice ${invoice.invoiceNumber} cancelled`,
+        payload: {
+          reason: dto.reason,
+          cancelledAt: invoice.cancelledAt.toISOString(),
+        },
+      },
+      viewer?.userId,
+    );
 
-    return this.invoicesRepo.save(invoice);
+    return this.getOne(id, viewer);
+  }
+
+  async addNote(
+    id: string,
+    dto: AddInvoiceNoteDto,
+    viewer?: InvoiceViewer,
+  ): Promise<Invoice> {
+    const invoice = await this.findInvoiceEntityOrFail(id, viewer);
+    const now = new Date();
+    const actorName = await this.getActorDisplayName(viewer?.userId);
+    const stampedNote = `[${now.toISOString()}] ${actorName}: ${dto.note.trim()}`;
+    invoice.terms = invoice.terms
+      ? `${invoice.terms}\n${stampedNote}`
+      : stampedNote;
+    await this.invoicesRepo.save(invoice);
+
+    await this.appendActivity(
+      invoice,
+      {
+        type: 'invoice_note_added',
+        description: 'Internal invoice note added',
+        payload: {
+          note: dto.note.trim(),
+        },
+      },
+      viewer?.userId,
+    );
+
+    return this.getOne(id, viewer);
   }
 
   private async generateInvoiceNumber(): Promise<string> {
@@ -321,5 +448,52 @@ export class InvoicesService {
     }
 
     return invoice;
+  }
+
+  private async appendActivity(
+    invoice: Invoice,
+    activity: InvoiceActivityInput,
+    createdByUserId?: string,
+  ): Promise<void> {
+    const auditRow = this.invoiceActivitiesRepo.create({
+      invoiceId: invoice.id,
+      jobId: invoice.jobId ?? null,
+      type: activity.type,
+      description: activity.description,
+      payload: activity.payload,
+      createdByUserId: createdByUserId ?? null,
+    });
+    await this.invoiceActivitiesRepo.save(auditRow);
+
+    if (!invoice.jobId) {
+      return;
+    }
+
+    const timelineEvent = this.timelineEventsRepo.create({
+      jobId: invoice.jobId,
+      type: activity.type,
+      payload: {
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        ...activity.payload,
+      },
+      createdByUserId: createdByUserId ?? null,
+    });
+    await this.timelineEventsRepo.save(timelineEvent);
+  }
+
+  private async getActorDisplayName(userId?: string): Promise<string> {
+    if (!userId) {
+      return 'Unknown user';
+    }
+    const actor = await this.usersRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'firstName', 'lastName'],
+    });
+    if (!actor) {
+      return userId;
+    }
+    const fullName = `${actor.firstName} ${actor.lastName}`.trim();
+    return fullName || userId;
   }
 }

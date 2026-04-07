@@ -14,6 +14,7 @@ import { JobProposalSelection } from './jobs/entities/job-proposal-selection.ent
 import { JobsModule } from './jobs/jobs.module';
 import { Job } from './jobs/entities/job.entity';
 import { Invoice } from './invoices/entities/invoice.entity';
+import { InvoiceActivity } from './invoices/entities/invoice-activity.entity';
 import { InvoiceItem } from './invoices/entities/invoice-item.entity';
 import { InvoicePayment } from './invoices/entities/invoice-payment.entity';
 import { InvoicesModule } from './invoices/invoices.module';
@@ -125,6 +126,7 @@ const publicLeadThrottleLimit = Number(
         JobInternalComment,
         JobProposalSelection,
         Invoice,
+        InvoiceActivity,
         InvoiceItem,
         InvoicePayment,
         StaffRole,

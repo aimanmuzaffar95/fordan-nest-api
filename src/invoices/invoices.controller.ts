@@ -19,6 +19,7 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
+import { AddInvoiceNoteDto } from './dto/add-invoice-note.dto';
 
 @ApiTags('Invoices')
 @ApiBearerAuth('JWT')
@@ -111,5 +112,20 @@ export class InvoicesController {
       throw new Error('Missing authenticated user context');
     }
     return this.invoices.cancel(id, dto, { userId, role });
+  }
+
+  @Post(':id/notes')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  addNote(
+    @Param('id') id: string,
+    @Body() dto: AddInvoiceNoteDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.invoices.addNote(id, dto, { userId, role });
   }
 }
