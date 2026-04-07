@@ -1,4 +1,4 @@
-import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, Max, Min } from 'class-validator';
 
 export class UpdateAdminSettingsDto {
   @IsOptional()
@@ -10,26 +10,44 @@ export class UpdateAdminSettingsDto {
   calendarScopeEnforced?: boolean;
 
   @IsOptional()
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 0 })
   @Min(1)
   @Max(365)
   invoiceOverdueDays?: number;
 
   @IsOptional()
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 0 })
   @Min(1)
   @Max(365)
   preMeterPendingDays?: number;
 
   @IsOptional()
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 0 })
   @Min(0)
   @Max(365)
   installWarningDays?: number;
 
   @IsOptional()
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 0 })
   @Min(0)
   @Max(365)
   postMeterDeadlineDays?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(1000)
+  quickLeadDefaultSystemSizeKw?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(1000)
+  quickLeadDefaultBatterySizeKwh?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100000000)
+  quickLeadDefaultProjectPrice?: number;
 }

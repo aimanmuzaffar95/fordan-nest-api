@@ -34,6 +34,15 @@ export class AdminSettings {
   @Column({ type: 'int', default: 2 })
   postMeterDeadlineDays: number;
 
+  @Column({ type: 'numeric', precision: 10, scale: 2, default: 6.6 })
+  quickLeadDefaultSystemSizeKw: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2, default: 10 })
+  quickLeadDefaultBatterySizeKwh: string;
+
+  @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
+  quickLeadDefaultProjectPrice: string;
+
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })
   updatedByUser: User | null;

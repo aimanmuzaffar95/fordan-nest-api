@@ -18,6 +18,9 @@ export type AdminSettingsPayload = {
   preMeterPendingDays: number;
   installWarningDays: number;
   postMeterDeadlineDays: number;
+  quickLeadDefaultSystemSizeKw: number;
+  quickLeadDefaultBatterySizeKwh: number;
+  quickLeadDefaultProjectPrice: number;
 };
 
 @Injectable()
@@ -101,6 +104,9 @@ export class RuntimeSettingsService {
       preMeterPendingDays: 7,
       installWarningDays: 3,
       postMeterDeadlineDays: 2,
+      quickLeadDefaultSystemSizeKw: '6.6',
+      quickLeadDefaultBatterySizeKwh: '10',
+      quickLeadDefaultProjectPrice: '0',
       updatedByUserId: null,
     });
 
@@ -115,6 +121,15 @@ export class RuntimeSettingsService {
       preMeterPendingDays: settings.preMeterPendingDays,
       installWarningDays: settings.installWarningDays,
       postMeterDeadlineDays: settings.postMeterDeadlineDays,
+      quickLeadDefaultSystemSizeKw: Number(
+        settings.quickLeadDefaultSystemSizeKw,
+      ),
+      quickLeadDefaultBatterySizeKwh: Number(
+        settings.quickLeadDefaultBatterySizeKwh,
+      ),
+      quickLeadDefaultProjectPrice: Number(
+        settings.quickLeadDefaultProjectPrice,
+      ),
     };
   }
 }

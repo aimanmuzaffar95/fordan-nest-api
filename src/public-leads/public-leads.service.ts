@@ -10,6 +10,7 @@ import { SubmitPublicLeadDto } from './dto/submit-public-lead.dto';
 import { CreateJobDto } from '../jobs/dto/create-job.dto';
 import { UserRole } from '../users/entities/user-role.enum';
 import { envBool } from '../common/env.util';
+import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
 
 @Injectable()
 export class PublicLeadsService {
@@ -17,6 +18,7 @@ export class PublicLeadsService {
     private readonly customers: CustomersService,
     private readonly jobs: JobsService,
     private readonly email: EmailService,
+    private readonly runtimeSettings: RuntimeSettingsService,
   ) {}
 
   async submit(
@@ -51,9 +53,14 @@ export class PublicLeadsService {
       email: dto.email,
     });
 
+    const settings = await this.runtimeSettings.getSettings();
     const systemType = dto.systemIntent;
-    const systemSizeKw = systemType === 'battery' ? 0 : 6.6;
-    const batterySizeKwh = systemType === 'solar' ? undefined : 10;
+    const systemSizeKw =
+      systemType === 'battery' ? 0 : settings.quickLeadDefaultSystemSizeKw;
+    const batterySizeKwh =
+      systemType === 'solar'
+        ? undefined
+        : settings.quickLeadDefaultBatterySizeKwh;
 
     const t = dto.tracking;
     const formSlug = t?.formSlug?.trim() || 'default';
@@ -89,7 +96,7 @@ export class PublicLeadsService {
       systemType,
       systemSizeKw,
       batterySizeKwh,
-      projectPrice: 0,
+      projectPrice: settings.quickLeadDefaultProjectPrice,
       contractSigned: false,
       depositPaid: false,
       depositAmount: 0,
