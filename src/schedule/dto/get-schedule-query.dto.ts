@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsUUID } from 'class-validator';
+import { IsDateString } from 'class-validator';
 
 export class GetScheduleQueryDto {
   @IsDateString()
@@ -6,8 +6,4 @@ export class GetScheduleQueryDto {
 
   @IsDateString()
   to!: string;
-
-  @IsOptional()
-  @IsUUID()
-  teamId?: string;
 }

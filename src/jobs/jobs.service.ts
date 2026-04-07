@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   PreconditionFailedException,
 } from '@nestjs/common';
@@ -35,7 +36,6 @@ import { JobInternalComment } from './entities/job-internal-comment.entity';
 import { JobProposalSelection } from './entities/job-proposal-selection.entity';
 import { Job } from './entities/job.entity';
 import { Customer } from '../customers/entities/customer.entity';
-import { Team } from '../teams/entities/team.entity';
 import { User } from '../users/entities/user.entity';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
@@ -66,6 +66,7 @@ type ProposalSummarySyncInput = {
 export class JobsService {
   private static readonly ORDER_NUMBER_PREFIX = 'ORD-';
   private static readonly FIRST_ORDER_NUMBER = 1001;
+  private readonly logger = new Logger(JobsService.name);
 
   constructor(
     @InjectRepository(Job)
@@ -80,8 +81,6 @@ export class JobsService {
     private readonly jobProposalSelectionsRepo: Repository<JobProposalSelection>,
     @InjectRepository(Customer)
     private readonly customersRepo: Repository<Customer>,
-    @InjectRepository(Team)
-    private readonly teamsRepo: Repository<Team>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     @InjectRepository(Note)
@@ -110,11 +109,6 @@ export class JobsService {
       .addOrderBy('job.createdAt', 'DESC');
 
     if (viewer?.role === UserRole.INSTALLER) {
-      const user = await this.usersRepo.findOne({
-        where: { id: viewer.userId },
-        select: ['id', 'teamId'],
-      });
-      const teamId = user?.teamId ?? null;
       const directAssignmentSubquery = qb
         .subQuery()
         .select('1')
@@ -130,21 +124,6 @@ export class JobsService {
           sub.orWhere(`EXISTS ${directAssignmentSubquery}`, {
             installerUserId: viewer.userId,
           });
-          if (teamId) {
-            const teamAssignmentSubquery = qb
-              .subQuery()
-              .select('1')
-              .from(Assignment, 'team_assignment')
-              .where('team_assignment.jobId = job.id')
-              .andWhere('team_assignment.teamId = :installerTeamId')
-              .getQuery();
-            sub.orWhere('job.assignedTeamId = :installerTeamId', {
-              installerTeamId: teamId,
-            });
-            sub.orWhere(`EXISTS ${teamAssignmentSubquery}`, {
-              installerTeamId: teamId,
-            });
-          }
         }),
       );
     }
@@ -493,19 +472,27 @@ export class JobsService {
         managerAssignmentNotificationOrderNumber,
       );
 
-      await this.notificationsService.sendToUser(assignedManagerId, {
-        type: NOTIFICATION_TYPE.JOB_ASSIGNED_TO_MANAGER,
-        title: 'New manager assignment',
-        body: `You were assigned to job ${assignedOrderNumber}.`,
-        metadata: {
-          jobId: assignedJobId,
-          orderNumber: assignedOrderNumber,
-          customerName: managerAssignmentNotificationCustomerName,
-          assignedByUserId: managerAssignmentNotificationAssignedByUserId,
-          managerId: assignedManagerId,
-        },
-        dedupeKey: `manager-assignment:${assignedJobId}:${assignedManagerId}`,
-      });
+      try {
+        await this.notificationsService.sendToUser(assignedManagerId, {
+          type: NOTIFICATION_TYPE.JOB_ASSIGNED_TO_MANAGER,
+          title: 'New manager assignment',
+          body: `You were assigned to job ${assignedOrderNumber}.`,
+          metadata: {
+            jobId: assignedJobId,
+            orderNumber: assignedOrderNumber,
+            customerName: managerAssignmentNotificationCustomerName,
+            assignedByUserId: managerAssignmentNotificationAssignedByUserId,
+            managerId: assignedManagerId,
+          },
+          dedupeKey: `manager-assignment:${assignedJobId}:${assignedManagerId}`,
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Manager assignment notification failed for job ${assignedJobId} and manager ${assignedManagerId}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+      }
     }
 
     return this.getOne(id, viewer);
@@ -909,7 +896,6 @@ export class JobsService {
       timelineEvents,
       manager,
       assignedStaffUser,
-      assignedTeam,
       installerRows,
       invoices,
       notes,
@@ -939,14 +925,10 @@ export class JobsService {
       job.assignedStaffUserId
         ? this.usersRepo.findOne({ where: { id: job.assignedStaffUserId } })
         : Promise.resolve(null),
-      job.assignedTeamId
-        ? this.teamsRepo.findOne({ where: { id: job.assignedTeamId } })
-        : Promise.resolve(null),
       this.assignmentsRepo.find({
         where: { jobId: job.id },
         relations: {
           staffUser: true,
-          team: true,
         },
         order: {
           scheduledDate: 'ASC',
@@ -1071,7 +1053,6 @@ export class JobsService {
         scheduledSlot: job.scheduledSlot,
         managerId: job.managerId,
         assignedStaffUserId: job.assignedStaffUserId,
-        assignedTeamId: job.assignedTeamId,
         invoiceStatus: derivedInvoiceFields.invoiceStatus,
         invoiceDate: derivedInvoiceFields.invoiceDate,
         invoiceDueDate: derivedInvoiceFields.invoiceDueDate,
@@ -1091,12 +1072,6 @@ export class JobsService {
         : null,
       manager: this.mapUserSummary(manager),
       assignedStaffUser: this.mapUserSummary(assignedStaffUser),
-      assignedTeam: assignedTeam
-        ? {
-            id: assignedTeam.id,
-            name: assignedTeam.name,
-          }
-        : null,
       installerAssignments: installerRows.map((row) => ({
         id: row.id,
         scheduledDate: row.scheduledDate,
@@ -1105,12 +1080,6 @@ export class JobsService {
         lockedAt: row.lockedAt,
         lockReason: row.lockReason,
         installer: this.mapUserSummary(row.staffUser),
-        team: row.team
-          ? {
-              id: row.team.id,
-              name: row.team.name,
-            }
-          : null,
       })),
       financials: {
         depositPaidAmount: paidDepositAmount.toFixed(2),
@@ -1145,7 +1114,6 @@ export class JobsService {
       email: this.safeTrim(user.emailAddress),
       phone: this.safeTrim(user.phoneNumber),
       role: user.role,
-      teamId: user.teamId,
     };
   }
 
@@ -1646,37 +1614,14 @@ export class JobsService {
     return Number(value).toString();
   }
 
-  /** Direct assignment row or same-team assignment row on the job. */
+  /** Direct assignment row on the job. */
   private async assertInstallerJobAccess(job: Job, userId: string) {
     if (job.assignedStaffUserId === userId) {
       return;
     }
 
-    const user = await this.usersRepo.findOne({
-      where: { id: userId },
-      select: ['id', 'teamId'],
-    });
-
-    if (
-      user?.teamId &&
-      job.assignedTeamId &&
-      job.assignedTeamId === user.teamId
-    ) {
-      return;
-    }
-
-    const accessConditions: Array<{
-      jobId: string;
-      staffUserId?: string;
-      teamId?: string;
-    }> = [{ jobId: job.id, staffUserId: userId }];
-
-    if (user?.teamId) {
-      accessConditions.push({ jobId: job.id, teamId: user.teamId });
-    }
-
     const hasAssignmentAccess = await this.assignmentsRepo.count({
-      where: accessConditions,
+      where: { jobId: job.id, staffUserId: userId },
     });
     if (hasAssignmentAccess > 0) {
       return;
@@ -1964,7 +1909,6 @@ export class JobsService {
         invoiceDate: null,
         invoiceDueDate: null,
         paidDate: null,
-        assignedTeamId: null,
         assignedStaffUserId,
         scheduledDate: null,
         scheduledSlot: null,

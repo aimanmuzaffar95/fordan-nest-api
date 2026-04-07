@@ -40,7 +40,6 @@ export type StaffListItem = {
   staffType: UserRole.MANAGER | UserRole.INSTALLER;
   emailAddress: string;
   username: string;
-  teamId: string | null;
   staffRole: StaffRoleSummary | null;
 };
 
@@ -516,7 +515,6 @@ export class StaffService {
       staffType: user.role as UserRole.MANAGER | UserRole.INSTALLER,
       emailAddress: user.emailAddress,
       username: user.credential?.username ?? '',
-      teamId: user.teamId ?? null,
       staffRole: user.staffRole
         ? {
             id: user.staffRole.id,

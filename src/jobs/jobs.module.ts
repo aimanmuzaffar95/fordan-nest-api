@@ -14,7 +14,6 @@ import { MeterApplication } from '../metering/entities/meter-application.entity'
 import { Customer } from '../customers/entities/customer.entity';
 import { Inverter } from '../inverters/entities/inverter.entity';
 import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
-import { Team } from '../teams/entities/team.entity';
 import { User } from '../users/entities/user.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { Note } from '../notes/entities/note.entity';
@@ -29,6 +28,7 @@ import { ReportsController } from '../reports/reports.controller';
 import { JobQuotationPdfService } from './job-quotation-pdf.service';
 import { JobQuotationService } from './job-quotation.service';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
@@ -36,6 +36,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       secret: process.env.JWT_SECRET ?? 'development-secret',
     }),
     FilesModule,
+    EmailModule,
     NotificationsModule,
     TypeOrmModule.forFeature([
       Job,
@@ -45,7 +46,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
       MeterApplication,
       Assignment,
       Customer,
-      Team,
       TimelineEvent,
       User,
       Note,

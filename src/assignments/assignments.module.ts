@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobsModule } from '../jobs/jobs.module';
-import { Team } from '../teams/entities/team.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { User } from '../users/entities/user.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -12,7 +11,7 @@ import { JobAssignmentsController } from './job-assignments.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Assignment, Team, User, TimelineEvent]),
+    TypeOrmModule.forFeature([Assignment, User, TimelineEvent]),
     JobsModule,
     NotificationsModule,
   ],

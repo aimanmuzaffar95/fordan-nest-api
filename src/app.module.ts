@@ -20,14 +20,12 @@ import { InvoicesModule } from './invoices/invoices.module';
 import { StaffRole } from './staff/entities/staff-role.entity';
 import { StaffModule } from './staff/staff.module';
 
-import { Team } from './teams/entities/team.entity';
 import { Assignment } from './assignments/entities/assignment.entity';
 import { MeterApplication } from './metering/entities/meter-application.entity';
 import { Alert } from './alerts/entities/alert.entity';
 import { File as FileEntity } from './files/entities/file.entity';
 import { Note } from './notes/entities/note.entity';
 import { TimelineEvent } from './timeline/entities/timeline-event.entity';
-import { TeamsModule } from './teams/teams.module';
 import { AssignmentsModule } from './assignments/assignments.module';
 import { ScheduleModule } from './schedule/schedule.module';
 import { MeteringModule } from './metering/metering.module';
@@ -130,7 +128,6 @@ const publicLeadThrottleLimit = Number(
         InvoiceItem,
         InvoicePayment,
         StaffRole,
-        Team,
         Assignment,
         MeterApplication,
         Alert,
@@ -152,7 +149,6 @@ const publicLeadThrottleLimit = Number(
     InvoicesModule,
     JobsModule,
     StaffModule,
-    TeamsModule,
     AssignmentsModule,
     ScheduleModule,
     MeteringModule,

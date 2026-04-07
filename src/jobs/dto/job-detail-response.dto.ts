@@ -33,7 +33,6 @@ export type JobDetailJobDto = {
   scheduledSlot: string | null;
   managerId: string | null;
   assignedStaffUserId: string | null;
-  assignedTeamId: string | null;
   invoiceStatus: string | null;
   invoiceDate: string | null;
   invoiceDueDate: string | null;
@@ -50,12 +49,6 @@ export type JobDetailPersonDto = {
   email: string;
   phone: string;
   role: UserRole;
-  teamId: string | null;
-};
-
-export type JobDetailTeamDto = {
-  id: string;
-  name: string;
 };
 
 export type JobDetailAssignmentDto = {
@@ -66,7 +59,6 @@ export type JobDetailAssignmentDto = {
   lockedAt: Date | null;
   lockReason: string | null;
   installer: JobDetailPersonDto | null;
-  team: JobDetailTeamDto | null;
 };
 
 export type JobDetailFinancialsDto = {
@@ -117,7 +109,6 @@ export type JobDetailResponseDto = {
   customer: JobDetailCustomerDto | null;
   manager: JobDetailPersonDto | null;
   assignedStaffUser: JobDetailPersonDto | null;
-  assignedTeam: JobDetailTeamDto | null;
   installerAssignments: JobDetailAssignmentDto[];
   financials: JobDetailFinancialsDto;
   notes: JobDetailTextEntryDto[];

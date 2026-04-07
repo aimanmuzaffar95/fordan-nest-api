@@ -108,7 +108,6 @@ const defaultSettings: AdminSettings = {
   invoiceOverdueDays: 14,
   overridePreMeter: false,
   calendarScopeEnforced: true,
-  maxJobsPerTeamPerDay: 2,
   updatedByUserId: null,
   updatedByUser: null,
   createdAt: new Date(),

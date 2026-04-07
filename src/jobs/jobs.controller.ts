@@ -73,7 +73,7 @@ export class JobsController {
   @ApiOperation({
     summary: 'List jobs',
     description:
-      '**Manager:** only jobs where `managerId` matches the authenticated user. **Installer:** only jobs where you are `assignedStaffUserId` or (when set) `assignedTeamId` matches your `users.teamId`. **Admin:** all jobs (subject to filters).',
+      '**Manager:** only jobs where `managerId` matches the authenticated user. **Installer:** only jobs where you are `assignedStaffUserId` or have a direct assignment row. **Admin:** all jobs (subject to filters).',
   })
   list(
     @Query() query: FindJobsQueryDto,

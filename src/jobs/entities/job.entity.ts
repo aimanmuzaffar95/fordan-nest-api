@@ -85,10 +85,6 @@ export class Job {
   @Column({ type: 'date', nullable: true })
   installDate: string | null;
 
-  // Denormalized helpers for the current UI; authoritative schedule may be via `assignments`.
-  @Column({ type: 'uuid', nullable: true })
-  assignedTeamId: string | null;
-
   @Column({ type: 'uuid', nullable: true })
   assignedStaffUserId: string | null;
 

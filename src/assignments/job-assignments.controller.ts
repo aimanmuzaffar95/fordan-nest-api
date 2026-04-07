@@ -66,17 +66,17 @@ export class JobAssignmentsController {
   @ApiOperation({
     summary: 'Create schedule assignment for a job',
     description:
-      'A job may have **multiple installer assignments**. Every installer row on the same job must share the same effective `teamId`, `scheduledDate`, and `slot`. `teamId` is optional: when omitted, the API uses the installer’s current `users.teamId` if available, otherwise stores the assignment as unassigned. Enforces **team daily kW** (`teams.dailyCapacityKw`) only when a team is present, plus DB unique `(staffUserId, scheduledDate, slot)`. Updates only the job denormalized assignment helper fields from the primary assignment row; `jobs.installDate` remains independently managed.',
+      'A job may have **multiple installer assignments**. Every installer row on the same job must share the same `scheduledDate` and `slot`, while the DB unique `(staffUserId, scheduledDate, slot)` still prevents double-booking the same installer. Updates only the job denormalized assignment helper fields from the primary assignment row; `jobs.installDate` remains independently managed.',
   })
   @ApiCreatedResponse({ description: 'Assignment created (**201**).' })
   @ApiConflictResponse({
     description:
-      '**409** + `code: CONFLICT` — capacity, double-booked staff, duplicate installer on the same job, inactive user, or schedule mismatch with existing installers on the job.',
+      '**409** + `code: CONFLICT` — double-booked staff, duplicate installer on the same job, inactive user, or schedule mismatch with existing installers on the job.',
   })
   @ApiForbiddenResponse({
     description: '**403** — `installer` cannot create assignments.',
   })
-  @ApiNotFoundResponse({ description: 'Job, team, or staff user not found.' })
+  @ApiNotFoundResponse({ description: 'Job or staff user not found.' })
   create(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Body() dto: CreateAssignmentDto,
@@ -95,7 +95,7 @@ export class JobAssignmentsController {
   @ApiOperation({
     summary: 'Delete an assignment',
     description:
-      'Removes one assignment row. If other installer rows remain, the API recalculates job denormalized `assignedTeamId`, `assignedStaffUserId`, `scheduledDate`, and `scheduledSlot` from the remaining primary assignment; otherwise it clears those helper fields. `jobs.installDate` is not changed by assignment deletion. **409** if the assignment is **locked** — call **`POST /assignments/:id/lock`** with `locked: false` first.',
+      'Removes one assignment row. If other installer rows remain, the API recalculates job denormalized `assignedStaffUserId`, `scheduledDate`, and `scheduledSlot` from the remaining primary assignment; otherwise it clears those helper fields. `jobs.installDate` is not changed by assignment deletion. **409** if the assignment is **locked** — call **`POST /assignments/:id/lock`** with `locked: false` first.',
   })
   @ApiOkResponse({ description: '`data: { id }` of removed assignment.' })
   @ApiConflictResponse({

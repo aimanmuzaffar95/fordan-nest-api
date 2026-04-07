@@ -9,7 +9,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { JobsService, JobListViewer } from '../jobs/jobs.service';
 import { Job } from '../jobs/entities/job.entity';
-import { Team } from '../teams/entities/team.entity';
 import { User } from '../users/entities/user.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { Assignment } from './entities/assignment.entity';
@@ -27,8 +26,6 @@ export class AssignmentsService {
   constructor(
     @InjectRepository(Assignment)
     private readonly assignmentRepo: Repository<Assignment>,
-    @InjectRepository(Team)
-    private readonly teamsRepo: Repository<Team>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     private readonly jobsService: JobsService,
@@ -57,7 +54,7 @@ export class AssignmentsService {
 
     const staff = await this.usersRepo.findOne({
       where: { id: dto.staffUserId },
-      select: ['id', 'teamId', 'active'],
+      select: ['id', 'active'],
     });
     if (!staff) throw new NotFoundException('Staff user not found');
     if (!staff.active) {
@@ -65,13 +62,6 @@ export class AssignmentsService {
         message: 'Staff user is inactive',
         code: 'CONFLICT',
       });
-    }
-
-    const effectiveTeamId = dto.teamId ?? staff.teamId ?? null;
-    let team: Team | null = null;
-    if (effectiveTeamId) {
-      team = await this.teamsRepo.findOne({ where: { id: effectiveTeamId } });
-      if (!team) throw new NotFoundException('Team not found');
     }
 
     const existingForJob = await this.assignmentRepo.find({
@@ -92,40 +82,12 @@ export class AssignmentsService {
     if (
       primaryJobAssignment &&
       (primaryJobAssignment.scheduledDate !== dto.scheduledDate ||
-        primaryJobAssignment.slot !== dto.slot ||
-        (primaryJobAssignment.teamId ?? null) !== effectiveTeamId)
+        primaryJobAssignment.slot !== dto.slot)
     ) {
       throw new ConflictException({
-        message:
-          'All installers on a job must share the same date, slot, and team.',
+        message: 'All installers on a job must share the same date and slot.',
         code: 'CONFLICT',
       });
-    }
-
-    if (team && effectiveTeamId) {
-      const sameDay = await this.assignmentRepo.find({
-        where: { teamId: effectiveTeamId, scheduledDate: dto.scheduledDate },
-        relations: { job: true },
-      });
-      const scheduledJobIds = new Set<string>();
-      const usedKw = sameDay.reduce((sum, assignment) => {
-        if (
-          scheduledJobIds.has(assignment.jobId) ||
-          assignment.jobId === jobId
-        ) {
-          return sum;
-        }
-        scheduledJobIds.add(assignment.jobId);
-        return sum + Number(assignment.job.systemSizeKw);
-      }, 0);
-      const addKw = primaryJobAssignment ? 0 : Number(job.job.systemSizeKw);
-      const capKw = Number(team.dailyCapacityKw);
-      if (usedKw + addKw > capKw + 1e-6) {
-        throw new ConflictException({
-          message: `Team daily capacity (${capKw} kW) would be exceeded on ${dto.scheduledDate}.`,
-          code: 'CONFLICT',
-        });
-      }
     }
 
     try {
@@ -136,7 +98,6 @@ export class AssignmentsService {
 
           const assignment = aRepo.create({
             jobId,
-            teamId: effectiveTeamId,
             staffUserId: dto.staffUserId,
             scheduledDate: dto.scheduledDate,
             slot: dto.slot,
@@ -149,7 +110,6 @@ export class AssignmentsService {
 
           const primaryAssignment = primaryJobAssignment ?? saved;
           await this.syncJobScheduleFields(jRepo, jobId, {
-            assignedTeamId: primaryAssignment.teamId,
             assignedStaffUserId: primaryAssignment.staffUserId,
             scheduledDate: primaryAssignment.scheduledDate,
             scheduledSlot: primaryAssignment.slot,
@@ -173,7 +133,6 @@ export class AssignmentsService {
                 `${job.customer.firstName} ${job.customer.lastName}`.trim(),
               assignedByUserId: viewer.userId,
               assignedStaffUserId: dto.staffUserId,
-              teamId: effectiveTeamId,
             },
             dedupeKey: `installer-assignment:${jobId}:${dto.staffUserId}:${dto.scheduledDate}:${dto.slot}`,
           }),
@@ -236,13 +195,11 @@ export class AssignmentsService {
         jobId,
         primaryAssignment
           ? {
-              assignedTeamId: primaryAssignment.teamId,
               assignedStaffUserId: primaryAssignment.staffUserId,
               scheduledDate: primaryAssignment.scheduledDate,
               scheduledSlot: primaryAssignment.slot,
             }
           : {
-              assignedTeamId: null,
               assignedStaffUserId: null,
               scheduledDate: null,
               scheduledSlot: null,
@@ -278,20 +235,17 @@ export class AssignmentsService {
       if (managerId) {
         await this.sendNotificationSafely(
           () =>
-            this.notificationsService.sendToUser(
-              managerId,
-              {
-                type: NOTIFICATION_TYPE.JOB_NEEDS_ASSIGNMENT,
-                title: 'Job needs installer assignment',
-                body: `Job ${jobAfterRemoval.job.orderNumber} is ready to be assigned.`,
-                metadata: {
-                  jobId,
-                  orderNumber: jobAfterRemoval.job.orderNumber,
-                  managerId,
-                },
-                dedupeKey: `needs-assignment:${jobId}:${managerId}`,
+            this.notificationsService.sendToUser(managerId, {
+              type: NOTIFICATION_TYPE.JOB_NEEDS_ASSIGNMENT,
+              title: 'Job needs installer assignment',
+              body: `Job ${jobAfterRemoval.job.orderNumber} is ready to be assigned.`,
+              metadata: {
+                jobId,
+                orderNumber: jobAfterRemoval.job.orderNumber,
+                managerId,
               },
-            ),
+              dedupeKey: `needs-assignment:${jobId}:${managerId}`,
+            }),
           `needs-assignment-manager:${jobId}:${managerId}`,
         );
       } else {
@@ -319,7 +273,6 @@ export class AssignmentsService {
     jobsRepo: Repository<Job>,
     jobId: string,
     values: {
-      assignedTeamId: string | null;
       assignedStaffUserId: string | null;
       scheduledDate: string | null;
       scheduledSlot: string | null;

@@ -396,31 +396,8 @@ export class FilesService {
       return;
     }
 
-    const user = await this.usersRepo.findOne({
-      where: { id: userId },
-      select: ['id', 'teamId'],
-    });
-
-    if (
-      user?.teamId &&
-      job.assignedTeamId &&
-      job.assignedTeamId === user.teamId
-    ) {
-      return;
-    }
-
-    const accessConditions: Array<{
-      jobId: string;
-      staffUserId?: string;
-      teamId?: string;
-    }> = [{ jobId: job.id, staffUserId: userId }];
-
-    if (user?.teamId) {
-      accessConditions.push({ jobId: job.id, teamId: user.teamId });
-    }
-
     const hasAssignmentAccess = await this.assignmentsRepo.count({
-      where: accessConditions,
+      where: { jobId: job.id, staffUserId: userId },
     });
 
     if (hasAssignmentAccess > 0) {

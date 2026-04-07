@@ -19,10 +19,9 @@ import { CustomersModule } from '../src/customers/customers.module';
 import { Customer } from '../src/customers/entities/customer.entity';
 import { Job } from '../src/jobs/entities/job.entity';
 import { MeterApplication } from '../src/metering/entities/meter-application.entity';
-import { Team } from '../src/teams/entities/team.entity';
 import { MeteringModule } from '../src/metering/metering.module';
 import { ScheduleModule } from '../src/schedule/schedule.module';
-import { TeamsModule } from '../src/teams/teams.module';
+import { StaffRole } from '../src/staff/entities/staff-role.entity';
 import { TimelineEvent } from '../src/timeline/entities/timeline-event.entity';
 import { User } from '../src/users/entities/user.entity';
 import { UserRole } from '../src/users/entities/user-role.enum';
@@ -63,7 +62,6 @@ describe('Customers (e2e)', () => {
   let meterRepository: Repository<MeterApplication>;
   let timelineRepository: Repository<TimelineEvent>;
   let usersRepository: Repository<User>;
-  let teamsRepository: Repository<Team>;
   let assignmentRepository: Repository<Assignment>;
 
   beforeAll(async () => {
@@ -80,12 +78,11 @@ describe('Customers (e2e)', () => {
             TimelineEvent,
             User,
             UserCredential,
-            Team,
             Assignment,
+            StaffRole,
           ],
         }),
         CustomersModule,
-        TeamsModule,
         AssignmentsModule,
         ScheduleModule,
         MeteringModule,
@@ -122,9 +119,6 @@ describe('Customers (e2e)', () => {
     usersRepository = moduleFixture.get<Repository<User>>(
       getRepositoryToken(User),
     );
-    teamsRepository = moduleFixture.get<Repository<Team>>(
-      getRepositoryToken(Team),
-    );
     assignmentRepository = moduleFixture.get<Repository<Assignment>>(
       getRepositoryToken(Assignment),
     );
@@ -150,7 +144,6 @@ describe('Customers (e2e)', () => {
     await assignmentRepository.clear();
     await jobsRepository.clear();
     await customersRepository.clear();
-    await teamsRepository.clear();
   });
 
   afterAll(async () => {
@@ -421,12 +414,6 @@ describe('Customers (e2e)', () => {
   });
 
   it('creates assignment for job (201) and rejects second assignment (409)', async () => {
-    const team = await teamsRepository.save(
-      teamsRepository.create({
-        name: 'North Crew',
-        dailyCapacityKw: '100.00',
-      }),
-    );
     const customer = await customersRepository.save(
       customersRepository.create({
         firstName: 'Assign',
@@ -459,7 +446,6 @@ describe('Customers (e2e)', () => {
       .send({
         scheduledDate: '2026-06-15',
         slot: 'AM',
-        teamId: team.id,
         staffUserId: E2E_MANAGER_USER_ID,
       })
       .expect(201);
@@ -476,19 +462,12 @@ describe('Customers (e2e)', () => {
       .send({
         scheduledDate: '2026-06-16',
         slot: 'PM',
-        teamId: team.id,
         staffUserId: E2E_MANAGER_USER_ID,
       })
       .expect(409);
   });
 
   it('locks assignment (delete blocked), unlock, then delete', async () => {
-    const team = await teamsRepository.save(
-      teamsRepository.create({
-        name: 'Lock Crew',
-        dailyCapacityKw: '50.00',
-      }),
-    );
     const customer = await customersRepository.save(
       customersRepository.create({
         firstName: 'Lock',
@@ -521,7 +500,6 @@ describe('Customers (e2e)', () => {
       .send({
         scheduledDate: '2026-07-01',
         slot: 'PM',
-        teamId: team.id,
         staffUserId: E2E_MANAGER_USER_ID,
       })
       .expect(201);
@@ -548,13 +526,7 @@ describe('Customers (e2e)', () => {
       .expect(200);
   });
 
-  it('GET /schedule returns assignments and dailyKwByTeam in range (200)', async () => {
-    const team = await teamsRepository.save(
-      teamsRepository.create({
-        name: 'Schedule Crew',
-        dailyCapacityKw: '40.00',
-      }),
-    );
+  it('GET /schedule returns assignments and daily installer load in range (200)', async () => {
     const customer = await customersRepository.save(
       customersRepository.create({
         firstName: 'Sched',
@@ -587,7 +559,6 @@ describe('Customers (e2e)', () => {
       .send({
         scheduledDate: '2026-08-10',
         slot: 'AM',
-        teamId: team.id,
         staffUserId: E2E_MANAGER_USER_ID,
       })
       .expect(201);
@@ -599,31 +570,33 @@ describe('Customers (e2e)', () => {
     const body = schedRes.body as SuccessBody<{
       from: string;
       to: string;
-      teamId: string | null;
       items: Array<{
         jobId: string;
         scheduledDate: string;
         systemSizeKw: number;
       }>;
-      dailyKwByTeam: Array<{
+      dailyLoadByInstaller: Array<{
         scheduledDate: string;
+        staffUserId: string;
         bookedKw: number;
-        capacityKw: number;
+        assignmentCount: number;
       }>;
     }>;
 
     expect(body.data.from).toBe('2026-08-01');
     expect(body.data.to).toBe('2026-08-31');
-    expect(body.data.teamId).toBeNull();
     expect(body.data.items).toHaveLength(1);
     expect(body.data.items[0].jobId).toBe(jobId);
     expect(body.data.items[0].scheduledDate).toBe('2026-08-10');
     expect(body.data.items[0].systemSizeKw).toBe(5.5);
 
-    expect(body.data.dailyKwByTeam).toHaveLength(1);
-    expect(body.data.dailyKwByTeam[0].scheduledDate).toBe('2026-08-10');
-    expect(body.data.dailyKwByTeam[0].bookedKw).toBe(5.5);
-    expect(body.data.dailyKwByTeam[0].capacityKw).toBe(40);
+    expect(body.data.dailyLoadByInstaller).toHaveLength(1);
+    expect(body.data.dailyLoadByInstaller[0].scheduledDate).toBe('2026-08-10');
+    expect(body.data.dailyLoadByInstaller[0].staffUserId).toBe(
+      E2E_MANAGER_USER_ID,
+    );
+    expect(body.data.dailyLoadByInstaller[0].bookedKw).toBe(5.5);
+    expect(body.data.dailyLoadByInstaller[0].assignmentCount).toBe(1);
   });
 
   it('searches by name, email, and phone with name matches first (200)', async () => {
@@ -746,6 +719,7 @@ describe('Customers as installer (e2e)', () => {
             TimelineEvent,
             User,
             UserCredential,
+            StaffRole,
           ],
         }),
         CustomersModule,

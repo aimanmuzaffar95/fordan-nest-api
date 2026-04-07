@@ -9,7 +9,6 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Job } from '../../jobs/entities/job.entity';
-import { Team } from '../../teams/entities/team.entity';
 import { User } from '../../users/entities/user.entity';
 
 // TypeORM compatibility:
@@ -42,13 +41,6 @@ export class Assignment {
 
   @Column({ type: 'uuid' })
   jobId: string;
-
-  @ManyToOne(() => Team, { nullable: true, onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'teamId' })
-  team: Team | null;
-
-  @Column({ type: 'uuid', nullable: true })
-  teamId: string | null;
 
   @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'staffUserId' })

@@ -32,10 +32,4 @@ export class UpdateAdminSettingsDto {
   @Min(0)
   @Max(365)
   postMeterDeadlineDays?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(50)
-  maxJobsPerTeamPerDay?: number;
 }

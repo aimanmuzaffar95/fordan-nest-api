@@ -18,7 +18,6 @@ export type AdminSettingsPayload = {
   preMeterPendingDays: number;
   installWarningDays: number;
   postMeterDeadlineDays: number;
-  maxJobsPerTeamPerDay: number;
 };
 
 @Injectable()
@@ -102,7 +101,6 @@ export class RuntimeSettingsService {
       preMeterPendingDays: 7,
       installWarningDays: 3,
       postMeterDeadlineDays: 2,
-      maxJobsPerTeamPerDay: 2,
       updatedByUserId: null,
     });
 
@@ -117,7 +115,6 @@ export class RuntimeSettingsService {
       preMeterPendingDays: settings.preMeterPendingDays,
       installWarningDays: settings.installWarningDays,
       postMeterDeadlineDays: settings.postMeterDeadlineDays,
-      maxJobsPerTeamPerDay: settings.maxJobsPerTeamPerDay,
     };
   }
 }

@@ -47,9 +47,6 @@ export class User {
 
   @Column({ type: 'timestamp', nullable: true })
   deletedAt: Date | null;
-  @Column({ type: 'uuid', nullable: true })
-  teamId: string | null;
-
   @Column({ type: 'boolean', default: true })
   active: boolean;
 

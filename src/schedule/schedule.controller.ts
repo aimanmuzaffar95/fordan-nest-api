@@ -1,7 +1,6 @@
 import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
-  ApiForbiddenResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -27,12 +26,9 @@ export class ScheduleController {
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
   @ApiOperation({
-    summary: 'Schedule aggregate (assignments + kW by team/day)',
+    summary: 'Schedule aggregate (assignments + daily installer load)',
     description:
-      '**Query:** `from`, `to` (inclusive `YYYY-MM-DD`, max **366** days), optional **`teamId`**. **Admin:** all rows. **Manager:** when `calendarScopeEnforced=true`, rows for jobs where `job.managerId` matches the viewer. **Installer:** rows where you are **`staffUserId`** OR assignment **`teamId`** matches **`users.teamId`**; **403** if `teamId` filter ≠ your team or you have no team but pass `teamId`.',
-  })
-  @ApiForbiddenResponse({
-    description: '**403** — installer `teamId` filter not allowed.',
+      '**Query:** `from`, `to` (inclusive `YYYY-MM-DD`, max **366** days). **Admin:** all rows. **Manager:** when `calendarScopeEnforced=true`, rows for jobs where `job.managerId` matches the viewer. **Installer:** only rows where you are the assigned `staffUserId`.',
   })
   get(
     @Query() query: GetScheduleQueryDto,

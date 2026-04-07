@@ -34,9 +34,6 @@ export class AdminSettings {
   @Column({ type: 'int', default: 2 })
   postMeterDeadlineDays: number;
 
-  @Column({ type: 'int', default: 2 })
-  maxJobsPerTeamPerDay: number;
-
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })
   updatedByUser: User | null;

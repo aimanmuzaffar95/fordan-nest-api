@@ -3,7 +3,6 @@ import { Assignment } from '../entities/assignment.entity';
 export class AssignmentResponseDto {
   id: string;
   jobId: string;
-  teamId: string | null;
   staffUserId: string;
   scheduledDate: string;
   slot: string;
@@ -18,7 +17,6 @@ export class AssignmentResponseDto {
     return {
       id: a.id,
       jobId: a.jobId,
-      teamId: a.teamId,
       staffUserId: a.staffUserId,
       scheduledDate: a.scheduledDate,
       slot: a.slot,

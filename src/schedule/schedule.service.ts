@@ -1,12 +1,7 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Assignment } from '../assignments/entities/assignment.entity';
-import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { GetScheduleQueryDto } from './dto/get-schedule-query.dto';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
@@ -18,29 +13,26 @@ export type ScheduleItemDto = {
   jobId: string;
   customerId: string;
   systemSizeKw: number;
-  teamId: string | null;
-  teamName: string;
-  teamDailyCapacityKw: number;
   staffUserId: string;
+  staffName: string;
   scheduledDate: string;
   slot: string;
   locked: boolean;
 };
 
-export type ScheduleDailyTeamDto = {
+export type ScheduleDailyInstallerDto = {
   scheduledDate: string;
-  teamId: string;
-  teamName: string;
+  staffUserId: string;
+  staffName: string;
+  assignmentCount: number;
   bookedKw: number;
-  capacityKw: number;
 };
 
 export type ScheduleResponseDto = {
   from: string;
   to: string;
-  teamId: string | null;
   items: ScheduleItemDto[];
-  dailyKwByTeam: ScheduleDailyTeamDto[];
+  dailyLoadByInstaller: ScheduleDailyInstallerDto[];
 };
 
 const MAX_RANGE_DAYS = 366;
@@ -50,8 +42,6 @@ export class ScheduleService {
   constructor(
     @InjectRepository(Assignment)
     private readonly assignmentRepo: Repository<Assignment>,
-    @InjectRepository(User)
-    private readonly usersRepo: Repository<User>,
     private readonly runtimeSettings: RuntimeSettingsService,
   ) {}
 
@@ -79,44 +69,15 @@ export class ScheduleService {
       );
     }
 
-    const filterTeamId = query.teamId ?? null;
-
     const qb = this.assignmentRepo
       .createQueryBuilder('a')
       .leftJoinAndSelect('a.job', 'job')
-      .leftJoinAndSelect('a.team', 'team')
+      .leftJoinAndSelect('a.staffUser', 'staffUser')
       .where('a.scheduledDate >= :from', { from })
       .andWhere('a.scheduledDate <= :to', { to });
 
     if (viewer.role === UserRole.INSTALLER && calendarScopeEnforced) {
-      const user = await this.usersRepo.findOne({
-        where: { id: viewer.userId },
-        select: ['id', 'teamId'],
-      });
-      if (!user) {
-        throw new ForbiddenException('User not found');
-      }
-      if (filterTeamId && user.teamId && filterTeamId !== user.teamId) {
-        throw new ForbiddenException(
-          'Cannot query schedule for a team you are not on',
-        );
-      }
-      if (filterTeamId && !user.teamId) {
-        throw new ForbiddenException(
-          'teamId filter is not allowed for your account',
-        );
-      }
-
-      qb.andWhere(
-        new Brackets((sub) => {
-          sub.where('a.staffUserId = :viewerId', { viewerId: viewer.userId });
-          if (user.teamId) {
-            sub.orWhere('a.teamId = :viewerTeamId', {
-              viewerTeamId: user.teamId,
-            });
-          }
-        }),
-      );
+      qb.andWhere('a.staffUserId = :viewerId', { viewerId: viewer.userId });
     }
 
     if (viewer.role === UserRole.MANAGER && calendarScopeEnforced) {
@@ -125,19 +86,10 @@ export class ScheduleService {
       qb.andWhere('job.managerId = :viewerId', { viewerId: viewer.userId });
     }
 
-    if (viewer.role !== UserRole.INSTALLER || !calendarScopeEnforced) {
-      if (filterTeamId) {
-        qb.andWhere('a.teamId = :teamId', { teamId: filterTeamId });
-      }
-    } else if (filterTeamId) {
-      // calendarScopeEnforced installer path already validated the filterTeamId above.
-      // Avoid duplicating a filter that might unintentionally narrow beyond the "team OR staff" rule.
-    }
-
     const rows = await qb
       .orderBy('a.scheduledDate', 'ASC')
       .addOrderBy('a.slot', 'ASC')
-      .addOrderBy('a.teamId', 'ASC')
+      .addOrderBy('a.staffUserId', 'ASC')
       .getMany();
 
     const items: ScheduleItemDto[] = rows.map((a) => ({
@@ -145,45 +97,43 @@ export class ScheduleService {
       jobId: a.jobId,
       customerId: a.job.customerId,
       systemSizeKw: Number(a.job.systemSizeKw),
-      teamId: a.teamId ?? null,
-      teamName: a.team?.name ?? 'Unassigned',
-      teamDailyCapacityKw: Number(a.team?.dailyCapacityKw ?? 0),
       staffUserId: a.staffUserId,
+      staffName:
+        `${a.staffUser?.firstName ?? ''} ${a.staffUser?.lastName ?? ''}`.trim(),
       scheduledDate: a.scheduledDate,
       slot: a.slot,
       locked: a.locked,
     }));
 
-    const dailyMap = new Map<string, ScheduleDailyTeamDto>();
+    const dailyMap = new Map<string, ScheduleDailyInstallerDto>();
     for (const it of items) {
-      if (!it.teamId) continue;
-      const key = `${it.scheduledDate}|${it.teamId}`;
+      const key = `${it.scheduledDate}|${it.staffUserId}`;
       const cur = dailyMap.get(key);
       if (cur) {
         cur.bookedKw += it.systemSizeKw;
+        cur.assignmentCount += 1;
       } else {
         dailyMap.set(key, {
           scheduledDate: it.scheduledDate,
-          teamId: it.teamId,
-          teamName: it.teamName,
+          staffUserId: it.staffUserId,
+          staffName: it.staffName,
+          assignmentCount: 1,
           bookedKw: it.systemSizeKw,
-          capacityKw: it.teamDailyCapacityKw,
         });
       }
     }
 
-    const dailyKwByTeam = [...dailyMap.values()].sort((x, y) => {
+    const dailyLoadByInstaller = [...dailyMap.values()].sort((x, y) => {
       const d = x.scheduledDate.localeCompare(y.scheduledDate);
       if (d !== 0) return d;
-      return x.teamName.localeCompare(y.teamName);
+      return x.staffName.localeCompare(y.staffName);
     });
 
     return {
       from,
       to,
-      teamId: filterTeamId,
       items,
-      dailyKwByTeam,
+      dailyLoadByInstaller,
     };
   }
 
