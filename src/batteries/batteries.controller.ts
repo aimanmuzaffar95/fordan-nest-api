@@ -1,15 +1,23 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { AdminOnly } from '../auth/decorators/role-access.decorators';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -17,6 +25,7 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { BatteriesService } from './batteries.service';
 import { CreateBatteryDto } from './dto/create-battery.dto';
 import { BatteryResponseDto } from './dto/battery-response.dto';
+import { UpdateBatteryDto } from './dto/update-battery.dto';
 
 @ApiTags('Equipment')
 @ApiBearerAuth('JWT')
@@ -46,11 +55,11 @@ export class BatteriesController {
   }
 
   @Post()
-  @AdminOnly()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({
     summary: 'Create battery catalog item',
     description:
-      'Creates a persisted battery catalog row. **Admin only.** Duplicate `brand + model` pairs are rejected.',
+      'Creates a persisted battery catalog row. **Admin** and **manager** can create; duplicate `brand + model` pairs are rejected.',
   })
   @ApiCreatedResponse({
     description: 'Battery created (**201**).',
@@ -60,9 +69,38 @@ export class BatteriesController {
       '**409** — a battery with the same `brand + model` already exists.',
   })
   @ApiForbiddenResponse({
-    description: '**403** — only **admin** may create battery catalog items.',
+    description:
+      '**403** — only **admin** or **manager** may create battery catalog items.',
   })
   create(@Body() dto: CreateBatteryDto): Promise<BatteryResponseDto> {
     return this.batteries.create(dto);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Update battery catalog item',
+    description:
+      'Updates an existing persisted battery catalog row. **Admin** and **manager** can update.',
+  })
+  @ApiOkResponse({
+    description: 'Battery updated (**200**).',
+  })
+  @ApiConflictResponse({
+    description:
+      '**409** — a battery with the same `brand + model` already exists.',
+  })
+  @ApiNotFoundResponse({
+    description: '**404** — battery item was not found.',
+  })
+  @ApiForbiddenResponse({
+    description:
+      '**403** — only **admin** or **manager** may update battery catalog items.',
+  })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateBatteryDto,
+  ): Promise<BatteryResponseDto> {
+    return this.batteries.update(id, dto);
   }
 }

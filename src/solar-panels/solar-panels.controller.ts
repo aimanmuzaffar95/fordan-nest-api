@@ -1,21 +1,30 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { AdminOnly } from '../auth/decorators/role-access.decorators';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateSolarPanelDto } from './dto/create-solar-panel.dto';
 import { SolarPanelResponseDto } from './dto/solar-panel-response.dto';
+import { UpdateSolarPanelDto } from './dto/update-solar-panel.dto';
 import { SolarPanelsService } from './solar-panels.service';
 
 @ApiTags('Equipment')
@@ -46,11 +55,11 @@ export class SolarPanelsController {
   }
 
   @Post()
-  @AdminOnly()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({
     summary: 'Create solar panel catalog item',
     description:
-      'Creates a persisted solar panel catalog row. **Admin only.** Duplicate `brand + model` pairs are rejected.',
+      'Creates a persisted solar panel catalog row. **Admin** and **manager** can create; duplicate `brand + model` pairs are rejected.',
   })
   @ApiCreatedResponse({
     description: 'Solar panel created (**201**).',
@@ -61,9 +70,37 @@ export class SolarPanelsController {
   })
   @ApiForbiddenResponse({
     description:
-      '**403** — only **admin** may create solar panel catalog items.',
+      '**403** — only **admin** or **manager** may create solar panel catalog items.',
   })
   create(@Body() dto: CreateSolarPanelDto): Promise<SolarPanelResponseDto> {
     return this.solarPanels.create(dto);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Update solar panel catalog item',
+    description:
+      'Updates an existing persisted solar panel catalog row. **Admin** and **manager** can update.',
+  })
+  @ApiOkResponse({
+    description: 'Solar panel updated (**200**).',
+  })
+  @ApiConflictResponse({
+    description:
+      '**409** — a solar panel with the same `brand + model` already exists.',
+  })
+  @ApiNotFoundResponse({
+    description: '**404** — solar panel item was not found.',
+  })
+  @ApiForbiddenResponse({
+    description:
+      '**403** — only **admin** or **manager** may update solar panel catalog items.',
+  })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateSolarPanelDto,
+  ): Promise<SolarPanelResponseDto> {
+    return this.solarPanels.update(id, dto);
   }
 }

@@ -1,8 +1,13 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateBatteryDto } from './dto/create-battery.dto';
 import { BatteryResponseDto } from './dto/battery-response.dto';
+import { UpdateBatteryDto } from './dto/update-battery.dto';
 import { Battery } from './entities/battery.entity';
 
 @Injectable()
@@ -50,6 +55,64 @@ export class BatteriesService {
         notes: dto.notes ?? null,
       }),
     );
+
+    return BatteryResponseDto.fromEntity(saved);
+  }
+
+  async update(id: string, dto: UpdateBatteryDto): Promise<BatteryResponseDto> {
+    const current = await this.batteriesRepo.findOne({ where: { id } });
+    if (!current) {
+      throw new NotFoundException('Battery not found');
+    }
+
+    const brand = dto.brand ?? current.brand;
+    const model = dto.model ?? current.model;
+    const duplicate = await this.batteriesRepo
+      .createQueryBuilder('battery')
+      .where('LOWER(battery.brand) = LOWER(:brand)', { brand })
+      .andWhere('LOWER(battery.model) = LOWER(:model)', { model })
+      .andWhere('battery.id != :id', { id: current.id })
+      .getOne();
+
+    if (duplicate) {
+      throw new ConflictException(
+        'A battery with this brand and model already exists',
+      );
+    }
+
+    const saved = await this.batteriesRepo.save({
+      ...current,
+      brand,
+      model,
+      capacityKwh:
+        typeof dto.capacityKwh === 'number'
+          ? dto.capacityKwh.toFixed(2)
+          : current.capacityKwh,
+      defaultUnitPrice:
+        typeof dto.defaultUnitPrice === 'number'
+          ? dto.defaultUnitPrice.toFixed(2)
+          : current.defaultUnitPrice,
+      stockStatus: dto.stockStatus ?? current.stockStatus,
+      voltage:
+        typeof dto.voltage === 'number'
+          ? dto.voltage.toFixed(2)
+          : dto.voltage === undefined
+            ? current.voltage
+            : null,
+      chemistry:
+        dto.chemistry === undefined
+          ? current.chemistry
+          : (dto.chemistry ?? null),
+      cycleLife:
+        dto.cycleLife === undefined
+          ? current.cycleLife
+          : (dto.cycleLife ?? null),
+      warrantyYears:
+        dto.warrantyYears === undefined
+          ? current.warrantyYears
+          : (dto.warrantyYears ?? null),
+      notes: dto.notes === undefined ? current.notes : (dto.notes ?? null),
+    });
 
     return BatteryResponseDto.fromEntity(saved);
   }

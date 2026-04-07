@@ -1,21 +1,30 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { AdminOnly } from '../auth/decorators/role-access.decorators';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateInverterDto } from './dto/create-inverter.dto';
 import { InverterResponseDto } from './dto/inverter-response.dto';
+import { UpdateInverterDto } from './dto/update-inverter.dto';
 import { InvertersService } from './inverters.service';
 
 @ApiTags('Equipment')
@@ -46,11 +55,11 @@ export class InvertersController {
   }
 
   @Post()
-  @AdminOnly()
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({
     summary: 'Create inverter catalog item',
     description:
-      'Creates a persisted inverter catalog row. **Admin only.** Duplicate `brand + model` pairs are rejected.',
+      'Creates a persisted inverter catalog row. **Admin** and **manager** can create; duplicate `brand + model` pairs are rejected.',
   })
   @ApiCreatedResponse({
     description: 'Inverter created (**201**).',
@@ -60,9 +69,38 @@ export class InvertersController {
       '**409** — an inverter with the same `brand + model` already exists.',
   })
   @ApiForbiddenResponse({
-    description: '**403** — only **admin** may create inverter catalog items.',
+    description:
+      '**403** — only **admin** or **manager** may create inverter catalog items.',
   })
   create(@Body() dto: CreateInverterDto): Promise<InverterResponseDto> {
     return this.inverters.create(dto);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Update inverter catalog item',
+    description:
+      'Updates an existing persisted inverter catalog row. **Admin** and **manager** can update.',
+  })
+  @ApiOkResponse({
+    description: 'Inverter updated (**200**).',
+  })
+  @ApiConflictResponse({
+    description:
+      '**409** — an inverter with the same `brand + model` already exists.',
+  })
+  @ApiNotFoundResponse({
+    description: '**404** — inverter item was not found.',
+  })
+  @ApiForbiddenResponse({
+    description:
+      '**403** — only **admin** or **manager** may update inverter catalog items.',
+  })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateInverterDto,
+  ): Promise<InverterResponseDto> {
+    return this.inverters.update(id, dto);
   }
 }
