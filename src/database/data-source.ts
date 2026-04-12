@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { Customer } from '../customers/entities/customer.entity';
+import { CustomerAuditLog } from '../customers/entities/customer-audit-log.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
 import { InvoiceActivity } from '../invoices/entities/invoice-activity.entity';
 import { InvoiceItem } from '../invoices/entities/invoice-item.entity';
@@ -96,6 +97,7 @@ export const AppDataSource = new DataSource({
     User,
     UserCredential,
     Customer,
+    CustomerAuditLog,
     Job,
     JobAuditLog,
     JobInternalComment,

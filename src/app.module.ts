@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { UserCredential } from './auth/entities/user-credential.entity';
 import { CustomersModule } from './customers/customers.module';
 import { Customer } from './customers/entities/customer.entity';
+import { CustomerAuditLog } from './customers/entities/customer-audit-log.entity';
 import { User } from './users/entities/user.entity';
 import { InstallerModule } from './installer/installer.module';
 import { JobAuditLog } from './jobs/entities/job-audit-log.entity';
@@ -128,6 +129,7 @@ const publicLeadThrottleLimit = Number(
         User,
         UserCredential,
         Customer,
+        CustomerAuditLog,
         Job,
         JobAuditLog,
         JobInternalComment,

@@ -20,6 +20,12 @@ export class Customer {
   @Column({ type: 'varchar', length: 255, nullable: true })
   address: string | null;
 
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  lat: number | null;
+
+  @Column({ type: 'decimal', precision: 11, scale: 7, nullable: true })
+  lng: number | null;
+
   @Column({ type: 'varchar', length: 30 })
   phone: string;
 

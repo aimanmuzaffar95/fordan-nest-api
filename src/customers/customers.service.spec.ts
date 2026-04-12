@@ -44,6 +44,7 @@ const createQueryBuilderMock = (): QueryBuilderMock => ({
 describe('CustomersService', () => {
   let service: CustomersService;
   let repository: jest.Mocked<Repository<Customer>>;
+  let dataSource: { getRepository: jest.Mock };
 
   const createRepositoryMock = () =>
     ({
@@ -54,6 +55,18 @@ describe('CustomersService', () => {
     }) as unknown as jest.Mocked<Repository<Customer>>;
 
   beforeEach(async () => {
+    dataSource = {
+      getRepository: jest.fn().mockReturnValue({
+        create: jest
+          .fn()
+          .mockImplementation((value: Record<string, unknown>) => ({
+            ...value,
+          })),
+        save: jest.fn().mockResolvedValue([]),
+        find: jest.fn().mockResolvedValue([]),
+      }),
+    };
+
     const moduleRef = await Test.createTestingModule({
       providers: [
         CustomersService,
@@ -63,9 +76,7 @@ describe('CustomersService', () => {
         },
         {
           provide: DataSource,
-          useValue: {
-            getRepository: jest.fn(),
-          },
+          useValue: dataSource,
         },
       ],
     }).compile();
@@ -113,6 +124,8 @@ describe('CustomersService', () => {
       firstName: 'Jane',
       lastName: 'Doe',
       address: null,
+      lat: null,
+      lng: null,
       phone: '+15550001111',
       secondaryPhone: null,
       email: 'jane@example.com',

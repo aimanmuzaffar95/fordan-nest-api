@@ -1,5 +1,13 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class UpdateCustomerDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -24,6 +32,18 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  lat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  lng?: number;
 
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,

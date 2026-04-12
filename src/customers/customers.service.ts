@@ -21,12 +21,18 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CustomerResponseDto } from './dto/customer-response.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { CustomerAuditLog } from './entities/customer-audit-log.entity';
 import { Customer } from './entities/customer.entity';
 
 type TimelineEventDto = {
   event: string;
   actorName: string;
   createdAt: string;
+  meta: Record<string, unknown>;
+};
+
+type CustomerAuditChange = {
+  eventType: string;
   meta: Record<string, unknown>;
 };
 
@@ -72,6 +78,8 @@ export class CustomersService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       address: dto.address ?? null,
+      lat: dto.lat ?? null,
+      lng: dto.lng ?? null,
       phone: dto.phone,
       secondaryPhone: dto.secondaryPhone ?? null,
       email: dto.email,
@@ -209,6 +217,19 @@ export class CustomersService {
       }
     }
 
+    const original = {
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      address: customer.address,
+      lat: customer.lat,
+      lng: customer.lng,
+      phone: customer.phone,
+      secondaryPhone: customer.secondaryPhone,
+      email: customer.email,
+    };
+    const addressChanged =
+      typeof dto.address !== 'undefined' && dto.address !== original.address;
+
     if (typeof dto.firstName !== 'undefined') {
       customer.firstName = dto.firstName;
     }
@@ -217,6 +238,21 @@ export class CustomersService {
     }
     if (typeof dto.address !== 'undefined') {
       customer.address = dto.address;
+    }
+    if (typeof dto.lat !== 'undefined') {
+      customer.lat = dto.lat;
+    }
+    if (typeof dto.lng !== 'undefined') {
+      customer.lng = dto.lng;
+    }
+
+    if (
+      addressChanged &&
+      typeof dto.lat === 'undefined' &&
+      typeof dto.lng === 'undefined'
+    ) {
+      customer.lat = null;
+      customer.lng = null;
     }
     if (typeof dto.phone !== 'undefined') {
       customer.phone = dto.phone;
@@ -230,6 +266,23 @@ export class CustomersService {
 
     try {
       const updated = await this.customersRepository.save(customer);
+      const auditChanges = this.buildCustomerAuditChanges(original, customer);
+
+      if (auditChanges.length > 0) {
+        const customerAuditLogsRepo =
+          this.dataSource.getRepository(CustomerAuditLog);
+        await customerAuditLogsRepo.save(
+          auditChanges.map((change) =>
+            customerAuditLogsRepo.create({
+              customerId: customer.id,
+              performedByUserId: viewer?.userId ?? null,
+              eventType: change.eventType,
+              payload: change.meta,
+            }),
+          ),
+        );
+      }
+
       return CustomerResponseDto.fromEntity(updated);
     } catch (error) {
       const driverError = (
@@ -257,6 +310,26 @@ export class CustomersService {
       createdAt: customer.createdAt.toISOString(),
       meta: {},
     });
+
+    const customerAuditLogs = await this.dataSource
+      .getRepository(CustomerAuditLog)
+      .find({
+        where: { customerId },
+        relations: { performedByUser: true },
+        order: { createdAt: 'ASC' },
+      });
+
+    for (const auditLog of customerAuditLogs) {
+      const actorName = auditLog.performedByUser
+        ? `${auditLog.performedByUser.firstName} ${auditLog.performedByUser.lastName}`.trim()
+        : 'System';
+      events.push({
+        event: this.describeCustomerAuditEvent(auditLog.eventType),
+        actorName: actorName.length > 0 ? actorName : 'System',
+        createdAt: auditLog.createdAt.toISOString(),
+        meta: this.normalizeMeta(auditLog.payload),
+      });
+    }
 
     const jobs = await this.dataSource.getRepository(Job).find({
       where: { customerId },
@@ -373,5 +446,108 @@ export class CustomersService {
         { managerUserId: viewer.userId },
       )
       .distinct(true);
+  }
+
+  private buildCustomerAuditChanges(
+    previous: {
+      firstName: string;
+      lastName: string;
+      address: string | null;
+      lat: number | null;
+      lng: number | null;
+      phone: string;
+      secondaryPhone: string | null;
+      email: string;
+    },
+    current: Customer,
+  ): CustomerAuditChange[] {
+    const changes: CustomerAuditChange[] = [];
+
+    if (
+      previous.firstName !== current.firstName ||
+      previous.lastName !== current.lastName
+    ) {
+      changes.push({
+        eventType: 'name_updated',
+        meta: {
+          oldFirstName: previous.firstName,
+          oldLastName: previous.lastName,
+          newFirstName: current.firstName,
+          newLastName: current.lastName,
+        },
+      });
+    }
+
+    if (previous.phone !== current.phone) {
+      changes.push({
+        eventType: 'phone_updated',
+        meta: { oldPhone: previous.phone, newPhone: current.phone },
+      });
+    }
+
+    if (previous.secondaryPhone !== current.secondaryPhone) {
+      changes.push({
+        eventType: 'secondary_phone_updated',
+        meta: {
+          oldSecondaryPhone: previous.secondaryPhone,
+          newSecondaryPhone: current.secondaryPhone,
+        },
+      });
+    }
+
+    if (previous.email !== current.email) {
+      changes.push({
+        eventType: 'email_updated',
+        meta: { oldEmail: previous.email, newEmail: current.email },
+      });
+    }
+
+    if (previous.address !== current.address) {
+      changes.push({
+        eventType: 'address_updated',
+        meta: { oldAddress: previous.address, newAddress: current.address },
+      });
+    }
+
+    if (previous.lat !== current.lat || previous.lng !== current.lng) {
+      changes.push({
+        eventType: 'coordinates_updated',
+        meta: {
+          oldLat: previous.lat,
+          oldLng: previous.lng,
+          newLat: current.lat,
+          newLng: current.lng,
+        },
+      });
+    }
+
+    return changes;
+  }
+
+  private describeCustomerAuditEvent(eventType: string): string {
+    switch (eventType) {
+      case 'name_updated':
+        return 'Name updated';
+      case 'phone_updated':
+        return 'Phone number updated';
+      case 'secondary_phone_updated':
+        return 'Secondary phone updated';
+      case 'email_updated':
+        return 'Email updated';
+      case 'address_updated':
+        return 'Address updated';
+      case 'coordinates_updated':
+        return 'Map location updated';
+      default:
+        return 'Customer record updated';
+    }
+  }
+
+  private normalizeMeta(payload: unknown): Record<string, unknown> {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return {};
+    }
+
+    return payload as Record<string, unknown>;
   }
 }
