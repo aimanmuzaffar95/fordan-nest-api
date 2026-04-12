@@ -17,6 +17,7 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { CreateEmployeeRoleDto } from './dto/create-employee-role.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { CreateStaffRoleDto } from './dto/create-staff-role.dto';
+import { ResetStaffPasswordDto } from './dto/reset-staff-password.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { EmployeeRole } from './entities/employee-role.entity';
 import { StaffRole } from './entities/staff-role.entity';
@@ -407,6 +408,53 @@ export class StaffService {
     return {
       id: existing.id,
       deletedAt: existing.deletedAt.toISOString(),
+    };
+  }
+
+  async resetTemporaryPassword(
+    id: string,
+    dto: ResetStaffPasswordDto,
+    actorUserId: string,
+  ): Promise<{ staffId: string; username: string; mustChangePassword: true }> {
+    const existing = await this.findActiveStaffOrFail(id);
+
+    // Reject employee records — they have no login credentials
+    if (existing.role === UserRole.EMPLOYEE) {
+      throw new BadRequestException(
+        'This staff member does not have login credentials',
+      );
+    }
+
+    // Reject if technical staff but credential is missing
+    if (!existing.credential) {
+      throw new BadRequestException(
+        'Staff member is missing login credentials. Recreate this record to manage login fields.',
+      );
+    }
+
+    // Hash and set the new temporary password
+    existing.credential.passwordHash = await hashPassword(
+      dto.temporaryPassword,
+      10,
+    );
+    existing.credential.mustChangePassword = true;
+    await this.credentialsRepository.save(existing.credential);
+
+    // Emit structured audit log
+    this.logger.log(
+      JSON.stringify({
+        event: 'staff_temporary_password_reset_issued',
+        performedByUserId: actorUserId,
+        targetUserId: existing.id,
+        targetUsername: existing.credential.username,
+        targetStaffType: existing.role,
+      }),
+    );
+
+    return {
+      staffId: existing.id,
+      username: existing.credential.username,
+      mustChangePassword: true,
     };
   }
 
