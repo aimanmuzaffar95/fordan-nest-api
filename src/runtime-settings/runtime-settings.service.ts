@@ -10,6 +10,12 @@ import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
+import {
+  deepMergeMessagingPatch,
+  mergeCustomerMessagingTemplates,
+} from '../customer-messaging/customer-messaging.merge';
+import { validateCustomerMessagingTemplates } from '../customer-messaging/customer-messaging.validate';
+import type { CustomerMessagingTemplates } from '../customer-messaging/customer-messaging.types';
 
 export type AdminSettingsPayload = {
   overridePreMeter: boolean;
@@ -31,6 +37,7 @@ export type AdminSettingsPayload = {
   smtpSecure: boolean | null;
   mailFrom: string | null;
   mailFromName: string | null;
+  customerMessagingTemplates: CustomerMessagingTemplates;
 };
 
 @Injectable()
@@ -60,6 +67,8 @@ export class RuntimeSettingsService {
     const patch = { ...updates } as Record<string, unknown>;
     const smtpPassRaw = patch['smtpPass'];
     delete patch['smtpPass'];
+    const messagingRaw = patch['customerMessagingTemplates'];
+    delete patch['customerMessagingTemplates'];
     const cleaned = Object.fromEntries(
       Object.entries(patch).filter(([, v]) => v !== undefined),
     );
@@ -73,6 +82,14 @@ export class RuntimeSettingsService {
         (typeof smtpPassRaw === 'string' && smtpPassRaw.trim() === '')
           ? null
           : String(smtpPassRaw);
+    }
+    if (messagingRaw !== undefined) {
+      const current = mergeCustomerMessagingTemplates(
+        settings.customerMessagingTemplates,
+      );
+      const next = deepMergeMessagingPatch(current, messagingRaw);
+      validateCustomerMessagingTemplates(next);
+      settings.customerMessagingTemplates = next;
     }
 
     const changedFields = Object.keys(updates).sort();
@@ -177,6 +194,9 @@ export class RuntimeSettingsService {
       mailFromName: settings.mailFromName?.trim()
         ? settings.mailFromName.trim()
         : null,
+      customerMessagingTemplates: mergeCustomerMessagingTemplates(
+        settings.customerMessagingTemplates,
+      ),
     };
   }
 }

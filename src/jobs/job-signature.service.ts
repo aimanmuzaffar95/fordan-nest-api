@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'node:crypto';
 import { Repository } from 'typeorm';
 import type { Request } from 'express';
+import { CustomerMessagingRendererService } from '../email/customer-messaging-renderer.service';
 import { EmailService } from '../email/email.service';
 import { FilesService } from '../files/files.service';
 import type { UploadKind } from '../files/upload.constants';
@@ -167,6 +168,7 @@ export class JobSignatureService {
     private readonly pdfMerge: JobSignaturePdfMergeService,
     private readonly files: FilesService,
     private readonly email: EmailService,
+    private readonly customerMessaging: CustomerMessagingRendererService,
     private readonly runtimeSettings: RuntimeSettingsService,
   ) {}
 
@@ -286,17 +288,17 @@ export class JobSignatureService {
     const signingUrl = `${base}/sign/${rawToken}`;
     if (sendEmail) {
       try {
-        await this.email.send({
-          to: ctx.customerEmail,
-          subject: `Sign your Fordan Solar quotation — ${ctx.orderNumber}`,
-          template: 'signature-request',
-          context: {
+        const { subject, html } =
+          await this.customerMessaging.renderSignatureRequestCustomerEmail({
             customerName: ctx.customerName,
             orderNumber: ctx.orderNumber,
             signingUrl,
             referenceCode: ref,
-            currentYear: new Date().getFullYear(),
-          },
+          });
+        await this.email.send({
+          to: ctx.customerEmail,
+          subject,
+          html,
         });
       } catch {
         await this.signatureRepo.update(

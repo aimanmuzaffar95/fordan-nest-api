@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../users/entities/user.entity';
+import type { CustomerMessagingTemplates } from '../customer-messaging/customer-messaging.types';
 
 export const ADMIN_SETTINGS_SINGLETON_ID = 'global';
 
@@ -72,6 +73,9 @@ export class AdminSettings {
 
   @Column({ type: 'varchar', length: 200, nullable: true })
   mailFromName: string | null;
+
+  @Column({ type: 'json', nullable: true })
+  customerMessagingTemplates: CustomerMessagingTemplates | null;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })

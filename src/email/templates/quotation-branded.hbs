@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quotation</title>
+</head>
+<body style="margin:0;padding:24px;background-color:{{pageBgHex}};font-family:'Plus Jakarta Sans',Arial,sans-serif;color:{{bodyTextHex}};">
+  <div style="max-width:600px;margin:0 auto;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 6px 24px rgba(17,24,39,0.08);">
+    <div style="padding:24px 32px;background-color:#ffffff;border-bottom:1px solid {{borderHex}};">
+      <div style="font-size:28px;line-height:1.1;font-weight:800;color:{{primaryHex}};letter-spacing:-0.03em;">{{brandHeaderName}}</div>
+    </div>
+
+    <div style="padding:40px 32px;background-color:{{heroBgHex}};">
+      <p style="margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:{{heroAccentHex}};">{{{compiledKicker}}}</p>
+      <h1 style="margin:0 0 16px;font-size:32px;line-height:1.2;font-weight:800;color:#ffffff;">{{{compiledHeroTitle}}}</h1>
+      <p style="margin:0;font-size:17px;line-height:1.6;color:{{heroLeadHex}};">{{{compiledHeroIntro}}}</p>
+    </div>
+
+    <div style="padding:32px;">
+      <p style="margin:0 0 28px;font-size:15px;line-height:1.7;color:{{bodyMutedHex}};">
+        {{{compiledIntroParagraph}}}
+      </p>
+
+      <h2 style="margin:0 0 18px;font-size:22px;line-height:1.3;font-weight:800;color:{{bodyTextHex}};">Project quotation breakdown</h2>
+
+      <div style="margin:0 0 12px;padding:18px 20px;border-radius:16px;background-color:{{cardBgHex}};border:1px solid {{borderHex}};">
+        <p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:{{primaryHex}};">Project</p>
+        <p style="margin:0;font-size:16px;line-height:1.5;color:{{bodyTextHex}};">
+          <strong>Order:</strong> {{orderNumber}}<br>
+          <strong>System type:</strong> {{systemTypeLabel}}<br>
+          <strong>Solar array:</strong> {{systemSizeLabel}}<br>
+          <strong>Battery storage:</strong> {{batterySizeLabel}}
+        </p>
+      </div>
+
+      {{#each proposalItems}}
+      <div style="margin:0 0 12px;padding:18px 20px;border-radius:16px;background-color:{{../cardBgHex}};border:1px solid {{../borderHex}};">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+          <tr>
+            <td style="vertical-align:top;padding-right:12px;">
+              <p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:{{../primaryHex}};">Quoted item</p>
+              <p style="margin:0 0 4px;font-size:18px;line-height:1.4;font-weight:800;color:{{../bodyTextHex}};">{{label}}</p>
+              {{#if subtitle}}
+              <p style="margin:0;font-size:14px;line-height:1.5;color:{{../bodyMutedHex}};">{{subtitle}}</p>
+              {{/if}}
+            </td>
+            <td style="vertical-align:top;text-align:right;white-space:nowrap;">
+              <p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:{{../primaryHex}};">Pricing</p>
+              <p style="margin:0;font-size:14px;line-height:1.6;color:{{../bodyTextHex}};">Qty {{quantity}}</p>
+              <p style="margin:0;font-size:14px;line-height:1.6;color:{{../bodyTextHex}};">Unit {{proposalUnitPrice}}</p>
+              <p style="margin:0;font-size:16px;line-height:1.6;font-weight:800;color:{{../bodyTextHex}};">{{lineTotal}}</p>
+            </td>
+          </tr>
+        </table>
+      </div>
+      {{/each}}
+
+      <div style="margin:24px 0 28px;padding:22px 24px;border-radius:18px;background-color:{{totalBarBgHex}};">
+        <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:{{totalBarLabelHex}};">Total project investment</p>
+        <p style="margin:0;font-size:32px;line-height:1.1;font-weight:800;color:#ffffff;">{{proposalTotal}}</p>
+      </div>
+
+      <div style="padding:24px;border-radius:18px;background-color:rgba(213,224,248,0.3);">
+        <h3 style="margin:0 0 12px;font-size:18px;line-height:1.3;font-weight:800;color:{{bodyTextHex}};">What happens next</h3>
+        <p style="margin:0 0 10px;font-size:14px;line-height:1.7;color:{{bodyMutedHex}};">1. {{{compiledNext1}}}</p>
+        <p style="margin:0 0 10px;font-size:14px;line-height:1.7;color:{{bodyMutedHex}};">2. {{{compiledNext2}}}</p>
+        <p style="margin:0;font-size:14px;line-height:1.7;color:{{bodyMutedHex}};">3. {{{compiledNext3}}}</p>
+      </div>
+    </div>
+
+    <div style="padding:28px 32px;background-color:#f8fafc;border-top:1px solid #e5e7eb;text-align:center;">
+      <div style="margin:0 0 16px;font-size:22px;line-height:1.1;font-weight:800;color:{{heroBgHex}};">{{footerBrandName}}</div>
+      <p style="margin:0 0 6px;font-size:12px;line-height:1.6;color:#9ca3af;">{{{compiledFooterLine1}}}</p>
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#9ca3af;">{{{compiledFooterLine2}}}</p>
+    </div>
+  </div>
+</body>
+</html>

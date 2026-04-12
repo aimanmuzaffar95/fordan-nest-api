@@ -4,6 +4,7 @@ import {
   IsEmail,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUrl,
@@ -161,4 +162,8 @@ export class UpdateAdminSettingsDto {
   @IsString()
   @MaxLength(200)
   mailFromName?: string | null;
+
+  @IsOptional()
+  @IsObject()
+  customerMessagingTemplates?: Record<string, unknown>;
 }

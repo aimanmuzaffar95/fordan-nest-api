@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CustomerMessagingRendererService } from '../email/customer-messaging-renderer.service';
 import { EmailService } from '../email/email.service';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { UserRole } from '../users/entities/user-role.enum';
@@ -45,6 +46,7 @@ export class JobQuotationService {
   constructor(
     private readonly jobs: JobsService,
     private readonly email: EmailService,
+    private readonly customerMessaging: CustomerMessagingRendererService,
     private readonly quotationPdf: JobQuotationPdfService,
     @InjectRepository(TimelineEvent)
     private readonly timelineEventsRepo: Repository<TimelineEvent>,
@@ -129,6 +131,11 @@ export class JobQuotationService {
       throw new BadRequestException('Customer email is missing for this job');
     }
 
+    const pdfCopy = await this.customerMessaging.resolveQuotationPdfCopy({
+      customerName,
+      orderNumber,
+    });
+
     const pdfBuffer = await this.quotationPdf.buildQuotationPdf({
       attachmentFilename,
       customerName,
@@ -140,6 +147,11 @@ export class JobQuotationService {
       batterySizeLabel: this.toBatterySizeLabel(jobDetail.job.batterySizeKwh),
       proposalItems,
       proposalTotal,
+      pdfBrandName: pdfCopy.brandName,
+      pdfPrimaryHex: pdfCopy.primaryHex,
+      pdfHeadline: pdfCopy.headline,
+      pdfThankYou: pdfCopy.thankYou,
+      pdfFooterNote: pdfCopy.footerNote,
     });
 
     return { ...ctx, pdfBuffer };
@@ -163,18 +175,15 @@ export class JobQuotationService {
     const customer = jobDetail.customer;
     const sentAt = new Date().toISOString();
 
-    await this.email.send({
-      to: customerEmail,
-      subject: `Your Fordan Solar quotation for ${orderNumber}`,
-      template: 'quotation',
-      context: {
+    const { subject, html } =
+      await this.customerMessaging.renderQuotationCustomerEmail({
         customerName,
         orderNumber,
+        projectAddress:
+          customer?.address?.trim() || 'Address available on file',
         systemTypeLabel: this.toSystemTypeLabel(jobDetail.job.systemType),
         systemSizeLabel: this.toSystemSizeLabel(jobDetail.job.systemSizeKw),
         batterySizeLabel: this.toBatterySizeLabel(jobDetail.job.batterySizeKwh),
-        projectAddress:
-          customer?.address?.trim() || 'Address available on file',
         proposalItems: proposalItems.map((item) => ({
           label: item.name,
           subtitle: item.subtitle,
@@ -183,8 +192,12 @@ export class JobQuotationService {
           lineTotal: this.formatCurrency(item.lineTotal),
         })),
         proposalTotal: this.formatCurrency(proposalTotal),
-        currentYear: new Date().getFullYear(),
-      },
+      });
+
+    await this.email.send({
+      to: customerEmail,
+      subject,
+      html,
       attachments: [
         {
           filename: attachmentFilename,
