@@ -36,10 +36,10 @@ export class EmailService {
 
     const text = dto.text ?? (html ? htmlToText(html) : undefined);
 
-    if (!this.provider.capabilities.configured) {
+    if (!(await this.provider.isConfigured())) {
       throw new ServiceUnavailableException({
         message:
-          'Email delivery is unavailable because SMTP is not configured. Set SMTP_HOST and related credentials.',
+          'Email delivery is unavailable because SMTP is not configured. Set host and port under Settings → Mail, or set SMTP_HOST (and related) in the API environment.',
         code: 'EMAIL_DELIVERY_FAILED',
       });
     }

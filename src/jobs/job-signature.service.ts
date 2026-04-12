@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import type { Readable } from 'node:stream';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'node:crypto';
 import { Repository } from 'typeorm';
@@ -39,6 +40,88 @@ function randomToken(): string {
 
 function referenceCode(): string {
   return `SIG-${randomBytes(4).toString('hex').toUpperCase()}`;
+}
+
+const HEADER_PUBLIC_WEB_BASE_URL = 'x-public-web-base-url';
+
+function stripTrailingSlashes(s: string): string {
+  return s.replace(/\/+$/, '');
+}
+
+function isLocalDevHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '::1';
+}
+
+function parseEsignAllowedOriginsEnv(): Set<string> {
+  const raw = process.env.ESIGN_ALLOWED_PUBLIC_ORIGINS?.trim() ?? '';
+  if (!raw) return new Set();
+  return new Set(
+    raw
+      .split(',')
+      .map((s) => stripTrailingSlashes(s.trim()))
+      .filter((p) => p.length > 0),
+  );
+}
+
+function toHttpOrigin(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  try {
+    const u = new URL(t);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return stripTrailingSlashes(`${u.protocol}//${u.host}`);
+  } catch {
+    return null;
+  }
+}
+
+function tryPublicBaseUrlFromRequest(req?: Request): string | null {
+  if (!req?.headers) return null;
+
+  const candidates: string[] = [];
+  const h = req.headers[HEADER_PUBLIC_WEB_BASE_URL];
+  const headerVal = Array.isArray(h) ? h[0] : h;
+  if (typeof headerVal === 'string' && headerVal.trim()) {
+    candidates.push(headerVal.trim());
+  }
+  if (typeof req.headers.origin === 'string' && req.headers.origin.trim()) {
+    candidates.push(req.headers.origin.trim());
+  }
+  if (typeof req.headers.referer === 'string' && req.headers.referer.trim()) {
+    try {
+      candidates.push(new URL(req.headers.referer.trim()).origin);
+    } catch {
+      /* ignore malformed Referer */
+    }
+  }
+
+  const allowlist = parseEsignAllowedOriginsEnv();
+  const trustAny =
+    (process.env.ESIGN_TRUST_BROWSER_ORIGIN ?? '').toLowerCase() === 'true' ||
+    (process.env.ESIGN_TRUST_BROWSER_ORIGIN ?? '').trim() === '1';
+
+  for (const c of candidates) {
+    const origin = toHttpOrigin(c);
+    if (!origin) continue;
+    let hostname: string;
+    try {
+      hostname = new URL(origin).hostname;
+    } catch {
+      continue;
+    }
+    if (isLocalDevHostname(hostname)) {
+      return origin;
+    }
+    if (allowlist.has(origin)) {
+      return origin;
+    }
+    if (trustAny) {
+      return origin;
+    }
+  }
+
+  return null;
 }
 
 function parsePngBase64(raw: string): Buffer {
@@ -95,19 +178,23 @@ export class JobSignatureService {
     }
   }
 
-  private async resolvePublicBaseUrl(): Promise<string> {
+  private async resolvePublicBaseUrl(req?: Request): Promise<string> {
     const payload = await this.runtimeSettings.getSettings();
     const fromDb = payload.esignPublicBaseUrl?.trim();
     if (fromDb) {
-      return fromDb.replace(/\/+$/, '');
+      return stripTrailingSlashes(fromDb);
     }
     const fromEnv = process.env.ESIGN_PUBLIC_BASE_URL?.trim() ?? '';
     if (fromEnv) {
-      return fromEnv.replace(/\/+$/, '');
+      return stripTrailingSlashes(fromEnv);
+    }
+    const fromRequest = tryPublicBaseUrlFromRequest(req);
+    if (fromRequest) {
+      return fromRequest;
     }
     throw new BadRequestException({
       message:
-        'E-sign web URL is not configured. Set it under Settings (admin) or set ESIGN_PUBLIC_BASE_URL for the API (e.g. https://crm.example.com).',
+        'E-sign web URL is not configured. Use Settings (admin), set ESIGN_PUBLIC_BASE_URL on the API, add ESIGN_ALLOWED_PUBLIC_ORIGINS (comma-separated), or open the CRM from localhost / send X-Public-Web-Base-Url from the web app.',
       code: 'ESIGN_PUBLIC_BASE_URL_MISSING',
     });
   }
@@ -162,6 +249,7 @@ export class JobSignatureService {
     jobId: string,
     viewer: JobListViewer,
     sendEmail: boolean,
+    req?: Request,
   ): Promise<{
     id: string;
     signingUrl: string;
@@ -173,7 +261,7 @@ export class JobSignatureService {
       jobId,
       viewer,
     );
-    const base = await this.resolvePublicBaseUrl();
+    const base = await this.resolvePublicBaseUrl(req);
     const rawToken = randomToken();
     const tokenHash = sha256Hex(rawToken);
     const ref = await this.uniqueReferenceCode();
@@ -247,6 +335,17 @@ export class JobSignatureService {
     };
   }
 
+  private async findSignatureRowByRawToken(
+    rawToken: string,
+  ): Promise<JobSignatureRequest | null> {
+    const token = rawToken?.trim();
+    if (!token || token.length < 16) {
+      return null;
+    }
+    const tokenHash = sha256Hex(token);
+    return this.signatureRepo.findOne({ where: { tokenHash } });
+  }
+
   private async uniqueReferenceCode(): Promise<string> {
     for (let i = 0; i < 8; i += 1) {
       const ref = referenceCode();
@@ -270,24 +369,13 @@ export class JobSignatureService {
   }
 
   async getPublicSession(rawToken: string) {
-    const token = rawToken?.trim();
-    if (!token || token.length < 16) {
-      throw new NotFoundException('Invalid or expired signing link');
-    }
-    const tokenHash = sha256Hex(token);
-    const row = await this.signatureRepo.findOne({ where: { tokenHash } });
+    const row = await this.findSignatureRowByRawToken(rawToken);
     if (!row) {
       throw new NotFoundException('Invalid or expired signing link');
     }
     await this.expireIfNeeded(row);
     if (row.status === 'expired' || row.status === 'cancelled') {
       throw new NotFoundException('Invalid or expired signing link');
-    }
-    if (row.status === 'signed') {
-      throw new BadRequestException({
-        message: 'This document has already been signed.',
-        code: 'ALREADY_SIGNED',
-      });
     }
     const jobFull = await this.jobsRepo.findOne({
       where: { id: row.jobId },
@@ -297,26 +385,39 @@ export class JobSignatureService {
       throw new NotFoundException('Invalid or expired signing link');
     }
     const firstName = jobFull.customer?.firstName?.trim() || 'Customer';
-    return {
+    const base = {
       orderNumber: jobFull.orderNumber,
       customerFirstName: firstName,
       referenceCode: row.referenceCode,
       expiresAt: row.expiresAt.toISOString(),
       consentVersion: ESIGN_CONSENT_VERSION,
     };
+    if (row.status === 'signed') {
+      return {
+        ...base,
+        signingComplete: true,
+        signedAt: row.signedAt?.toISOString() ?? null,
+      };
+    }
+    return {
+      ...base,
+      signingComplete: false,
+      signedAt: null,
+    };
   }
 
   async recordPublicView(rawToken: string): Promise<{ ok: true }> {
-    const token = rawToken?.trim();
-    if (!token || token.length < 16) {
-      throw new NotFoundException('Invalid or expired signing link');
-    }
-    const tokenHash = sha256Hex(token);
-    const row = await this.signatureRepo.findOne({ where: { tokenHash } });
+    const row = await this.findSignatureRowByRawToken(rawToken);
     if (!row) {
       throw new NotFoundException('Invalid or expired signing link');
     }
     await this.expireIfNeeded(row);
+    if (row.status === 'expired' || row.status === 'cancelled') {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    if (row.status === 'signed') {
+      return { ok: true };
+    }
     if (row.status !== 'pending' && row.status !== 'viewed') {
       throw new NotFoundException('Invalid or expired signing link');
     }
@@ -338,6 +439,57 @@ export class JobSignatureService {
       );
     }
     return { ok: true };
+  }
+
+  async getPublicQuotationPdf(rawToken: string): Promise<{
+    buffer: Buffer;
+    filename: string;
+  }> {
+    const row = await this.findSignatureRowByRawToken(rawToken);
+    if (!row) {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    await this.expireIfNeeded(row);
+    if (row.status === 'expired' || row.status === 'cancelled') {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    const { pdfBuffer, attachmentFilename } =
+      await this.jobQuotation.buildValidatedQuotationPdf(row.jobId, undefined);
+    return { buffer: pdfBuffer, filename: attachmentFilename };
+  }
+
+  async getPublicSignedPdfStream(rawToken: string): Promise<{
+    stream: Readable;
+    contentLength?: number;
+    contentType: string | null;
+    filename: string;
+  }> {
+    const row = await this.findSignatureRowByRawToken(rawToken);
+    if (!row) {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    await this.expireIfNeeded(row);
+    if (row.status !== 'signed' || !row.signedFileId) {
+      throw new NotFoundException('Signed document is not available yet');
+    }
+    const dl = await this.files.getJobFileStreamWithKindGate({
+      jobId: row.jobId,
+      fileId: row.signedFileId,
+      allowedKinds: [SIGNED_FILE_KIND],
+    });
+    const safeName = (
+      dl.file.displayName ??
+      dl.file.originalName ??
+      'signed-quotation.pdf'
+    )
+      .replace(/[\r\n"]/g, '_')
+      .trim();
+    return {
+      stream: dl.stream,
+      contentLength: dl.contentLength,
+      contentType: dl.file.contentType,
+      filename: safeName || 'signed-quotation.pdf',
+    };
   }
 
   async completePublicSign(

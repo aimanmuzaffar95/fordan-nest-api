@@ -49,6 +49,30 @@ export class AdminSettings {
   @Column({ type: 'int', default: 14 })
   esignTokenTtlDays: number;
 
+  @Column({ type: 'boolean', default: true })
+  complianceRequireSignature: boolean;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  smtpHost: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  smtpPort: number | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  smtpUser: string | null;
+
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  smtpPass: string | null;
+
+  @Column({ type: 'boolean', nullable: true })
+  smtpSecure: boolean | null;
+
+  @Column({ type: 'varchar', length: 320, nullable: true })
+  mailFrom: string | null;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  mailFromName: string | null;
+
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })
   updatedByUser: User | null;

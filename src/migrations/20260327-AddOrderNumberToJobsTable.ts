@@ -6,8 +6,8 @@ import {
 } from 'typeorm';
 
 type RawJobRow = {
-  id: string;
-  orderNumber: string | null;
+  jid: string;
+  ord_num: string | null;
 };
 
 export class AddOrderNumberToJobsTable20260327_1700000000016 implements MigrationInterface {
@@ -35,14 +35,14 @@ export class AddOrderNumberToJobsTable20260327_1700000000016 implements Migratio
     const orderNumberColumn = this.escapeIdentifier('orderNumber', dialect);
 
     const rows = (await queryRunner.query(
-      `SELECT ${idColumn} AS id, ${orderNumberColumn} AS orderNumber FROM ${tableName} ORDER BY ${createdAtColumn} ASC, ${idColumn} ASC`,
+      `SELECT ${idColumn} AS jid, ${orderNumberColumn} AS ord_num FROM ${tableName} ORDER BY ${createdAtColumn} ASC, ${idColumn} ASC`,
     )) as RawJobRow[];
 
     let nextSequence = 1001;
     const claimedNumbers = new Set<number>();
 
     rows.forEach((row) => {
-      const parsed = this.parseOrderNumber(row.orderNumber);
+      const parsed = this.parseOrderNumber(row.ord_num);
       if (parsed === null) {
         return;
       }
@@ -54,7 +54,7 @@ export class AddOrderNumberToJobsTable20260327_1700000000016 implements Migratio
     });
 
     for (const row of rows) {
-      if (this.parseOrderNumber(row.orderNumber) !== null) {
+      if (this.parseOrderNumber(row.ord_num) !== null) {
         continue;
       }
 
@@ -67,20 +67,26 @@ export class AddOrderNumberToJobsTable20260327_1700000000016 implements Migratio
       nextSequence += 1;
 
       await queryRunner.query(
-        `UPDATE ${tableName} SET ${orderNumberColumn} = '${orderNumber}' WHERE ${idColumn} = '${row.id}'`,
+        `UPDATE ${tableName} SET ${orderNumberColumn} = '${orderNumber}' WHERE ${idColumn} = '${row.jid}'`,
       );
     }
 
-    await queryRunner.changeColumn(
-      'jobs',
-      'orderNumber',
-      new TableColumn({
-        name: 'orderNumber',
-        type: 'varchar',
-        length: '50',
-        isNullable: false,
-      }),
+    // Do not use changeColumn on Postgres: it drops/recreates the column and wipes values before NOT NULL.
+    const jobsTableBeforeNotNull = await queryRunner.getTable('jobs');
+    const orderNumberCol = jobsTableBeforeNotNull?.columns.find(
+      (c) => c.name === 'orderNumber',
     );
+    if (orderNumberCol?.isNullable !== false) {
+      if (dialect === 'postgres') {
+        await queryRunner.query(
+          `ALTER TABLE ${tableName} ALTER COLUMN ${orderNumberColumn} SET NOT NULL`,
+        );
+      } else {
+        await queryRunner.query(
+          `ALTER TABLE ${tableName} MODIFY ${orderNumberColumn} varchar(50) NOT NULL`,
+        );
+      }
+    }
 
     const jobsTable = await queryRunner.getTable('jobs');
     const existingIndex = jobsTable?.indices.find(

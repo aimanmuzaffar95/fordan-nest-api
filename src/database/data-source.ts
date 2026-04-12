@@ -24,6 +24,8 @@ import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 import { Inverter } from '../inverters/entities/inverter.entity';
 import { Battery } from '../batteries/entities/battery.entity';
 import { AdminSettings } from '../runtime-settings/admin-settings.entity';
+import { ComplianceFormTemplate } from '../compliance/entities/compliance-form-template.entity';
+import { JobComplianceSubmission } from '../compliance/entities/job-compliance-submission.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -118,6 +120,8 @@ export const AppDataSource = new DataSource({
     Inverter,
     Battery,
     AdminSettings,
+    ComplianceFormTemplate,
+    JobComplianceSubmission,
   ],
   migrations: isMigrationCli
     ? ['src/migrations/*.ts']

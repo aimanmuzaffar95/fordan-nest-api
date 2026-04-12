@@ -415,7 +415,7 @@ export class JobsController {
   @ApiOperation({
     summary: 'Create e-signature request (quotation)',
     description:
-      'Creates a signing link for the current saved proposal quotation. Cancels other open requests for the job. **400** when `ESIGN_PUBLIC_BASE_URL` is missing. **503** when `sendEmail` is true and SMTP fails.',
+      'Creates a signing link for the current saved proposal quotation. Cancels other open requests for the job. Public signing URL: admin Settings, `ESIGN_PUBLIC_BASE_URL`, `ESIGN_ALLOWED_PUBLIC_ORIGINS`, or (localhost only) `Origin` / `X-Public-Web-Base-Url` from the browser. **503** when `sendEmail` is true and SMTP fails.',
   })
   createSignatureRequest(
     @Param('id', ParseUUIDPipe) id: string,
@@ -428,7 +428,12 @@ export class JobsController {
       throw new UnauthorizedException('Missing authenticated user context');
     }
     const sendEmail = dto.sendEmail !== false;
-    return this.jobSignatures.createRequest(id, { userId, role }, sendEmail);
+    return this.jobSignatures.createRequest(
+      id,
+      { userId, role },
+      sendEmail,
+      req,
+    );
   }
 
   @Post(':id/send-quotation')

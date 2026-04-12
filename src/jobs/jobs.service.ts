@@ -1251,6 +1251,22 @@ export class JobsService {
         const labels = fields.map((field) => this.humanizeToken(field));
         return `${prefix}: ${labels.join(', ')}`;
       }
+      case 'compliance_form_submitted': {
+        const name = this.readTimelinePayloadString(payload, 'templateName');
+        const signed =
+          payload &&
+          typeof payload === 'object' &&
+          !Array.isArray(payload) &&
+          payload.signed === true;
+        if (name) {
+          return signed
+            ? `Compliance form signed and submitted: ${name}`
+            : `Compliance form submitted: ${name}`;
+        }
+        return signed
+          ? 'Compliance form signed and submitted'
+          : 'Compliance form submitted';
+      }
       default:
         return this.humanizeToken(entry.type);
     }

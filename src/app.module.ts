@@ -44,6 +44,9 @@ import { Inverter } from './inverters/entities/inverter.entity';
 import { BatteriesModule } from './batteries/batteries.module';
 import { Battery } from './batteries/entities/battery.entity';
 import { AdminSettings } from './runtime-settings/admin-settings.entity';
+import { ComplianceModule } from './compliance/compliance.module';
+import { ComplianceFormTemplate } from './compliance/entities/compliance-form-template.entity';
+import { JobComplianceSubmission } from './compliance/entities/job-compliance-submission.entity';
 import { AlertsModule } from './alerts/alerts.module';
 import { Notification } from './notifications/entities/notification.entity';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -144,6 +147,8 @@ const publicLeadThrottleLimit = Number(
         Battery,
         AdminSettings,
         Notification,
+        ComplianceFormTemplate,
+        JobComplianceSubmission,
       ],
       synchronize: SYNCHRONIZE,
     }),
@@ -173,6 +178,7 @@ const publicLeadThrottleLimit = Number(
     PublicLeadsModule,
     AlertsModule,
     NotificationsModule,
+    ComplianceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

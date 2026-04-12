@@ -370,6 +370,40 @@ export class FilesService {
     };
   }
 
+  /**
+   * Stream a job-owned file when the caller has already authorized access (e.g. public e-sign token).
+   * Returns **404** when the file is missing or its `kind` is not in `allowedKinds`.
+   */
+  async getJobFileStreamWithKindGate(params: {
+    jobId: string;
+    fileId: string;
+    allowedKinds: readonly UploadKind[];
+  }): Promise<DownloadableFile> {
+    const file = await this.fileRepo.findOne({
+      where: {
+        id: params.fileId,
+        ownerType: 'job',
+        ownerId: params.jobId,
+      },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    if (!params.allowedKinds.includes(file.kind as UploadKind)) {
+      throw new NotFoundException('File not found');
+    }
+
+    const storedFile = await this.storageService.getStoredFile(file);
+
+    return {
+      file,
+      stream: storedFile.stream,
+      contentLength: storedFile.contentLength,
+    };
+  }
+
   async getMeterApplicationFileDownload(
     meterApplicationId: string,
     fileId: string,

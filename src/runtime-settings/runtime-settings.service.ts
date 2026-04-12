@@ -23,6 +23,14 @@ export type AdminSettingsPayload = {
   quickLeadDefaultProjectPrice: number;
   esignPublicBaseUrl: string | null;
   esignTokenTtlDays: number;
+  complianceRequireSignature: boolean;
+  smtpHost: string | null;
+  smtpPort: number | null;
+  smtpUser: string | null;
+  smtpPassSet: boolean;
+  smtpSecure: boolean | null;
+  mailFrom: string | null;
+  mailFromName: string | null;
 };
 
 @Injectable()
@@ -49,9 +57,23 @@ export class RuntimeSettingsService {
     }
 
     const settings = await this.getOrCreateSettingsEntity();
-    Object.assign(settings, updates, {
+    const patch = { ...updates } as Record<string, unknown>;
+    const smtpPassRaw = patch['smtpPass'];
+    delete patch['smtpPass'];
+    const cleaned = Object.fromEntries(
+      Object.entries(patch).filter(([, v]) => v !== undefined),
+    );
+    Object.assign(settings, cleaned, {
       updatedByUserId,
     });
+    if (smtpPassRaw !== undefined) {
+      settings.smtpPass =
+        smtpPassRaw === null ||
+        smtpPassRaw === '' ||
+        (typeof smtpPassRaw === 'string' && smtpPassRaw.trim() === '')
+          ? null
+          : String(smtpPassRaw);
+    }
 
     const changedFields = Object.keys(updates).sort();
     const saved = await this.settingsRepo.save(settings);
@@ -111,6 +133,7 @@ export class RuntimeSettingsService {
       quickLeadDefaultProjectPrice: '0',
       esignPublicBaseUrl: null,
       esignTokenTtlDays: 14,
+      complianceRequireSignature: true,
       updatedByUserId: null,
     });
 
@@ -138,6 +161,22 @@ export class RuntimeSettingsService {
         ? settings.esignPublicBaseUrl.trim()
         : null,
       esignTokenTtlDays: settings.esignTokenTtlDays ?? 14,
+      complianceRequireSignature: settings.complianceRequireSignature !== false,
+      smtpHost: settings.smtpHost?.trim() ? settings.smtpHost.trim() : null,
+      smtpPort:
+        settings.smtpPort != null && Number.isFinite(Number(settings.smtpPort))
+          ? Number(settings.smtpPort)
+          : null,
+      smtpUser: settings.smtpUser?.trim() ? settings.smtpUser.trim() : null,
+      smtpPassSet: Boolean(settings.smtpPass?.trim()),
+      smtpSecure:
+        settings.smtpSecure === true || settings.smtpSecure === false
+          ? settings.smtpSecure
+          : null,
+      mailFrom: settings.mailFrom?.trim() ? settings.mailFrom.trim() : null,
+      mailFromName: settings.mailFromName?.trim()
+        ? settings.mailFromName.trim()
+        : null,
     };
   }
 }

@@ -5,5 +5,6 @@ export const EMAIL_PROVIDER = Symbol('EMAIL_PROVIDER');
 
 export interface IEmailProvider {
   readonly capabilities: EmailProviderCapabilities;
+  isConfigured(): Promise<boolean>;
   send(options: EmailOptions): Promise<void>;
 }
