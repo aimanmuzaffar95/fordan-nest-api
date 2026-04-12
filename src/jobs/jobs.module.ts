@@ -33,6 +33,7 @@ import { JobSignatureService } from './job-signature.service';
 import { PublicSignatureController } from './public-signature.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EmailModule } from '../email/email.module';
+import { RuntimeSettingsModule } from '../runtime-settings/runtime-settings.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { EmailModule } from '../email/email.module';
     }),
     FilesModule,
     EmailModule,
+    RuntimeSettingsModule,
     NotificationsModule,
     TypeOrmModule.forFeature([
       Job,

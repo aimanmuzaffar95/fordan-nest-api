@@ -43,6 +43,12 @@ export class AdminSettings {
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
   quickLeadDefaultProjectPrice: string;
 
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  esignPublicBaseUrl: string | null;
+
+  @Column({ type: 'int', default: 14 })
+  esignTokenTtlDays: number;
+
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })
   updatedByUser: User | null;

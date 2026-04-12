@@ -21,6 +21,8 @@ export type AdminSettingsPayload = {
   quickLeadDefaultSystemSizeKw: number;
   quickLeadDefaultBatterySizeKwh: number;
   quickLeadDefaultProjectPrice: number;
+  esignPublicBaseUrl: string | null;
+  esignTokenTtlDays: number;
 };
 
 @Injectable()
@@ -107,6 +109,8 @@ export class RuntimeSettingsService {
       quickLeadDefaultSystemSizeKw: '6.6',
       quickLeadDefaultBatterySizeKwh: '10',
       quickLeadDefaultProjectPrice: '0',
+      esignPublicBaseUrl: null,
+      esignTokenTtlDays: 14,
       updatedByUserId: null,
     });
 
@@ -130,6 +134,10 @@ export class RuntimeSettingsService {
       quickLeadDefaultProjectPrice: Number(
         settings.quickLeadDefaultProjectPrice,
       ),
+      esignPublicBaseUrl: settings.esignPublicBaseUrl?.trim()
+        ? settings.esignPublicBaseUrl.trim()
+        : null,
+      esignTokenTtlDays: settings.esignTokenTtlDays ?? 14,
     };
   }
 }

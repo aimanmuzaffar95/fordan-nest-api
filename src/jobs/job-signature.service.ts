@@ -23,6 +23,7 @@ import {
 import { Job } from './entities/job.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import type { CompletePublicSignatureDto } from './dto/complete-public-signature.dto';
+import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
 
 export const ESIGN_CONSENT_VERSION = '1';
 
@@ -69,24 +70,6 @@ function parsePngBase64(raw: string): Buffer {
   return buf;
 }
 
-function publicBaseUrl(): string {
-  const raw = process.env.ESIGN_PUBLIC_BASE_URL?.trim() ?? '';
-  if (!raw) {
-    throw new BadRequestException({
-      message:
-        'ESIGN_PUBLIC_BASE_URL is not configured. Set it to the web origin where customers open signing links (e.g. https://crm.example.com).',
-      code: 'ESIGN_PUBLIC_BASE_URL_MISSING',
-    });
-  }
-  return raw.replace(/\/+$/, '');
-}
-
-function tokenTtlMs(): number {
-  const days = Number(process.env.ESIGN_TOKEN_TTL_DAYS ?? '14');
-  const safe = Number.isFinite(days) && days > 0 && days <= 90 ? days : 14;
-  return safe * 86400000;
-}
-
 @Injectable()
 export class JobSignatureService {
   constructor(
@@ -101,6 +84,7 @@ export class JobSignatureService {
     private readonly pdfMerge: JobSignaturePdfMergeService,
     private readonly files: FilesService,
     private readonly email: EmailService,
+    private readonly runtimeSettings: RuntimeSettingsService,
   ) {}
 
   private assertStaff(viewer: JobListViewer): void {
@@ -109,6 +93,33 @@ export class JobSignatureService {
         'Installers cannot create signature requests',
       );
     }
+  }
+
+  private async resolvePublicBaseUrl(): Promise<string> {
+    const payload = await this.runtimeSettings.getSettings();
+    const fromDb = payload.esignPublicBaseUrl?.trim();
+    if (fromDb) {
+      return fromDb.replace(/\/+$/, '');
+    }
+    const fromEnv = process.env.ESIGN_PUBLIC_BASE_URL?.trim() ?? '';
+    if (fromEnv) {
+      return fromEnv.replace(/\/+$/, '');
+    }
+    throw new BadRequestException({
+      message:
+        'E-sign web URL is not configured. Set it under Settings (admin) or set ESIGN_PUBLIC_BASE_URL for the API (e.g. https://crm.example.com).',
+      code: 'ESIGN_PUBLIC_BASE_URL_MISSING',
+    });
+  }
+
+  private async resolveTokenTtlMs(): Promise<number> {
+    const payload = await this.runtimeSettings.getSettings();
+    let days = payload.esignTokenTtlDays;
+    if (!Number.isFinite(days) || days < 1 || days > 90) {
+      days = Number(process.env.ESIGN_TOKEN_TTL_DAYS ?? '14');
+    }
+    const safe = Number.isFinite(days) && days > 0 && days <= 90 ? days : 14;
+    return safe * 86400000;
   }
 
   private async expireIfNeeded(row: JobSignatureRequest): Promise<void> {
@@ -162,11 +173,11 @@ export class JobSignatureService {
       jobId,
       viewer,
     );
-    const base = publicBaseUrl();
+    const base = await this.resolvePublicBaseUrl();
     const rawToken = randomToken();
     const tokenHash = sha256Hex(rawToken);
     const ref = await this.uniqueReferenceCode();
-    const expiresAt = new Date(Date.now() + tokenTtlMs());
+    const expiresAt = new Date(Date.now() + (await this.resolveTokenTtlMs()));
     await this.cancelOpenRequests(jobId);
     const row = this.signatureRepo.create({
       jobId,
