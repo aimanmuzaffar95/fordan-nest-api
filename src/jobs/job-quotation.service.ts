@@ -7,6 +7,7 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { SendJobQuotationResponseDto } from './dto/send-job-quotation-response.dto';
 import { JobQuotationPdfService } from './job-quotation-pdf.service';
 import { JobsService, type JobListViewer } from './jobs.service';
+import type { JobDetailResponseDto } from './dto/job-detail-response.dto';
 
 export type ProposalConfigItem = {
   id: string;
@@ -25,6 +26,20 @@ export type ProposalConfigItem = {
   efficiency: number | null;
 };
 
+export type ValidatedQuotationContext = {
+  jobDetail: JobDetailResponseDto;
+  proposalItems: ProposalConfigItem[];
+  proposalTotal: number;
+  customerName: string;
+  orderNumber: string;
+  attachmentFilename: string;
+  customerEmail: string;
+};
+
+export type ValidatedQuotationPdfResult = ValidatedQuotationContext & {
+  pdfBuffer: Buffer;
+};
+
 @Injectable()
 export class JobQuotationService {
   constructor(
@@ -35,11 +50,15 @@ export class JobQuotationService {
     private readonly timelineEventsRepo: Repository<TimelineEvent>,
   ) {}
 
-  async sendQuotation(
+  /**
+   * Validates proposal config + pricing (same rules as quotation email / signing).
+   * When `viewer` is omitted, skips installer/manager RBAC (internal signing pipeline only).
+   */
+  async validateQuotationPrerequisites(
     jobId: string,
-    viewer: JobListViewer,
-  ): Promise<SendJobQuotationResponseDto> {
-    if (viewer.role === UserRole.INSTALLER) {
+    viewer?: JobListViewer,
+  ): Promise<ValidatedQuotationContext> {
+    if (viewer?.role === UserRole.INSTALLER) {
       throw new BadRequestException(
         'Installers cannot send customer quotations',
       );
@@ -78,13 +97,43 @@ export class JobQuotationService {
       `${customer.firstName} ${customer.lastName}`.trim() || 'Customer';
     const orderNumber = jobDetail.job.orderNumber;
     const attachmentFilename = `quotation_${orderNumber.toLowerCase()}.pdf`;
-    const sentAt = new Date().toISOString();
+
+    return {
+      jobDetail,
+      proposalItems,
+      proposalTotal,
+      customerName,
+      orderNumber,
+      attachmentFilename,
+      customerEmail: customer.email,
+    };
+  }
+
+  async buildValidatedQuotationPdf(
+    jobId: string,
+    viewer?: JobListViewer,
+  ): Promise<ValidatedQuotationPdfResult> {
+    const ctx = await this.validateQuotationPrerequisites(jobId, viewer);
+    const {
+      jobDetail,
+      proposalItems,
+      proposalTotal,
+      customerName,
+      orderNumber,
+      attachmentFilename,
+      customerEmail,
+    } = ctx;
+
+    const customer = jobDetail.customer;
+    if (!customer) {
+      throw new BadRequestException('Customer email is missing for this job');
+    }
 
     const pdfBuffer = await this.quotationPdf.buildQuotationPdf({
       attachmentFilename,
       customerName,
       customerAddress: customer.address?.trim() ?? '',
-      customerEmail: customer.email,
+      customerEmail,
       orderNumber,
       systemTypeLabel: this.toSystemTypeLabel(jobDetail.job.systemType),
       systemSizeLabel: this.toSystemSizeLabel(jobDetail.job.systemSizeKw),
@@ -93,8 +142,29 @@ export class JobQuotationService {
       proposalTotal,
     });
 
+    return { ...ctx, pdfBuffer };
+  }
+
+  async sendQuotation(
+    jobId: string,
+    viewer: JobListViewer,
+  ): Promise<SendJobQuotationResponseDto> {
+    const {
+      pdfBuffer,
+      jobDetail,
+      proposalItems,
+      proposalTotal,
+      customerName,
+      orderNumber,
+      attachmentFilename,
+      customerEmail,
+    } = await this.buildValidatedQuotationPdf(jobId, viewer);
+
+    const customer = jobDetail.customer;
+    const sentAt = new Date().toISOString();
+
     await this.email.send({
-      to: customer.email,
+      to: customerEmail,
       subject: `Your Fordan Solar quotation for ${orderNumber}`,
       template: 'quotation',
       context: {
@@ -103,7 +173,8 @@ export class JobQuotationService {
         systemTypeLabel: this.toSystemTypeLabel(jobDetail.job.systemType),
         systemSizeLabel: this.toSystemSizeLabel(jobDetail.job.systemSizeKw),
         batterySizeLabel: this.toBatterySizeLabel(jobDetail.job.batterySizeKwh),
-        projectAddress: customer.address?.trim() || 'Address available on file',
+        projectAddress:
+          customer?.address?.trim() || 'Address available on file',
         proposalItems: proposalItems.map((item) => ({
           label: item.name,
           subtitle: item.subtitle,
@@ -128,7 +199,7 @@ export class JobQuotationService {
         jobId,
         type: 'quotation_sent',
         payload: {
-          recipientEmail: customer.email,
+          recipientEmail: customerEmail,
           proposalTotal: proposalTotal.toFixed(2),
           attachmentFilename,
           sentAt,
@@ -139,7 +210,7 @@ export class JobQuotationService {
 
     return {
       jobId,
-      recipientEmail: customer.email,
+      recipientEmail: customerEmail,
       sentAt,
       proposalTotal,
       attachmentFilename,

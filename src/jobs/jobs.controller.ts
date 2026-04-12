@@ -52,6 +52,8 @@ import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.ser
 import { JobsService } from './jobs.service';
 import { JobQuotationService } from './job-quotation.service';
 import { SendJobQuotationResponseDto } from './dto/send-job-quotation-response.dto';
+import { CreateJobSignatureRequestDto } from './dto/create-job-signature-request.dto';
+import { JobSignatureService } from './job-signature.service';
 
 @ApiTags('Jobs')
 @ApiBearerAuth('JWT')
@@ -66,6 +68,7 @@ export class JobsController {
     private readonly jobQuotation: JobQuotationService,
     private readonly filesService: FilesService,
     private readonly leadCaptureInsightsService: LeadCaptureInsightsService,
+    private readonly jobSignatures: JobSignatureService,
   ) {}
 
   @Get()
@@ -385,6 +388,47 @@ export class JobsController {
       throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.jobs.updateProposalConfig(id, dto, { userId, role });
+  }
+
+  @Get(':id/signature-requests')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'List e-signature requests for a job',
+    description:
+      'Returns recent signature requests (pending, viewed, signed, etc.). **Manager:** only within your job scope.',
+  })
+  listSignatureRequests(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+    return this.jobSignatures.listForJob(id, { userId, role });
+  }
+
+  @Post(':id/signature-requests')
+  @HttpCode(HttpStatus.CREATED)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Create e-signature request (quotation)',
+    description:
+      'Creates a signing link for the current saved proposal quotation. Cancels other open requests for the job. **400** when `ESIGN_PUBLIC_BASE_URL` is missing. **503** when `sendEmail` is true and SMTP fails.',
+  })
+  createSignatureRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateJobSignatureRequestDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+    const sendEmail = dto.sendEmail !== false;
+    return this.jobSignatures.createRequest(id, { userId, role }, sendEmail);
   }
 
   @Post(':id/send-quotation')

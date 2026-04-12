@@ -266,6 +266,82 @@ export class FilesService {
     );
   }
 
+  /**
+   * Store a server-generated PDF for a job (e.g. e-signed quotation) with optional timeline row.
+   */
+  async persistJobGeneratedPdf(args: {
+    jobId: string;
+    buffer: Buffer;
+    displayName: string;
+    kind: UploadKind;
+    contentType: string;
+    uploadedByUserId: string | null;
+    timelineActorUserId: string | null;
+  }): Promise<FileEntity> {
+    const job = await this.jobsRepo.findOne({ where: { id: args.jobId } });
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    const stored = await this.storageService.store({
+      ownerType: 'job',
+      ownerId: args.jobId,
+      kind: args.kind,
+      originalName: `${args.displayName.replace(/[^a-zA-Z0-9._-]+/g, '_')}.pdf`,
+      contentType: args.contentType,
+      buffer: args.buffer,
+    });
+
+    const savedUpload = await this.dataSource.transaction(async (manager) => {
+      const fileRepository = manager.getRepository(FileEntity);
+      const timelineRepository = manager.getRepository(TimelineEvent);
+      const usersRepository = manager.getRepository(User);
+
+      const uploadedByUser = args.uploadedByUserId
+        ? await usersRepository.findOne({
+            where: { id: args.uploadedByUserId },
+            select: ['id', 'firstName', 'lastName'],
+          })
+        : null;
+
+      const savedFile = await fileRepository.save(
+        fileRepository.create({
+          ownerType: 'job',
+          ownerId: args.jobId,
+          kind: args.kind,
+          storageDriver: stored.storageDriver,
+          storageBucket: stored.storageBucket,
+          storageKey: stored.storageKey,
+          originalName: null,
+          displayName: args.displayName,
+          contentType: args.contentType,
+          sizeBytes: String(args.buffer.length),
+          uploadedByUserId: args.uploadedByUserId,
+        }),
+      );
+
+      await timelineRepository.save(
+        timelineRepository.create({
+          jobId: args.jobId,
+          type: 'job_file_uploaded',
+          payload: {
+            fileId: savedFile.id,
+            kind: savedFile.kind,
+            displayName: savedFile.displayName,
+            contentType: savedFile.contentType,
+            sizeBytes: savedFile.sizeBytes,
+            source: 'esign_completion',
+          },
+          createdByUserId: args.timelineActorUserId,
+        }),
+      );
+
+      return { savedFile, uploadedByUser };
+    });
+
+    return savedUpload.savedFile;
+  }
+
   async getJobFileDownload(
     jobId: string,
     fileId: string,

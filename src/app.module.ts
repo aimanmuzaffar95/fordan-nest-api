@@ -13,6 +13,7 @@ import { JobInternalComment } from './jobs/entities/job-internal-comment.entity'
 import { JobProposalSelection } from './jobs/entities/job-proposal-selection.entity';
 import { JobsModule } from './jobs/jobs.module';
 import { Job } from './jobs/entities/job.entity';
+import { JobSignatureRequest } from './jobs/entities/job-signature-request.entity';
 import { Invoice } from './invoices/entities/invoice.entity';
 import { InvoiceActivity } from './invoices/entities/invoice-activity.entity';
 import { InvoiceItem } from './invoices/entities/invoice-item.entity';
@@ -122,6 +123,7 @@ const publicLeadThrottleLimit = Number(
         UserCredential,
         Customer,
         Job,
+        JobSignatureRequest,
         JobAuditLog,
         JobInternalComment,
         JobProposalSelection,

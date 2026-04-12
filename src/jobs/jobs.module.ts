@@ -8,6 +8,7 @@ import { JobAuditLog } from './entities/job-audit-log.entity';
 import { JobInternalComment } from './entities/job-internal-comment.entity';
 import { JobProposalSelection } from './entities/job-proposal-selection.entity';
 import { Job } from './entities/job.entity';
+import { JobSignatureRequest } from './entities/job-signature-request.entity';
 import { Assignment } from '../assignments/entities/assignment.entity';
 import { Battery } from '../batteries/entities/battery.entity';
 import { MeterApplication } from '../metering/entities/meter-application.entity';
@@ -27,6 +28,9 @@ import { AdminDashboardReportsService } from '../reports/admin-dashboard.service
 import { ReportsController } from '../reports/reports.controller';
 import { JobQuotationPdfService } from './job-quotation-pdf.service';
 import { JobQuotationService } from './job-quotation.service';
+import { JobSignaturePdfMergeService } from './job-signature-pdf-merge.service';
+import { JobSignatureService } from './job-signature.service';
+import { PublicSignatureController } from './public-signature.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EmailModule } from '../email/email.module';
 
@@ -40,6 +44,7 @@ import { EmailModule } from '../email/email.module';
     NotificationsModule,
     TypeOrmModule.forFeature([
       Job,
+      JobSignatureRequest,
       JobAuditLog,
       JobInternalComment,
       JobProposalSelection,
@@ -58,6 +63,7 @@ import { EmailModule } from '../email/email.module';
   ],
   controllers: [
     JobsController,
+    PublicSignatureController,
     CustomerJobsController,
     AdminDashboardController,
     ReportsController,
@@ -66,6 +72,8 @@ import { EmailModule } from '../email/email.module';
     JobsService,
     JobQuotationPdfService,
     JobQuotationService,
+    JobSignaturePdfMergeService,
+    JobSignatureService,
     JobAuditLogsService,
     LeadCaptureInsightsService,
     AdminDashboardReportsService,
