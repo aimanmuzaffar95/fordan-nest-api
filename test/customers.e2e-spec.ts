@@ -159,6 +159,7 @@ describe('Customers (e2e)', () => {
         address: '123 Main St',
         phone: '  +15550001111 ',
         email: '  jane@example.com ',
+        acquisitionSource: 'social_media',
       })
       .expect(201);
 
@@ -171,6 +172,8 @@ describe('Customers (e2e)', () => {
       address: '123 Main St',
       phone: '+15550001111',
       email: 'jane@example.com',
+      acquisitionSource: 'social_media',
+      acquisitionSourceOther: null,
     });
     expect(typeof body.data.id).toBe('string');
     expect(typeof body.data.createdAt).toBe('string');
@@ -185,6 +188,7 @@ describe('Customers (e2e)', () => {
         lastName: 'Doe',
         phone: '  ',
         email: 'not-an-email',
+        acquisitionSource: 'social_media',
       })
       .expect(400);
   });
@@ -693,6 +697,7 @@ describe('Customers (e2e)', () => {
         lastName: 'Two',
         phone: '222',
         email: 'dup@example.com',
+        acquisitionSource: 'word_of_mouth',
       })
       .expect(409);
 
@@ -764,6 +769,7 @@ describe('Customers as installer (e2e)', () => {
         lastName: 'Lead',
         phone: '+15559990000',
         email: 'field-lead@example.com',
+        acquisitionSource: 'cold_outreach',
       })
       .expect(201);
 

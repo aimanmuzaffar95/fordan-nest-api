@@ -10,6 +10,8 @@ export class CustomerResponseDto {
   phone: string;
   secondaryPhone: string | null;
   email: string;
+  acquisitionSource: string | null;
+  acquisitionSourceOther: string | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -41,6 +43,8 @@ export class CustomerResponseDto {
       phone: entity.phone,
       secondaryPhone: entity.secondaryPhone,
       email: entity.email,
+      acquisitionSource: entity.acquisitionSource,
+      acquisitionSourceOther: entity.acquisitionSourceOther,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
     };

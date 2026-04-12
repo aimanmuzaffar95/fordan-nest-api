@@ -23,6 +23,7 @@ import { CustomerResponseDto } from './dto/customer-response.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerAuditLog } from './entities/customer-audit-log.entity';
 import { Customer } from './entities/customer.entity';
+import { CustomerAcquisitionSource } from './constants/customer-acquisition-source.constants';
 
 type TimelineEventDto = {
   event: string;
@@ -74,6 +75,12 @@ export class CustomersService {
       throw new ConflictException('Email already exists');
     }
 
+    const { acquisitionSource, acquisitionSourceOther } =
+      this.normalizeAcquisitionSourceValues(
+        dto.acquisitionSource,
+        dto.acquisitionSourceOther,
+      );
+
     const customer = this.customersRepository.create({
       firstName: dto.firstName,
       lastName: dto.lastName,
@@ -83,6 +90,8 @@ export class CustomersService {
       phone: dto.phone,
       secondaryPhone: dto.secondaryPhone ?? null,
       email: dto.email,
+      acquisitionSource,
+      acquisitionSourceOther,
     });
 
     const saved = await this.customersRepository.save(customer);
@@ -226,6 +235,8 @@ export class CustomersService {
       phone: customer.phone,
       secondaryPhone: customer.secondaryPhone,
       email: customer.email,
+      acquisitionSource: customer.acquisitionSource,
+      acquisitionSourceOther: customer.acquisitionSourceOther,
     };
     const addressChanged =
       typeof dto.address !== 'undefined' && dto.address !== original.address;
@@ -263,6 +274,22 @@ export class CustomersService {
     if (typeof dto.email !== 'undefined') {
       customer.email = dto.email;
     }
+
+    const nextAcquisitionSource =
+      dto.acquisitionSource ?? customer.acquisitionSource;
+    const nextAcquisitionSourceOtherRaw =
+      typeof dto.acquisitionSourceOther !== 'undefined'
+        ? dto.acquisitionSourceOther
+        : customer.acquisitionSourceOther;
+    const {
+      acquisitionSource: normalizedAcquisitionSource,
+      acquisitionSourceOther: normalizedAcquisitionSourceOther,
+    } = this.normalizeAcquisitionSourceValues(
+      nextAcquisitionSource,
+      nextAcquisitionSourceOtherRaw ?? undefined,
+    );
+    customer.acquisitionSource = normalizedAcquisitionSource;
+    customer.acquisitionSourceOther = normalizedAcquisitionSourceOther;
 
     try {
       const updated = await this.customersRepository.save(customer);
@@ -458,6 +485,8 @@ export class CustomersService {
       phone: string;
       secondaryPhone: string | null;
       email: string;
+      acquisitionSource: string | null;
+      acquisitionSourceOther: string | null;
     },
     current: Customer,
   ): CustomerAuditChange[] {
@@ -521,6 +550,21 @@ export class CustomersService {
       });
     }
 
+    if (
+      previous.acquisitionSource !== current.acquisitionSource ||
+      previous.acquisitionSourceOther !== current.acquisitionSourceOther
+    ) {
+      changes.push({
+        eventType: 'acquisition_source_updated',
+        meta: {
+          oldAcquisitionSource: previous.acquisitionSource,
+          oldAcquisitionSourceOther: previous.acquisitionSourceOther,
+          newAcquisitionSource: current.acquisitionSource,
+          newAcquisitionSourceOther: current.acquisitionSourceOther,
+        },
+      });
+    }
+
     return changes;
   }
 
@@ -538,9 +582,42 @@ export class CustomersService {
         return 'Address updated';
       case 'coordinates_updated':
         return 'Map location updated';
+      case 'acquisition_source_updated':
+        return 'Acquisition source updated';
       default:
         return 'Customer record updated';
     }
+  }
+
+  private normalizeAcquisitionSourceValues(
+    source?: string | null,
+    other?: string,
+  ): {
+    acquisitionSource: CustomerAcquisitionSource | null;
+    acquisitionSourceOther: string | null;
+  } {
+    if (!source) {
+      return { acquisitionSource: null, acquisitionSourceOther: null };
+    }
+
+    if (source !== 'other') {
+      return {
+        acquisitionSource: source as CustomerAcquisitionSource,
+        acquisitionSourceOther: null,
+      };
+    }
+
+    const normalizedOther = typeof other === 'string' ? other.trim() : '';
+    if (!normalizedOther) {
+      throw new BadRequestException(
+        'acquisitionSourceOther is required when acquisitionSource is other',
+      );
+    }
+
+    return {
+      acquisitionSource: 'other',
+      acquisitionSourceOther: normalizedOther,
+    };
   }
 
   private normalizeMeta(payload: unknown): Record<string, unknown> {

@@ -35,6 +35,12 @@ export class Customer {
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
 
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  acquisitionSource: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  acquisitionSourceOther: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

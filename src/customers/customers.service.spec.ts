@@ -118,6 +118,7 @@ describe('CustomersService', () => {
       lastName: 'Doe',
       phone: '+15550001111',
       email: 'jane@example.com',
+      acquisitionSource: 'social_media',
     });
 
     expect(repository.create.mock.calls[0]?.[0]).toEqual({
@@ -129,6 +130,8 @@ describe('CustomersService', () => {
       phone: '+15550001111',
       secondaryPhone: null,
       email: 'jane@example.com',
+      acquisitionSource: 'social_media',
+      acquisitionSourceOther: null,
     });
     expect(result).toMatchObject({
       id: saved.id,
@@ -146,6 +149,7 @@ describe('CustomersService', () => {
         lastName: 'Doe',
         phone: '+15550001111',
         email: 'jane@example.com',
+        acquisitionSource: 'social_media',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
   });

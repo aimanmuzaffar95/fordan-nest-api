@@ -2,13 +2,16 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsEmail,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Max,
   Min,
   MinLength,
 } from 'class-validator';
+import { CUSTOMER_ACQUISITION_SOURCE_VALUES } from '../constants/customer-acquisition-source.constants';
 
 export class CreateCustomerDto {
   @ApiProperty({ example: 'Jane' })
@@ -72,4 +75,28 @@ export class CreateCustomerDto {
   )
   @IsEmail()
   email: string;
+
+  @ApiProperty({
+    enum: CUSTOMER_ACQUISITION_SOURCE_VALUES,
+    example: 'social_media',
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @IsIn(CUSTOMER_ACQUISITION_SOURCE_VALUES)
+  acquisitionSource: string;
+
+  @ApiPropertyOptional({
+    example: 'Local community WhatsApp group',
+    description: 'Required when acquisitionSource is "other".',
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  acquisitionSourceOther?: string;
 }

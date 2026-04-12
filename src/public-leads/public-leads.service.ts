@@ -51,6 +51,7 @@ export class PublicLeadsService {
       address,
       phone: dto.phone,
       email: dto.email,
+      acquisitionSource: 'website_form',
     });
 
     const settings = await this.runtimeSettings.getSettings();
