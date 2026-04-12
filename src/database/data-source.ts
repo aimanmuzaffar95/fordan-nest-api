@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
+import { loadEnvFile } from '../common/load-env.util';
 import { User } from '../users/entities/user.entity';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { Customer } from '../customers/entities/customer.entity';
@@ -25,6 +26,8 @@ import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 import { Inverter } from '../inverters/entities/inverter.entity';
 import { Battery } from '../batteries/entities/battery.entity';
 import { AdminSettings } from '../runtime-settings/admin-settings.entity';
+
+loadEnvFile();
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;

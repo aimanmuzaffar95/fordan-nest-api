@@ -48,6 +48,10 @@ import { AlertsModule } from './alerts/alerts.module';
 import { Notification } from './notifications/entities/notification.entity';
 import { NotificationsModule } from './notifications/notifications.module';
 import { EmployeeRole } from './staff/entities/employee-role.entity';
+import { getSettingsEncryptionKey } from './common/crypto.util';
+import { loadEnvFile } from './common/load-env.util';
+
+loadEnvFile();
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -102,6 +106,8 @@ const publicLeadThrottleTtl = Number(
 const publicLeadThrottleLimit = Number(
   process.env.PUBLIC_LEAD_THROTTLE_LIMIT ?? '12',
 );
+
+getSettingsEncryptionKey();
 
 @Module({
   imports: [

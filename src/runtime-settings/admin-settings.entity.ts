@@ -43,6 +43,27 @@ export class AdminSettings {
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
   quickLeadDefaultProjectPrice: string;
 
+  @Column({ type: 'text', nullable: true })
+  smtpHost: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  smtpPort: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  smtpSecure: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  smtpUser: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  smtpPass: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  mailFrom: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  mailFromName: string | null;
+
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })
   updatedByUser: User | null;

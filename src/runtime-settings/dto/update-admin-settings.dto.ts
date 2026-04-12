@@ -1,4 +1,13 @@
-import { IsBoolean, IsNumber, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsNumber,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class UpdateAdminSettingsDto {
   @IsOptional()
@@ -50,4 +59,39 @@ export class UpdateAdminSettingsDto {
   @Min(0)
   @Max(100000000)
   quickLeadDefaultProjectPrice?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(253)
+  smtpHost?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  smtpPort?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  smtpSecure?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  smtpUser?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  smtpPass?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  mailFrom?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  mailFromName?: string;
 }
