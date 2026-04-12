@@ -59,8 +59,12 @@ export class JobQuotationService {
   async validateQuotationPrerequisites(
     jobId: string,
     viewer?: JobListViewer,
+    options?: { allowInstallerPdfDownload?: boolean },
   ): Promise<ValidatedQuotationContext> {
-    if (viewer?.role === UserRole.INSTALLER) {
+    if (
+      viewer?.role === UserRole.INSTALLER &&
+      !options?.allowInstallerPdfDownload
+    ) {
       throw new BadRequestException(
         'Installers cannot send customer quotations',
       );
@@ -114,8 +118,13 @@ export class JobQuotationService {
   async buildValidatedQuotationPdf(
     jobId: string,
     viewer?: JobListViewer,
+    options?: { allowInstallerPdfDownload?: boolean },
   ): Promise<ValidatedQuotationPdfResult> {
-    const ctx = await this.validateQuotationPrerequisites(jobId, viewer);
+    const ctx = await this.validateQuotationPrerequisites(
+      jobId,
+      viewer,
+      options,
+    );
     const {
       jobDetail,
       proposalItems,

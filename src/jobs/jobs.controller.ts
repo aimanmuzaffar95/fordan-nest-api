@@ -131,6 +131,42 @@ export class JobsController {
     );
   }
 
+  /** Must stay above `@Get(':id')` so `quotation.pdf` is not parsed as a UUID. */
+  @Get(':id/quotation.pdf')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Download quotation PDF',
+    description:
+      'Streams the same validated quotation PDF as **POST …/send-quotation** (proposal config + **Settings → Templates** PDF branding). **400** when prerequisites fail (same as send-quotation). **404** when the job is outside RBAC scope. **Installers** may download for assigned jobs only.',
+  })
+  async downloadQuotationPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+    @Res() res: Response,
+  ): Promise<void> {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+
+    const { pdfBuffer, attachmentFilename } =
+      await this.jobQuotation.buildValidatedQuotationPdf(
+        id,
+        { userId, role },
+        { allowInstallerPdfDownload: role === UserRole.INSTALLER },
+      );
+
+    const safeName =
+      attachmentFilename.replace(/[\r\n"]/g, '_').trim() || 'quotation.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${safeName}"`,
+    );
+    res.send(pdfBuffer);
+  }
+
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
   @ApiOperation({
