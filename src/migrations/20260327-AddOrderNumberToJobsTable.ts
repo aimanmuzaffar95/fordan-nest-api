@@ -28,6 +28,28 @@ export class AddOrderNumberToJobsTable20260327_1700000000016 implements Migratio
       );
     }
 
+    const jobsTableBeforeMigration = await queryRunner.getTable('jobs');
+    const existingOrderNumberColumn = jobsTableBeforeMigration?.findColumnByName(
+      'orderNumber',
+    );
+    const hasUniqueOrderNumberConstraint = Boolean(
+      jobsTableBeforeMigration?.uniques.some(
+        (unique) =>
+          unique.columnNames.length === 1 &&
+          unique.columnNames[0] === 'orderNumber',
+      ) ||
+        jobsTableBeforeMigration?.indices.some(
+          (index) =>
+            index.isUnique &&
+            index.columnNames.length === 1 &&
+            index.columnNames[0] === 'orderNumber',
+        ),
+    );
+
+    if (existingOrderNumberColumn && !existingOrderNumberColumn.isNullable && hasUniqueOrderNumberConstraint) {
+      return;
+    }
+
     const dialect = queryRunner.connection.options.type;
     const tableName = this.escapeIdentifier('jobs', dialect);
     const idColumn = this.escapeIdentifier('id', dialect);
@@ -40,10 +62,17 @@ export class AddOrderNumberToJobsTable20260327_1700000000016 implements Migratio
 
     let nextSequence = 1001;
     const claimedNumbers = new Set<number>();
+    const jobsNeedingOrderNumber = new Set<string>();
 
     rows.forEach((row) => {
       const parsed = this.parseOrderNumber(row.orderNumber);
       if (parsed === null) {
+        jobsNeedingOrderNumber.add(row.id);
+        return;
+      }
+
+      if (claimedNumbers.has(parsed)) {
+        jobsNeedingOrderNumber.add(row.id);
         return;
       }
 
@@ -54,7 +83,17 @@ export class AddOrderNumberToJobsTable20260327_1700000000016 implements Migratio
     });
 
     for (const row of rows) {
-      if (this.parseOrderNumber(row.orderNumber) !== null) {
+      if (!jobsNeedingOrderNumber.has(row.id)) {
+        continue;
+      }
+
+      await queryRunner.query(
+        `UPDATE ${tableName} SET ${orderNumberColumn} = 'TMP-${row.id}' WHERE ${idColumn} = '${row.id}'`,
+      );
+    }
+
+    for (const row of rows) {
+      if (!jobsNeedingOrderNumber.has(row.id)) {
         continue;
       }
 
@@ -84,7 +123,10 @@ export class AddOrderNumberToJobsTable20260327_1700000000016 implements Migratio
 
     const jobsTable = await queryRunner.getTable('jobs');
     const existingIndex = jobsTable?.indices.find(
-      (index) => index.name === this.uniqueIndexName,
+      (index) =>
+        index.isUnique &&
+        index.columnNames.length === 1 &&
+        index.columnNames[0] === 'orderNumber',
     );
 
     if (!existingIndex) {

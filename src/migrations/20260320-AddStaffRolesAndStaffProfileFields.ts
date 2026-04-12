@@ -9,89 +9,128 @@ import {
 
 export class AddStaffRolesAndStaffProfileFields20260320_1700000000008 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.createTable(
-      new Table({
-        name: 'staff_roles',
-        columns: [
-          {
-            name: 'id',
-            type: 'uuid',
-            isPrimary: true,
-            isNullable: false,
-            default: 'uuid_generate_v4()',
-          },
-          {
-            name: 'name',
-            type: 'varchar',
-            length: '100',
-            isNullable: false,
-            isUnique: true,
-          },
-          {
-            name: 'description',
-            type: 'varchar',
-            length: '500',
-            isNullable: false,
-          },
-          {
-            name: 'createdAt',
-            type: 'timestamp',
-            isNullable: false,
-            default: 'now()',
-          },
-          {
-            name: 'updatedAt',
-            type: 'timestamp',
-            isNullable: false,
-            default: 'now()',
-          },
-        ],
-      }),
+    const hasStaffRolesTable = await queryRunner.hasTable('staff_roles');
+    if (!hasStaffRolesTable) {
+      await queryRunner.createTable(
+        new Table({
+          name: 'staff_roles',
+          columns: [
+            {
+              name: 'id',
+              type: 'uuid',
+              isPrimary: true,
+              isNullable: false,
+              default: 'uuid_generate_v4()',
+            },
+            {
+              name: 'name',
+              type: 'varchar',
+              length: '100',
+              isNullable: false,
+              isUnique: true,
+            },
+            {
+              name: 'description',
+              type: 'varchar',
+              length: '500',
+              isNullable: false,
+            },
+            {
+              name: 'createdAt',
+              type: 'timestamp',
+              isNullable: false,
+              default: 'now()',
+            },
+            {
+              name: 'updatedAt',
+              type: 'timestamp',
+              isNullable: false,
+              default: 'now()',
+            },
+          ],
+        }),
+      );
+    }
+
+    const columnsToAdd: TableColumn[] = [];
+
+    if (!(await queryRunner.hasColumn('users', 'address'))) {
+      columnsToAdd.push(
+        new TableColumn({
+          name: 'address',
+          type: 'varchar',
+          length: '255',
+          isNullable: true,
+        }),
+      );
+    }
+
+    if (!(await queryRunner.hasColumn('users', 'identificationNumber'))) {
+      columnsToAdd.push(
+        new TableColumn({
+          name: 'identificationNumber',
+          type: 'varchar',
+          length: '255',
+          isNullable: true,
+          isUnique: true,
+        }),
+      );
+    }
+
+    if (!(await queryRunner.hasColumn('users', 'staffRoleId'))) {
+      columnsToAdd.push(
+        new TableColumn({
+          name: 'staffRoleId',
+          type: 'uuid',
+          isNullable: true,
+        }),
+      );
+    }
+
+    if (!(await queryRunner.hasColumn('users', 'deletedAt'))) {
+      columnsToAdd.push(
+        new TableColumn({
+          name: 'deletedAt',
+          type: 'timestamp',
+          isNullable: true,
+        }),
+      );
+    }
+
+    if (columnsToAdd.length > 0) {
+      await queryRunner.addColumns('users', columnsToAdd);
+    }
+
+    const usersTable = await queryRunner.getTable('users');
+    const hasStaffRoleForeignKey = usersTable?.foreignKeys.some((foreignKey) =>
+      foreignKey.columnNames.includes('staffRoleId'),
     );
 
-    await queryRunner.addColumns('users', [
-      new TableColumn({
-        name: 'address',
-        type: 'varchar',
-        length: '255',
-        isNullable: true,
-      }),
-      new TableColumn({
-        name: 'identificationNumber',
-        type: 'varchar',
-        length: '255',
-        isNullable: true,
-        isUnique: true,
-      }),
-      new TableColumn({
-        name: 'staffRoleId',
-        type: 'uuid',
-        isNullable: true,
-      }),
-      new TableColumn({
-        name: 'deletedAt',
-        type: 'timestamp',
-        isNullable: true,
-      }),
-    ]);
+    if (!hasStaffRoleForeignKey) {
+      await queryRunner.createForeignKey(
+        'users',
+        new TableForeignKey({
+          columnNames: ['staffRoleId'],
+          referencedColumnNames: ['id'],
+          referencedTableName: 'staff_roles',
+          onDelete: 'SET NULL',
+        }),
+      );
+    }
 
-    await queryRunner.createForeignKey(
-      'users',
-      new TableForeignKey({
-        columnNames: ['staffRoleId'],
-        referencedColumnNames: ['id'],
-        referencedTableName: 'staff_roles',
-        onDelete: 'SET NULL',
-      }),
+    const usersTableWithIndexes = await queryRunner.getTable('users');
+    const hasUsersDeletedRoleIndex = usersTableWithIndexes?.indices.some(
+      (index) => index.name === 'IDX_users_deletedAt_role',
     );
-
-    await queryRunner.createIndex(
-      'users',
-      new TableIndex({
-        name: 'IDX_users_deletedAt_role',
-        columnNames: ['deletedAt', 'role'],
-      }),
-    );
+    if (!hasUsersDeletedRoleIndex) {
+      await queryRunner.createIndex(
+        'users',
+        new TableIndex({
+          name: 'IDX_users_deletedAt_role',
+          columnNames: ['deletedAt', 'role'],
+        }),
+      );
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
@@ -112,13 +151,21 @@ export class AddStaffRolesAndStaffProfileFields20260320_1700000000008 implements
       await queryRunner.dropIndex('users', usersDeletedRoleIndex);
     }
 
-    await queryRunner.dropColumns('users', [
-      'deletedAt',
-      'staffRoleId',
-      'identificationNumber',
-      'address',
-    ]);
+    if (await queryRunner.hasColumn('users', 'deletedAt')) {
+      await queryRunner.dropColumn('users', 'deletedAt');
+    }
+    if (await queryRunner.hasColumn('users', 'staffRoleId')) {
+      await queryRunner.dropColumn('users', 'staffRoleId');
+    }
+    if (await queryRunner.hasColumn('users', 'identificationNumber')) {
+      await queryRunner.dropColumn('users', 'identificationNumber');
+    }
+    if (await queryRunner.hasColumn('users', 'address')) {
+      await queryRunner.dropColumn('users', 'address');
+    }
 
-    await queryRunner.dropTable('staff_roles');
+    if (await queryRunner.hasTable('staff_roles')) {
+      await queryRunner.dropTable('staff_roles');
+    }
   }
 }

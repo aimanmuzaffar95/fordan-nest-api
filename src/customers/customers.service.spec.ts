@@ -1,7 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { UserRole } from '../users/entities/user-role.enum';
 import { Customer } from './entities/customer.entity';
 import { CustomersService } from './customers.service';
@@ -56,6 +56,12 @@ describe('CustomersService', () => {
           provide: getRepositoryToken(Customer),
           useValue: createRepositoryMock(),
         },
+        {
+          provide: DataSource,
+          useValue: {
+            getRepository: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -96,6 +102,7 @@ describe('CustomersService', () => {
       lastName: 'Doe',
       address: null,
       phone: '+15550001111',
+      secondaryPhone: null,
       email: 'jane@example.com',
     });
     expect(result).toMatchObject({

@@ -61,6 +61,7 @@ export class CustomersService {
       lastName: dto.lastName,
       address: dto.address ?? null,
       phone: dto.phone,
+      secondaryPhone: dto.secondaryPhone ?? null,
       email: dto.email,
     });
 
@@ -110,6 +111,7 @@ export class CustomersService {
         WHEN ${fullNameExpr} LIKE :term THEN 0
         WHEN LOWER(customer.email) LIKE :term THEN 1
         WHEN LOWER(customer.phone) LIKE :term THEN 2
+        WHEN LOWER(COALESCE(customer.secondaryPhone, '')) LIKE :term THEN 2
         ELSE 3
       END
     `;
@@ -122,7 +124,10 @@ export class CustomersService {
             .orWhere('LOWER(customer.lastName) LIKE :term', { term })
             .orWhere(`${fullNameExpr} LIKE :term`, { term })
             .orWhere('LOWER(customer.email) LIKE :term', { term })
-            .orWhere('LOWER(customer.phone) LIKE :term', { term });
+            .orWhere('LOWER(customer.phone) LIKE :term', { term })
+            .orWhere("LOWER(COALESCE(customer.secondaryPhone, '')) LIKE :term", {
+              term,
+            });
         }),
       );
     this.applyViewerScope(filteredQueryBuilder, viewer);
@@ -200,6 +205,9 @@ export class CustomersService {
     }
     if (typeof dto.phone !== 'undefined') {
       customer.phone = dto.phone;
+    }
+    if (typeof dto.secondaryPhone !== 'undefined') {
+      customer.secondaryPhone = dto.secondaryPhone;
     }
     if (typeof dto.email !== 'undefined') {
       customer.email = dto.email;

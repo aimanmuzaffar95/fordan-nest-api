@@ -35,6 +35,15 @@ export class CreateCustomerDto {
   @MinLength(1)
   phone: string;
 
+  @ApiPropertyOptional({ example: '+61400000001' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  secondaryPhone?: string;
+
   @ApiProperty({ example: 'jane@example.com' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,

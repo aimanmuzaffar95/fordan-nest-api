@@ -34,6 +34,14 @@ export class UpdateCustomerDto {
   phone?: string;
 
   @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  secondaryPhone?: string;
+
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
   @IsOptional()

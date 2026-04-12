@@ -86,6 +86,13 @@ const DB_NAME =
   process.env.DATABASE_NAME ?? process.env.DB_DATABASE ?? 'nestdb';
 const DB_SOCKET_PATH = process.env.DATABASE_SOCKET_PATH?.trim() || undefined;
 const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
+const MIGRATIONS_RUN = envBool(
+  process.env.DATABASE_MIGRATIONS_RUN,
+  !SYNCHRONIZE,
+);
+const MIGRATION_PATHS = __filename.endsWith('.ts')
+  ? ['src/migrations/*.ts']
+  : ['dist/migrations/*.js'];
 
 const publicLeadThrottleTtl = Number(
   process.env.PUBLIC_LEAD_THROTTLE_TTL_MS ?? '60000',
@@ -143,7 +150,9 @@ const publicLeadThrottleLimit = Number(
         AdminSettings,
         Notification,
       ],
+      migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,
+      migrationsRun: MIGRATIONS_RUN,
     }),
     AuthModule,
     CustomersModule,

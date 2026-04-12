@@ -6,7 +6,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Postgres: ALTER TYPE … ADD VALUE is idempotent via IF NOT EXISTS.
  * MySQL/MariaDB: the ENUM column is redefined to include the new value.
  */
-export class AddPipelineRegressedAuditAction20260411 implements MigrationInterface {
+export class AddPipelineRegressedAuditAction20260411_1775865600000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const dialect = queryRunner.connection.options.type;
 
