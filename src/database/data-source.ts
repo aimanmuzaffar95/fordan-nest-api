@@ -13,6 +13,7 @@ import { JobAuditLog } from '../jobs/entities/job-audit-log.entity';
 import { JobInternalComment } from '../jobs/entities/job-internal-comment.entity';
 import { JobProposalSelection } from '../jobs/entities/job-proposal-selection.entity';
 import { StaffRole } from '../staff/entities/staff-role.entity';
+import { EmployeeRole } from '../staff/entities/employee-role.entity';
 import { Assignment } from '../assignments/entities/assignment.entity';
 import { MeterApplication } from '../metering/entities/meter-application.entity';
 import { Alert } from '../alerts/entities/alert.entity';
@@ -107,6 +108,7 @@ export const AppDataSource = new DataSource({
     InvoiceItem,
     InvoicePayment,
     StaffRole,
+    EmployeeRole,
     Assignment,
     MeterApplication,
     Alert,

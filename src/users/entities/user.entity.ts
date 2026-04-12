@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { UserCredential } from '../../auth/entities/user-credential.entity';
+import { EmployeeRole } from '../../staff/entities/employee-role.entity';
 import { StaffRole } from '../../staff/entities/staff-role.entity';
 import { UserRole } from './user-role.enum';
 
@@ -44,6 +45,13 @@ export class User {
 
   @Column({ type: 'uuid', nullable: true })
   staffRoleId: string | null;
+
+  @ManyToOne(() => EmployeeRole, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'employeeRoleId' })
+  employeeRole: EmployeeRole | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  employeeRoleId: string | null;
 
   @Column({ type: 'timestamp', nullable: true })
   deletedAt: Date | null;

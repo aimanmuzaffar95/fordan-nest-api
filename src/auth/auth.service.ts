@@ -60,6 +60,7 @@ export class AuthService implements OnModuleInit {
     if (shouldSeed) {
       await this.usersService.seedDefaultUsers();
       await this.staffService.seedDefaultStaffRoles();
+      await this.staffService.seedDefaultEmployeeRoles();
     }
   }
 

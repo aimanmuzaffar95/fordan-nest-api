@@ -36,23 +36,29 @@ export class CreateStaffDto {
   @MaxLength(255)
   identificationNumber?: string;
 
-  @IsIn([UserRole.MANAGER, UserRole.INSTALLER])
-  staffType: UserRole.MANAGER | UserRole.INSTALLER;
+  @IsIn([UserRole.MANAGER, UserRole.INSTALLER, UserRole.EMPLOYEE])
+  staffType: UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE;
 
   @IsOptional()
   @IsUUID()
   staffRoleId?: string;
 
+  @IsOptional()
+  @IsUUID()
+  employeeRoleId?: string;
+
   @IsEmail()
   emailAddress: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(100)
-  username: string;
+  username?: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(6)
   @MaxLength(255)
-  password: string;
+  password?: string;
 }

@@ -11,13 +11,14 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { User } from '../users/entities/user.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { EmployeeRole } from './entities/employee-role.entity';
 import { StaffRole } from './entities/staff-role.entity';
 import { StaffController } from './staff.controller';
 import { StaffService } from './staff.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, UserCredential, StaffRole]),
+    TypeOrmModule.forFeature([User, UserCredential, StaffRole, EmployeeRole]),
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'development-secret',
     }),

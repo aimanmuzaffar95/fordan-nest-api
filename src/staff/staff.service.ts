@@ -14,9 +14,11 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
+import { CreateEmployeeRoleDto } from './dto/create-employee-role.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { CreateStaffRoleDto } from './dto/create-staff-role.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
+import { EmployeeRole } from './entities/employee-role.entity';
 import { StaffRole } from './entities/staff-role.entity';
 
 type HashPasswordFn = (
@@ -30,6 +32,12 @@ type StaffRoleSummary = {
   description: string;
 };
 
+type EmployeeRoleSummary = {
+  id: string;
+  name: string;
+  description: string;
+};
+
 export type StaffListItem = {
   id: string;
   firstName: string;
@@ -37,10 +45,11 @@ export type StaffListItem = {
   phoneNumber: string;
   address: string;
   identificationNumber: string;
-  staffType: UserRole.MANAGER | UserRole.INSTALLER;
+  staffType: UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE;
   emailAddress: string;
   username: string;
   staffRole: StaffRoleSummary | null;
+  employeeRole: EmployeeRoleSummary | null;
 };
 
 const hashPassword = hash as unknown as HashPasswordFn;
@@ -56,6 +65,8 @@ export class StaffService {
     private readonly credentialsRepository: Repository<UserCredential>,
     @InjectRepository(StaffRole)
     private readonly staffRolesRepository: Repository<StaffRole>,
+    @InjectRepository(EmployeeRole)
+    private readonly employeeRolesRepository: Repository<EmployeeRole>,
     private readonly dataSource: DataSource,
     private readonly email: EmailService,
     private readonly notificationsService: NotificationsService,
@@ -95,12 +106,13 @@ export class StaffService {
   async listStaff(): Promise<StaffListItem[]> {
     const users = await this.usersRepository.find({
       where: {
-        role: In([UserRole.MANAGER, UserRole.INSTALLER]),
+        role: In([UserRole.MANAGER, UserRole.INSTALLER, UserRole.EMPLOYEE]),
         deletedAt: IsNull(),
       },
       relations: {
         credential: true,
         staffRole: true,
+        employeeRole: true,
       },
       order: {
         firstName: 'ASC',
@@ -113,17 +125,86 @@ export class StaffService {
 
   async createStaff(dto: CreateStaffDto): Promise<StaffListItem> {
     const payload = this.normalizeCreatePayload(dto);
+
+    // Handle EMPLOYEE type (non-technical staff)
+    if (payload.staffType === UserRole.EMPLOYEE) {
+      const employeeRole = await this.resolveEmployeeRole(
+        payload.employeeRoleId,
+      );
+
+      const identificationNumber =
+        payload.identificationNumber?.trim() ||
+        (await this.generateStaffId());
+
+      await this.ensureActiveIdentificationAvailable(identificationNumber);
+      await this.ensureEmailAvailable(payload.emailAddress);
+
+      const user = await this.usersRepository.save(
+        this.usersRepository.create({
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          phoneNumber: payload.phoneNumber,
+          address: payload.address,
+          identificationNumber,
+          role: UserRole.EMPLOYEE,
+          emailAddress: payload.emailAddress,
+          employeeRoleId: employeeRole.id,
+          staffRoleId: null,
+        }),
+      );
+
+      user.employeeRole = employeeRole;
+      const result = this.toStaffListItem(user);
+
+      await this.sendNotificationSafely(
+        () =>
+          this.notificationsService.sendToRole(
+            UserRole.ADMIN,
+            {
+              type: NOTIFICATION_TYPE.STAFF_ACCOUNT_CREATED,
+              title: 'New staff account created',
+              body: `${result.firstName} ${result.lastName} was added as Non-Technical Staff.`,
+              metadata: {
+                staffUserId: result.id,
+                staffType: result.staffType,
+                emailAddress: result.emailAddress,
+              },
+              dedupeKey: `staff-created:${result.id}`,
+            },
+            { excludeUserIds: [result.id] },
+          ),
+        `staff-created:${result.id}`,
+      );
+
+      return result;
+    }
+
+    // Handle MANAGER/INSTALLER (technical staff)
     const staffRole = await this.resolveStaffRole(
       payload.staffType,
       payload.staffRoleId,
     );
+
+    if (!payload.username) {
+      throw new BadRequestException(
+        'Username is required for technical staff',
+      );
+    }
+    if (!payload.password) {
+      throw new BadRequestException(
+        'Password is required for technical staff',
+      );
+    }
+
+    const username = payload.username;
+    const password = payload.password;
 
     const identificationNumber =
       payload.identificationNumber?.trim() || (await this.generateStaffId());
 
     await this.ensureActiveIdentificationAvailable(identificationNumber);
     await this.ensureEmailAvailable(payload.emailAddress);
-    await this.ensureUsernameAvailable(payload.username);
+    await this.ensureUsernameAvailable(username);
 
     const createdStaff = await this.dataSource.transaction(async (manager) => {
       const userRepository = manager.getRepository(User);
@@ -144,8 +225,8 @@ export class StaffService {
 
       const credential = await credentialRepository.save(
         credentialRepository.create({
-          username: payload.username,
-          passwordHash: await hashPassword(payload.password, 10),
+          username,
+          passwordHash: await hashPassword(password, 10),
           mustChangePassword: true,
           user,
         }),
@@ -156,7 +237,7 @@ export class StaffService {
       return this.toStaffListItem(user);
     });
 
-    this.sendWelcomeEmail(createdStaff, payload.password);
+    this.sendWelcomeEmail(createdStaff, password);
     await this.sendNotificationSafely(
       () =>
         this.notificationsService.sendToRole(
@@ -184,15 +265,76 @@ export class StaffService {
     const existing = await this.findActiveStaffOrFail(id);
     const payload = this.normalizeUpdatePayload(dto);
 
+    const nextStaffType =
+      payload.staffType ??
+      (existing.role as UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE);
+
+    // Check credential boundary: prevent type changes between employee and technical staff
+    const isCurrentlyEmployee = existing.role === UserRole.EMPLOYEE;
+    const isNextEmployee = nextStaffType === UserRole.EMPLOYEE;
+
+    if (isCurrentlyEmployee && !isNextEmployee) {
+      throw new BadRequestException(
+        'Staff type cannot be changed from non-technical to technical',
+      );
+    }
+    if (!isCurrentlyEmployee && isNextEmployee) {
+      throw new BadRequestException(
+        'Staff type cannot be changed from technical to non-technical',
+      );
+    }
+
+    // Handle EMPLOYEE update
+    if (isNextEmployee) {
+      const nextEmployeeRoleId =
+        payload.employeeRoleId === undefined
+          ? existing.employeeRoleId
+          : payload.employeeRoleId;
+
+      if (!nextEmployeeRoleId) {
+        throw new BadRequestException(
+          'Non-technical staff must have an employee role',
+        );
+      }
+
+      const employeeRole = await this.resolveEmployeeRole(nextEmployeeRoleId);
+
+      const nextIdentificationNumber =
+        payload.identificationNumber ?? existing.identificationNumber;
+      const nextEmail = payload.emailAddress ?? existing.emailAddress;
+
+      if (!nextIdentificationNumber) {
+        throw new BadRequestException(
+          'Identification number is required for staff members',
+        );
+      }
+
+      await this.ensureActiveIdentificationAvailable(
+        nextIdentificationNumber,
+        id,
+      );
+      await this.ensureEmailAvailable(nextEmail, id);
+
+      existing.firstName = payload.firstName ?? existing.firstName;
+      existing.lastName = payload.lastName ?? existing.lastName;
+      existing.phoneNumber = payload.phoneNumber ?? existing.phoneNumber;
+      existing.address = payload.address ?? existing.address;
+      existing.identificationNumber = nextIdentificationNumber;
+      existing.emailAddress = nextEmail;
+      existing.employeeRoleId = employeeRole.id;
+      existing.employeeRole = employeeRole;
+
+      const savedUser = await this.usersRepository.save(existing);
+      return this.toStaffListItem(savedUser);
+    }
+
+    // Handle MANAGER/INSTALLER update
     if (!existing.credential) {
       throw new BadRequestException(
         'Staff member is missing login credentials. Recreate this record to manage login fields.',
       );
     }
 
-    const nextStaffType =
-      payload.staffType ??
-      (existing.role as UserRole.MANAGER | UserRole.INSTALLER);
     const nextStaffRoleId =
       nextStaffType === UserRole.MANAGER
         ? null
@@ -307,12 +449,13 @@ export class StaffService {
     const user = await this.usersRepository.findOne({
       where: {
         id,
-        role: In([UserRole.MANAGER, UserRole.INSTALLER]),
+        role: In([UserRole.MANAGER, UserRole.INSTALLER, UserRole.EMPLOYEE]),
         deletedAt: IsNull(),
       },
       relations: {
         credential: true,
         staffRole: true,
+        employeeRole: true,
       },
     });
 
@@ -422,7 +565,112 @@ export class StaffService {
     return role;
   }
 
+  private async resolveEmployeeRole(
+    employeeRoleId?: string | null,
+  ): Promise<EmployeeRole> {
+    if (!employeeRoleId) {
+      throw new BadRequestException(
+        'Non-technical staff members must have an employee role',
+      );
+    }
+
+    const role = await this.employeeRolesRepository.findOne({
+      where: { id: employeeRoleId },
+    });
+
+    if (!role) {
+      throw new NotFoundException('Employee role not found');
+    }
+
+    return role;
+  }
+
+  async listEmployeeRoles(): Promise<EmployeeRoleSummary[]> {
+    const roles = await this.employeeRolesRepository.find({
+      order: {
+        name: 'ASC',
+      },
+    });
+
+    return roles.map((role) => ({
+      id: role.id,
+      name: role.name,
+      description: role.description,
+    }));
+  }
+
+  async createEmployeeRole(
+    dto: CreateEmployeeRoleDto,
+  ): Promise<EmployeeRoleSummary> {
+    await this.ensureEmployeeRoleNameAvailable(dto.name);
+
+    const role = await this.employeeRolesRepository.save(
+      this.employeeRolesRepository.create({
+        name: dto.name.trim(),
+        description: dto.description.trim(),
+      }),
+    );
+
+    return {
+      id: role.id,
+      name: role.name,
+      description: role.description,
+    };
+  }
+
+  async seedDefaultEmployeeRoles(): Promise<void> {
+    const defaults: Array<Pick<EmployeeRole, 'name' | 'description'>> = [
+      {
+        name: 'Sales Representative',
+        description:
+          'Handles customer outreach, lead qualification and sales pipeline',
+      },
+      {
+        name: 'Customer Support',
+        description:
+          'Manages customer inquiries, after-sales support and issue resolution',
+      },
+    ];
+
+    for (const role of defaults) {
+      const existing = await this.employeeRolesRepository
+        .createQueryBuilder('role')
+        .where('LOWER(role.name) = LOWER(:name)', { name: role.name })
+        .getOne();
+
+      if (existing) {
+        continue;
+      }
+
+      await this.employeeRolesRepository.save(
+        this.employeeRolesRepository.create(role),
+      );
+    }
+  }
+
+  private async ensureEmployeeRoleNameAvailable(
+    name: string,
+    excludeId?: string,
+  ): Promise<void> {
+    const query = this.employeeRolesRepository
+      .createQueryBuilder('role')
+      .where('LOWER(role.name) = LOWER(:name)', {
+        name: name.trim(),
+      });
+
+    if (excludeId) {
+      query.andWhere('role.id != :excludeId', { excludeId });
+    }
+
+    const existing = await query.getOne();
+    if (existing) {
+      throw new ConflictException('Employee role already exists');
+    }
+  }
+
   private normalizeCreatePayload(dto: CreateStaffDto): CreateStaffDto {
+    const isEmployee = dto.staffType === UserRole.EMPLOYEE;
+
     return {
       ...dto,
       firstName: dto.firstName.trim(),
@@ -431,9 +679,10 @@ export class StaffService {
       address: dto.address.trim(),
       identificationNumber: dto.identificationNumber?.trim(),
       emailAddress: dto.emailAddress.trim().toLowerCase(),
-      username: dto.username.trim(),
-      password: dto.password.trim(),
+      username: isEmployee ? undefined : dto.username?.trim(),
+      password: isEmployee ? undefined : dto.password?.trim(),
       staffRoleId: dto.staffRoleId?.trim(),
+      employeeRoleId: dto.employeeRoleId?.trim(),
     };
   }
 
@@ -451,6 +700,10 @@ export class StaffService {
         dto.staffRoleId === undefined || dto.staffRoleId === null
           ? dto.staffRoleId
           : dto.staffRoleId.trim(),
+      employeeRoleId:
+        dto.employeeRoleId === undefined || dto.employeeRoleId === null
+          ? dto.employeeRoleId
+          : dto.employeeRoleId.trim(),
     };
   }
 
@@ -508,9 +761,11 @@ export class StaffService {
   }
 
   private toStaffTypeLabel(
-    staffType: UserRole.MANAGER | UserRole.INSTALLER,
+    staffType: UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE,
   ): string {
-    return staffType === UserRole.MANAGER ? 'Manager' : 'Installer';
+    if (staffType === UserRole.MANAGER) return 'Manager';
+    if (staffType === UserRole.INSTALLER) return 'Installer';
+    return 'Non-Technical Staff';
   }
 
   private archiveIdentificationNumber(
@@ -529,14 +784,21 @@ export class StaffService {
       phoneNumber: user.phoneNumber,
       address: user.address ?? '',
       identificationNumber: user.identificationNumber ?? '',
-      staffType: user.role as UserRole.MANAGER | UserRole.INSTALLER,
+      staffType: user.role as UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE,
       emailAddress: user.emailAddress,
-      username: user.credential?.username ?? '',
+      username: user.role === UserRole.EMPLOYEE ? '' : (user.credential?.username ?? ''),
       staffRole: user.staffRole
         ? {
             id: user.staffRole.id,
             name: user.staffRole.name,
             description: user.staffRole.description,
+          }
+        : null,
+      employeeRole: user.employeeRole
+        ? {
+            id: user.employeeRole.id,
+            name: user.employeeRole.name,
+            description: user.employeeRole.description,
           }
         : null,
     };

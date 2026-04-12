@@ -41,12 +41,16 @@ export class UpdateStaffDto {
   identificationNumber?: string;
 
   @IsOptional()
-  @IsIn([UserRole.MANAGER, UserRole.INSTALLER])
-  staffType?: UserRole.MANAGER | UserRole.INSTALLER;
+  @IsIn([UserRole.MANAGER, UserRole.INSTALLER, UserRole.EMPLOYEE])
+  staffType?: UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE;
 
   @IsOptional()
   @IsUUID()
   staffRoleId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  employeeRoleId?: string | null;
 
   @IsOptional()
   @IsEmail()

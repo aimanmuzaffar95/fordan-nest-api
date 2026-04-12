@@ -11,12 +11,19 @@ import {
 import { AdminOnly } from '../auth/decorators/role-access.decorators';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { CreateEmployeeRoleDto } from './dto/create-employee-role.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { CreateStaffRoleDto } from './dto/create-staff-role.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { StaffService, StaffListItem } from './staff.service';
 
 type StaffRoleResponse = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+type EmployeeRoleResponse = {
   id: string;
   name: string;
   description: string;
@@ -64,5 +71,18 @@ export class StaffController {
   @AdminOnly()
   createRole(@Body() dto: CreateStaffRoleDto): Promise<StaffRoleResponse> {
     return this.staffService.createRole(dto);
+  }
+
+  @Get('employee-roles')
+  listEmployeeRoles(): Promise<EmployeeRoleResponse[]> {
+    return this.staffService.listEmployeeRoles();
+  }
+
+  @Post('employee-roles')
+  @AdminOnly()
+  createEmployeeRole(
+    @Body() dto: CreateEmployeeRoleDto,
+  ): Promise<EmployeeRoleResponse> {
+    return this.staffService.createEmployeeRole(dto);
   }
 }

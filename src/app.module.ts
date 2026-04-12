@@ -47,6 +47,7 @@ import { AdminSettings } from './runtime-settings/admin-settings.entity';
 import { AlertsModule } from './alerts/alerts.module';
 import { Notification } from './notifications/entities/notification.entity';
 import { NotificationsModule } from './notifications/notifications.module';
+import { EmployeeRole } from './staff/entities/employee-role.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -139,6 +140,7 @@ const publicLeadThrottleLimit = Number(
         InvoiceItem,
         InvoicePayment,
         StaffRole,
+        EmployeeRole,
         Assignment,
         MeterApplication,
         Alert,
