@@ -1,4 +1,9 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
@@ -67,6 +72,13 @@ describe('CustomersService', () => {
 
     service = moduleRef.get(CustomersService);
     repository = moduleRef.get(getRepositoryToken(Customer));
+    jest
+      .spyOn(global, 'fetch')
+      .mockImplementation(jest.fn() as unknown as typeof global.fetch);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('creates customer and defaults address to null', async () => {
@@ -334,5 +346,50 @@ describe('CustomersService', () => {
 
     expect(rootQb.innerJoin).toHaveBeenCalled();
     expect(rootQb.distinct).toHaveBeenCalledWith(true);
+  });
+
+  it('returns coordinates for a geocoded address', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue([{ lat: '-37.8136', lon: '144.9631' }]),
+    } as Response);
+
+    const result = await service.geocodeAddress('123 Solar St, Melbourne');
+
+    expect(global.fetch).toHaveBeenCalled();
+    expect(result).toEqual({ lat: -37.8136, lng: 144.9631 });
+  });
+
+  it('throws not found when geocoding has no results', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue([]),
+    } as Response);
+
+    await expect(
+      service.geocodeAddress('Unknown Place'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('maps upstream failures to service unavailable', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      status: 503,
+    } as Response);
+
+    await expect(
+      service.geocodeAddress('123 Solar St, Melbourne'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('throws bad gateway for invalid geocoding payload', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue([{ lat: 'NaN', lon: 'NaN' }]),
+    } as Response);
+
+    await expect(
+      service.geocodeAddress('123 Solar St, Melbourne'),
+    ).rejects.toBeInstanceOf(BadGatewayException);
   });
 });

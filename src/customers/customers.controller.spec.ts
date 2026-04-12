@@ -12,6 +12,7 @@ describe('CustomersController', () => {
     create: jest.fn(),
     findAll: jest.fn(),
     search: jest.fn(),
+    geocodeAddress: jest.fn(),
     findOne: jest.fn(),
     update: jest.fn(),
   };
@@ -77,5 +78,13 @@ describe('CustomersController', () => {
       userId: 'user-id',
       role: UserRole.ADMIN,
     });
+  });
+
+  it('forwards geocode address query', () => {
+    void controller.geocodeAddress({ address: '123 Solar Street, Melbourne' });
+
+    expect(customersService.geocodeAddress).toHaveBeenCalledWith(
+      '123 Solar Street, Melbourne',
+    );
   });
 });

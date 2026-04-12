@@ -15,6 +15,7 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiOperation,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -23,6 +24,7 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { FindCustomersQueryDto } from './dto/find-customers-query.dto';
 import { SearchCustomersQueryDto } from './dto/search-customers-query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { GeocodeCustomerAddressQueryDto } from './dto/geocode-customer-address-query.dto';
 import { CustomersService } from './customers.service';
 import { JobsService } from '../jobs/jobs.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -116,6 +118,22 @@ export class CustomersController {
   })
   getTimeline(@Param('id', ParseUUIDPipe) id: string) {
     return this.customersService.getTimeline(id);
+  }
+
+  @Get('geocode')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Geocode a customer address',
+    description:
+      '**Roles:** `admin`, `manager` only. Proxies address geocoding through the API for customer detail map previews.',
+  })
+  @ApiQuery({
+    name: 'address',
+    required: true,
+    description: 'Street address to geocode (max 255 chars).',
+  })
+  geocodeAddress(@Query() query: GeocodeCustomerAddressQueryDto) {
+    return this.customersService.geocodeAddress(query.address);
   }
 
   @Get(':id')

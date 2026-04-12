@@ -1,7 +1,10 @@
 import {
+  BadRequestException,
+  BadGatewayException,
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -38,6 +41,15 @@ type CustomerViewer = {
   userId: string;
   role: UserRole;
 };
+
+type GeocodeCoordinatesDto = {
+  lat: number;
+  lng: number;
+};
+
+const NOMINATIM_TIMEOUT_MS = 5000;
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
+const NOMINATIM_USER_AGENT = 'FordanCRM/1.0 (ops@fordan.com)';
 
 @Injectable()
 export class CustomersService {
@@ -125,9 +137,12 @@ export class CustomersService {
             .orWhere(`${fullNameExpr} LIKE :term`, { term })
             .orWhere('LOWER(customer.email) LIKE :term', { term })
             .orWhere('LOWER(customer.phone) LIKE :term', { term })
-            .orWhere("LOWER(COALESCE(customer.secondaryPhone, '')) LIKE :term", {
-              term,
-            });
+            .orWhere(
+              "LOWER(COALESCE(customer.secondaryPhone, '')) LIKE :term",
+              {
+                term,
+              },
+            );
         }),
       );
     this.applyViewerScope(filteredQueryBuilder, viewer);
@@ -282,6 +297,64 @@ export class CustomersService {
     );
 
     return events;
+  }
+
+  async geocodeAddress(address: string): Promise<GeocodeCoordinatesDto> {
+    const normalizedAddress = address.trim();
+    if (normalizedAddress.length === 0) {
+      throw new BadRequestException('Address is required');
+    }
+
+    const requestUrl = new URL(NOMINATIM_URL);
+    requestUrl.searchParams.set('format', 'json');
+    requestUrl.searchParams.set('limit', '1');
+    requestUrl.searchParams.set('q', normalizedAddress);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+      response = await fetch(requestUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': NOMINATIM_USER_AGENT,
+          Accept: 'application/json',
+        },
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ServiceUnavailableException('Geocoding service timed out');
+      }
+      throw new ServiceUnavailableException('Geocoding service unavailable');
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        throw new ServiceUnavailableException('Geocoding service rate limited');
+      }
+      throw new ServiceUnavailableException('Geocoding lookup failed');
+    }
+
+    const payload = (await response.json()) as Array<{
+      lat?: string;
+      lon?: string;
+    }>;
+
+    const firstResult = payload[0];
+    if (!firstResult?.lat || !firstResult.lon) {
+      throw new NotFoundException('Address coordinates not found');
+    }
+
+    const lat = Number.parseFloat(firstResult.lat);
+    const lng = Number.parseFloat(firstResult.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new BadGatewayException('Invalid geocoding coordinates returned');
+    }
+
+    return { lat, lng };
   }
 
   private applyViewerScope(
