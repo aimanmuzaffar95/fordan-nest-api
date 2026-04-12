@@ -6,16 +6,26 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Brackets,
+  DataSource,
+  In,
   QueryFailedError,
   Repository,
   SelectQueryBuilder,
 } from 'typeorm';
 import { Job } from '../jobs/entities/job.entity';
+import { Note } from '../notes/entities/note.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CustomerResponseDto } from './dto/customer-response.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { Customer } from './entities/customer.entity';
+
+type TimelineEventDto = {
+  event: string;
+  actorName: string;
+  createdAt: string;
+  meta: Record<string, unknown>;
+};
 
 type PaginatedCustomers = {
   items: CustomerResponseDto[];
@@ -34,6 +44,7 @@ export class CustomersService {
   constructor(
     @InjectRepository(Customer)
     private readonly customersRepository: Repository<Customer>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(dto: CreateCustomerDto): Promise<CustomerResponseDto> {
@@ -207,6 +218,62 @@ export class CustomersService {
 
       throw error;
     }
+  }
+
+  async getTimeline(customerId: string): Promise<TimelineEventDto[]> {
+    const customer = await this.customersRepository.findOne({
+      where: { id: customerId },
+    });
+    if (!customer) throw new NotFoundException('Customer not found');
+
+    const events: TimelineEventDto[] = [];
+
+    events.push({
+      event: 'Customer created',
+      actorName: 'System',
+      createdAt: customer.createdAt.toISOString(),
+      meta: {},
+    });
+
+    const jobs = await this.dataSource.getRepository(Job).find({
+      where: { customerId },
+      order: { createdAt: 'ASC' },
+    });
+
+    for (const job of jobs) {
+      events.push({
+        event: `Job created (${job.orderNumber ?? job.id.slice(0, 8)})`,
+        actorName: 'System',
+        createdAt: job.createdAt.toISOString(),
+        meta: { jobId: job.id, stage: job.pipelineStage },
+      });
+    }
+
+    const jobIds = jobs.map((j) => j.id);
+    if (jobIds.length > 0) {
+      const notes = await this.dataSource.getRepository(Note).find({
+        where: { jobId: In(jobIds) },
+        relations: { createdByUser: true },
+        order: { createdAt: 'ASC' },
+      });
+      for (const note of notes) {
+        events.push({
+          event: 'Note added',
+          actorName: note.createdByUser
+            ? `${note.createdByUser.firstName} ${note.createdByUser.lastName}`
+            : 'Unknown',
+          createdAt: note.createdAt.toISOString(),
+          meta: { jobId: note.jobId, preview: note.body?.slice(0, 80) },
+        });
+      }
+    }
+
+    events.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+    return events;
   }
 
   private applyViewerScope(

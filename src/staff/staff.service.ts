@@ -118,9 +118,10 @@ export class StaffService {
       payload.staffRoleId,
     );
 
-    await this.ensureActiveIdentificationAvailable(
-      payload.identificationNumber,
-    );
+    const identificationNumber =
+      payload.identificationNumber?.trim() || (await this.generateStaffId());
+
+    await this.ensureActiveIdentificationAvailable(identificationNumber);
     await this.ensureEmailAvailable(payload.emailAddress);
     await this.ensureUsernameAvailable(payload.username);
 
@@ -134,7 +135,7 @@ export class StaffService {
           lastName: payload.lastName,
           phoneNumber: payload.phoneNumber,
           address: payload.address,
-          identificationNumber: payload.identificationNumber,
+          identificationNumber: identificationNumber,
           role: payload.staffType,
           emailAddress: payload.emailAddress,
           staffRoleId: staffRole?.id ?? null,
@@ -156,20 +157,24 @@ export class StaffService {
     });
 
     this.sendWelcomeEmail(createdStaff, payload.password);
-    await this.notificationsService.sendToRole(
-      UserRole.ADMIN,
-      {
-        type: NOTIFICATION_TYPE.STAFF_ACCOUNT_CREATED,
-        title: 'New staff account created',
-        body: `${createdStaff.firstName} ${createdStaff.lastName} was added as ${createdStaff.staffType}.`,
-        metadata: {
-          staffUserId: createdStaff.id,
-          staffType: createdStaff.staffType,
-          emailAddress: createdStaff.emailAddress,
-        },
-        dedupeKey: `staff-created:${createdStaff.id}`,
-      },
-      { excludeUserIds: [createdStaff.id] },
+    await this.sendNotificationSafely(
+      () =>
+        this.notificationsService.sendToRole(
+          UserRole.ADMIN,
+          {
+            type: NOTIFICATION_TYPE.STAFF_ACCOUNT_CREATED,
+            title: 'New staff account created',
+            body: `${createdStaff.firstName} ${createdStaff.lastName} was added as ${createdStaff.staffType}.`,
+            metadata: {
+              staffUserId: createdStaff.id,
+              staffType: createdStaff.staffType,
+              emailAddress: createdStaff.emailAddress,
+            },
+            dedupeKey: `staff-created:${createdStaff.id}`,
+          },
+          { excludeUserIds: [createdStaff.id] },
+        ),
+      `staff-created:${createdStaff.id}`,
     );
 
     return createdStaff;
@@ -424,7 +429,7 @@ export class StaffService {
       lastName: dto.lastName.trim(),
       phoneNumber: dto.phoneNumber.trim(),
       address: dto.address.trim(),
-      identificationNumber: dto.identificationNumber.trim(),
+      identificationNumber: dto.identificationNumber?.trim(),
       emailAddress: dto.emailAddress.trim().toLowerCase(),
       username: dto.username.trim(),
       password: dto.password.trim(),
@@ -467,6 +472,18 @@ export class StaffService {
         staffRoleName: staff.staffRole?.name ?? null,
       },
     });
+  }
+
+  private async sendNotificationSafely(
+    action: () => Promise<unknown>,
+    context: string,
+  ): Promise<void> {
+    try {
+      await action();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Notification skipped for ${context}: ${message}`);
+    }
   }
 
   private getStaffLoginUrl(): string {
@@ -523,5 +540,28 @@ export class StaffService {
           }
         : null,
     };
+  }
+
+  private async generateStaffId(): Promise<string> {
+    const year = new Date().getFullYear();
+    const prefix = `FRD-${year}-`;
+
+    const latest = await this.usersRepository
+      .createQueryBuilder('user')
+      .where('user.identificationNumber LIKE :prefix', { prefix: `${prefix}%` })
+      .andWhere('user.deletedAt IS NULL')
+      .orderBy('user.identificationNumber', 'DESC')
+      .getOne();
+
+    let nextSequence = 1;
+    if (latest?.identificationNumber) {
+      const parts = latest.identificationNumber.split('-');
+      const lastNum = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(lastNum)) {
+        nextSequence = lastNum + 1;
+      }
+    }
+
+    return `${prefix}${String(nextSequence).padStart(4, '0')}`;
   }
 }

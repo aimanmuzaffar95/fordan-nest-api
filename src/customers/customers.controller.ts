@@ -107,6 +107,17 @@ export class CustomersController {
     });
   }
 
+  @Get(':id/timeline')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Get customer activity timeline',
+    description:
+      '**Roles:** `admin`, `manager` only. Returns events sorted newest-first.',
+  })
+  getTimeline(@Param('id', ParseUUIDPipe) id: string) {
+    return this.customersService.getTimeline(id);
+  }
+
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({

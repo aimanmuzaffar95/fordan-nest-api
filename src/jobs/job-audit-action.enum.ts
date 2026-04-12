@@ -11,4 +11,5 @@ export enum JobAuditAction {
   CONTRACT_SIGNED_CHANGED = 'contract_signed_changed',
   DEPOSIT_PAID_CHANGED = 'deposit_paid_changed',
   INSTALL_DATE_CHANGED = 'install_date_changed',
+  PIPELINE_REGRESSED = 'pipeline_regressed',
 }

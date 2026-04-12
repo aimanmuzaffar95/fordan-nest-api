@@ -30,6 +30,7 @@ import {
 } from './dto/update-job-proposal-config.dto';
 import { JobProposalEquipmentType } from './job-proposal-equipment-type.enum';
 import { JobPipelineStage } from './job-pipeline-stage.enum';
+import { FORWARD_GATE_RULES, isBackwardsMove } from './pipeline-gate.rules';
 import { JobSystemType } from './job-system-type.enum';
 import { JobAuditLog } from './entities/job-audit-log.entity';
 import { JobInternalComment } from './entities/job-internal-comment.entity';
@@ -1702,6 +1703,29 @@ export class JobsService {
 
     const toStage = dto.pipelineStage;
 
+    const fromStage = job.pipelineStage as JobPipelineStage;
+    const targetStage = toStage as JobPipelineStage;
+
+    // Check forward gate rules (only for forward moves).
+    if (!isBackwardsMove(fromStage, targetStage) && fromStage !== targetStage) {
+      const gateRule = FORWARD_GATE_RULES[targetStage];
+      if (gateRule) {
+        const gateError = gateRule(job);
+        if (gateError) {
+          throw new BadRequestException(gateError);
+        }
+      }
+    }
+
+    // Require a reason for backwards moves.
+    if (isBackwardsMove(fromStage, targetStage)) {
+      if (!dto.backstageReason || dto.backstageReason.trim().length < 5) {
+        throw new BadRequestException(
+          'A reason is required when moving a job to an earlier stage (minimum 5 characters).',
+        );
+      }
+    }
+
     // Server-side lock enforcement for "installed" transition.
     if (toStage === 'installed' && userRole !== UserRole.ADMIN) {
       const preMeterApproved = await this.meterApplicationsRepo.findOne({
@@ -1821,6 +1845,10 @@ export class JobsService {
             fromPosition: originalPosition,
             toPosition:
               typeof desiredPosition === 'number' ? desiredPosition : null,
+            ...(isBackwardsMove(actualFromStage, actualToStage) &&
+            dto.backstageReason
+              ? { backstageReason: dto.backstageReason.trim() }
+              : {}),
           } as unknown,
           createdByUserId: userId,
         }),
@@ -1833,6 +1861,28 @@ export class JobsService {
       if (!updated) throw new NotFoundException('Job not found');
       return updated;
     });
+
+    // Write the regression audit log outside the transaction so that a
+    // missing DB enum value (pending migration) never rolls back the move.
+    if (isBackwardsMove(fromStage, targetStage) && dto.backstageReason) {
+      try {
+        await this.dataSource.transaction((manager) =>
+          this.jobAuditLogs.logWithManager(manager, {
+            jobId,
+            performedById: userId,
+            action: JobAuditAction.PIPELINE_REGRESSED,
+            field: 'pipelineStage',
+            oldValue: fromStage,
+            newValue: targetStage,
+            metadata: { reason: dto.backstageReason!.trim() },
+          }),
+        );
+      } catch (auditErr) {
+        this.logger.warn(
+          `Pipeline regression audit log failed for job ${jobId}: ${String(auditErr)}`,
+        );
+      }
+    }
 
     await this.notifyNeedsAssignmentIfApplicable(updated);
     return updated;

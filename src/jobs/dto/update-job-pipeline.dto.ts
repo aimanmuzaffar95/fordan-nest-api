@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsInt, IsIn, IsOptional, Max, Min } from 'class-validator';
+import { IsInt, IsIn, IsOptional, IsString, MaxLength, MinLength, Max, Min } from 'class-validator';
 
 const VALID_PIPELINE_STAGES = [
   'lead',
@@ -27,4 +27,10 @@ export class UpdateJobPipelineDto {
   @Min(0)
   @Max(100000)
   pipelinePosition?: number;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  backstageReason?: string;
 }
