@@ -16,6 +16,15 @@ import {
 } from '../customer-messaging/customer-messaging.merge';
 import { validateCustomerMessagingTemplates } from '../customer-messaging/customer-messaging.validate';
 import type { CustomerMessagingTemplates } from '../customer-messaging/customer-messaging.types';
+import {
+  mergeCrmAppearancePatch,
+  mergeCrmAppearanceSettings,
+} from '../crm-appearance/crm-appearance.merge';
+import {
+  normalizeCrmAppearanceSettings,
+  validateCrmAppearanceSettings,
+} from '../crm-appearance/crm-appearance.validate';
+import type { CrmAppearanceSettings } from '../crm-appearance/crm-appearance.types';
 
 export type AdminSettingsPayload = {
   overridePreMeter: boolean;
@@ -38,6 +47,7 @@ export type AdminSettingsPayload = {
   mailFrom: string | null;
   mailFromName: string | null;
   customerMessagingTemplates: CustomerMessagingTemplates;
+  crmAppearanceSettings: CrmAppearanceSettings;
 };
 
 @Injectable()
@@ -69,6 +79,8 @@ export class RuntimeSettingsService {
     delete patch['smtpPass'];
     const messagingRaw = patch['customerMessagingTemplates'];
     delete patch['customerMessagingTemplates'];
+    const appearanceRaw = patch['crmAppearanceSettings'];
+    delete patch['crmAppearanceSettings'];
     const cleaned = Object.fromEntries(
       Object.entries(patch).filter(([, v]) => v !== undefined),
     );
@@ -76,12 +88,17 @@ export class RuntimeSettingsService {
       updatedByUserId,
     });
     if (smtpPassRaw !== undefined) {
-      settings.smtpPass =
+      if (
         smtpPassRaw === null ||
         smtpPassRaw === '' ||
         (typeof smtpPassRaw === 'string' && smtpPassRaw.trim() === '')
-          ? null
-          : String(smtpPassRaw);
+      ) {
+        settings.smtpPass = null;
+      } else if (typeof smtpPassRaw === 'string') {
+        settings.smtpPass = smtpPassRaw;
+      } else {
+        throw new BadRequestException('smtpPass must be a string or null');
+      }
     }
     if (messagingRaw !== undefined) {
       const current = mergeCustomerMessagingTemplates(
@@ -90,6 +107,15 @@ export class RuntimeSettingsService {
       const next = deepMergeMessagingPatch(current, messagingRaw);
       validateCustomerMessagingTemplates(next);
       settings.customerMessagingTemplates = next;
+    }
+    if (appearanceRaw !== undefined) {
+      const current = mergeCrmAppearanceSettings(
+        settings.crmAppearanceSettings,
+      );
+      const next = mergeCrmAppearancePatch(current, appearanceRaw);
+      const normalized = normalizeCrmAppearanceSettings(next);
+      validateCrmAppearanceSettings(normalized);
+      settings.crmAppearanceSettings = normalized;
     }
 
     const changedFields = Object.keys(updates).sort();
@@ -127,6 +153,12 @@ export class RuntimeSettingsService {
   async getCalendarScopeEnforced(): Promise<boolean> {
     const settings = await this.getOrCreateSettingsEntity();
     return settings.calendarScopeEnforced;
+  }
+
+  /** Safe, unauthenticated read for login and other pre-auth surfaces. */
+  async getPublicCrmAppearance(): Promise<CrmAppearanceSettings> {
+    const settings = await this.getOrCreateSettingsEntity();
+    return mergeCrmAppearanceSettings(settings.crmAppearanceSettings);
   }
 
   private async getOrCreateSettingsEntity(): Promise<AdminSettings> {
@@ -196,6 +228,9 @@ export class RuntimeSettingsService {
         : null,
       customerMessagingTemplates: mergeCustomerMessagingTemplates(
         settings.customerMessagingTemplates,
+      ),
+      crmAppearanceSettings: mergeCrmAppearanceSettings(
+        settings.crmAppearanceSettings,
       ),
     };
   }

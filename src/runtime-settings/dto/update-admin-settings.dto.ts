@@ -166,4 +166,8 @@ export class UpdateAdminSettingsDto {
   @IsOptional()
   @IsObject()
   customerMessagingTemplates?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  crmAppearanceSettings?: Record<string, unknown>;
 }

@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import type { CustomerMessagingTemplates } from '../customer-messaging/customer-messaging.types';
+import type { CrmAppearanceSettings } from '../crm-appearance/crm-appearance.types';
 
 export const ADMIN_SETTINGS_SINGLETON_ID = 'global';
 
@@ -76,6 +77,9 @@ export class AdminSettings {
 
   @Column({ type: 'json', nullable: true })
   customerMessagingTemplates: CustomerMessagingTemplates | null;
+
+  @Column({ type: 'json', nullable: true })
+  crmAppearanceSettings: CrmAppearanceSettings | null;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })
