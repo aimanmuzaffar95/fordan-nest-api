@@ -18,6 +18,8 @@ type BuildQuotationPdfArgs = {
   pdfHeadline: string;
   pdfThankYou: string;
   pdfFooterNote: string;
+  currency: string;
+  logoImageBytes?: Buffer;
 };
 
 @Injectable()
@@ -44,7 +46,7 @@ export class JobQuotationPdfService {
       const formatCurrency = (value: number) =>
         new Intl.NumberFormat('en-US', {
           style: 'currency',
-          currency: 'USD',
+          currency: args.currency,
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         }).format(value);
@@ -55,12 +57,30 @@ export class JobQuotationPdfService {
 
       const accent = args.pdfPrimaryHex;
 
+      const headerY = 40;
+      const headerX = doc.page.margins.left;
+      const logoMaxH = 34;
+      let brandTextX = headerX;
+
+      if (args.logoImageBytes) {
+        try {
+          doc.image(args.logoImageBytes, headerX, headerY - 6, {
+            fit: [160, logoMaxH],
+            valign: 'center',
+          });
+          brandTextX = headerX + 172;
+        } catch {
+          // If the logo can't be decoded, fall back to text branding.
+          brandTextX = headerX;
+        }
+      }
+
       doc
         .fillColor(accent)
         .font('Helvetica-Bold')
         .fontSize(20)
-        .text(args.pdfBrandName, doc.page.margins.left, 40, {
-          width: pageWidth,
+        .text(args.pdfBrandName, brandTextX, headerY, {
+          width: pageWidth - (brandTextX - headerX),
         });
 
       doc

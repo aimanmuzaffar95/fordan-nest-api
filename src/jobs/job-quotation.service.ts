@@ -3,6 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CustomerMessagingRendererService } from '../email/customer-messaging-renderer.service';
 import { EmailService } from '../email/email.service';
+import { FilesService } from '../files/files.service';
+import { CrmBrandingUploadSlot } from '../files/crm-branding.constants';
+import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { SendJobQuotationResponseDto } from './dto/send-job-quotation-response.dto';
@@ -48,6 +51,8 @@ export class JobQuotationService {
     private readonly email: EmailService,
     private readonly customerMessaging: CustomerMessagingRendererService,
     private readonly quotationPdf: JobQuotationPdfService,
+    private readonly settings: RuntimeSettingsService,
+    private readonly files: FilesService,
     @InjectRepository(TimelineEvent)
     private readonly timelineEventsRepo: Repository<TimelineEvent>,
   ) {}
@@ -145,6 +150,45 @@ export class JobQuotationService {
       orderNumber,
     });
 
+    const runtime = await this.settings.getSettings();
+    const appearanceRaw = runtime.crmAppearanceSettings as unknown as Record<
+      string,
+      unknown
+    >;
+    const currency =
+      typeof runtime.companyProfileSettings.currency === 'string' &&
+      runtime.companyProfileSettings.currency.trim()
+        ? runtime.companyProfileSettings.currency.trim()
+        : 'USD';
+    const appearanceName =
+      typeof appearanceRaw.appDisplayName === 'string'
+        ? appearanceRaw.appDisplayName.trim()
+        : '';
+    const appearanceHex =
+      typeof appearanceRaw.primaryHex === 'string'
+        ? appearanceRaw.primaryHex.trim()
+        : '';
+    const brandName = appearanceName || pdfCopy.brandName;
+    const primaryHex = appearanceHex || pdfCopy.primaryHex;
+
+    let logoBytes: Buffer | undefined;
+    try {
+      const download = await this.files.getPublicCrmBrandingDownload(
+        CrmBrandingUploadSlot.logo,
+      );
+      logoBytes = await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        download.stream.on('data', (c: Buffer | Uint8Array) =>
+          chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)),
+        );
+        download.stream.on('end', () => resolve(Buffer.concat(chunks)));
+        download.stream.on('error', reject);
+      });
+    } catch {
+      // Logo is optional.
+      logoBytes = undefined;
+    }
+
     const pdfBuffer = await this.quotationPdf.buildQuotationPdf({
       attachmentFilename,
       customerName,
@@ -156,11 +200,13 @@ export class JobQuotationService {
       batterySizeLabel: this.toBatterySizeLabel(jobDetail.job.batterySizeKwh),
       proposalItems,
       proposalTotal,
-      pdfBrandName: pdfCopy.brandName,
-      pdfPrimaryHex: pdfCopy.primaryHex,
+      pdfBrandName: brandName,
+      pdfPrimaryHex: primaryHex,
       pdfHeadline: pdfCopy.headline,
       pdfThankYou: pdfCopy.thankYou,
       pdfFooterNote: pdfCopy.footerNote,
+      currency,
+      logoImageBytes: logoBytes,
     });
 
     return { ...ctx, pdfBuffer };
