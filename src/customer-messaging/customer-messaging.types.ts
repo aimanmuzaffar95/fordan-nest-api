@@ -41,6 +41,21 @@ export type SignatureRequestEmailTemplateConfig = BrandColorsHex & {
   footerLine2Template: string;
 };
 
+export type SimpleBrandedEmailTemplateConfig = BrandColorsHex & {
+  subjectTemplate: string;
+  brandName: string;
+  kickerTemplate: string;
+  heroTitleTemplate: string;
+  heroIntroTemplate: string;
+  bodyTemplate: string;
+  /** Optional CTA button */
+  ctaLabel: string | null;
+  ctaUrlTemplate: string | null;
+  footerBrandName: string;
+  footerLine1Template: string;
+  footerLine2Template: string;
+};
+
 export type QuotationPdfTemplateConfig = {
   brandName: string;
   primaryHex: string;
@@ -53,4 +68,8 @@ export type CustomerMessagingTemplates = {
   quotationEmail: QuotationEmailTemplateConfig;
   signatureRequestEmail: SignatureRequestEmailTemplateConfig;
   quotationPdf: QuotationPdfTemplateConfig;
+  invoiceSentEmail: SimpleBrandedEmailTemplateConfig;
+  paymentReceiptEmail: SimpleBrandedEmailTemplateConfig;
+  overdueReminderEmail: SimpleBrandedEmailTemplateConfig;
+  jobStatusEmail: SimpleBrandedEmailTemplateConfig;
 };
