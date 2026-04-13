@@ -16,9 +16,17 @@ export type QuotationEmailLineItem = {
 export class CustomerMessagingRendererService {
   constructor(private readonly runtimeSettings: RuntimeSettingsService) {}
 
-  private async templates(): Promise<CustomerMessagingTemplates> {
+  private async templates(): Promise<{
+    templates: CustomerMessagingTemplates;
+    brandLogoUrl: string | null;
+  }> {
     const s = await this.runtimeSettings.getSettings();
-    return s.customerMessagingTemplates;
+    const logoUrl =
+      typeof s.crmAppearanceSettings.logoUrl === 'string' &&
+      s.crmAppearanceSettings.logoUrl.trim()
+        ? s.crmAppearanceSettings.logoUrl.trim()
+        : null;
+    return { templates: s.customerMessagingTemplates, brandLogoUrl: logoUrl };
   }
 
   private compile(template: string, ctx: Record<string, unknown>): string {
@@ -31,6 +39,7 @@ export class CustomerMessagingRendererService {
   ): Record<string, unknown> {
     return {
       brandName: theme.brandName,
+      brandLogoUrl: extra['brandLogoUrl'] ?? null,
       currentYear: new Date().getFullYear(),
       ...extra,
     };
@@ -42,6 +51,7 @@ export class CustomerMessagingRendererService {
   ): Record<string, unknown> {
     return {
       brandName: s.brandName,
+      brandLogoUrl: extra['brandLogoUrl'] ?? null,
       currentYear: new Date().getFullYear(),
       ...extra,
     };
@@ -57,8 +67,10 @@ export class CustomerMessagingRendererService {
     proposalItems: QuotationEmailLineItem[];
     proposalTotal: string;
   }): Promise<{ subject: string; html: string }> {
-    const { quotationEmail: q } = await this.templates();
+    const { templates, brandLogoUrl } = await this.templates();
+    const { quotationEmail: q } = templates;
     const ctx = this.baseCtx(q, {
+      brandLogoUrl,
       customerName: input.customerName,
       orderNumber: input.orderNumber,
       projectAddress: input.projectAddress,
@@ -81,6 +93,7 @@ export class CustomerMessagingRendererService {
       totalBarLabelHex: q.totalBarLabelHex,
       pageBgHex: q.pageBgHex,
       brandHeaderName: q.brandName,
+      brandLogoUrl,
       footerBrandName: q.footerBrandName,
       compiledKicker: this.compile(q.kickerTemplate, ctx),
       compiledHeroTitle: this.compile(q.heroTitleTemplate, ctx),
@@ -108,8 +121,10 @@ export class CustomerMessagingRendererService {
     signingUrl: string;
     referenceCode: string;
   }): Promise<{ subject: string; html: string }> {
-    const { signatureRequestEmail: s } = await this.templates();
+    const { templates, brandLogoUrl } = await this.templates();
+    const { signatureRequestEmail: s } = templates;
     const ctx = this.sigCtx(s, {
+      brandLogoUrl,
       customerName: input.customerName,
       orderNumber: input.orderNumber,
       signingUrl: input.signingUrl,
@@ -136,6 +151,7 @@ export class CustomerMessagingRendererService {
       borderHex: s.borderHex,
       pageBgHex: s.pageBgHex,
       brandHeaderName: s.brandName,
+      brandLogoUrl,
       compiledKicker: this.compile(s.kickerTemplate, ctx),
       compiledHeroTitle: this.compile(s.heroTitleTemplate, ctx),
       compiledHeroIntro: this.compile(s.heroIntroTemplate, ctx),
@@ -159,7 +175,8 @@ export class CustomerMessagingRendererService {
     thankYou: string;
     footerNote: string;
   }> {
-    const { quotationPdf: p } = await this.templates();
+    const { templates } = await this.templates();
+    const { quotationPdf: p } = templates;
     const ctx = {
       brandName: p.brandName,
       customerName: input.customerName,
