@@ -24,6 +24,16 @@ export function mergeCustomerMessagingTemplates(
       ...s.signatureRequestEmail,
     },
     quotationPdf: { ...base.quotationPdf, ...s.quotationPdf },
+    invoiceSentEmail: { ...base.invoiceSentEmail, ...s.invoiceSentEmail },
+    paymentReceiptEmail: {
+      ...base.paymentReceiptEmail,
+      ...s.paymentReceiptEmail,
+    },
+    overdueReminderEmail: {
+      ...base.overdueReminderEmail,
+      ...s.overdueReminderEmail,
+    },
+    jobStatusEmail: { ...base.jobStatusEmail, ...s.jobStatusEmail },
   };
 }
 
@@ -44,5 +54,15 @@ export function deepMergeMessagingPatch(
       ...p.signatureRequestEmail,
     },
     quotationPdf: { ...current.quotationPdf, ...p.quotationPdf },
+    invoiceSentEmail: { ...current.invoiceSentEmail, ...p.invoiceSentEmail },
+    paymentReceiptEmail: {
+      ...current.paymentReceiptEmail,
+      ...p.paymentReceiptEmail,
+    },
+    overdueReminderEmail: {
+      ...current.overdueReminderEmail,
+      ...p.overdueReminderEmail,
+    },
+    jobStatusEmail: { ...current.jobStatusEmail, ...p.jobStatusEmail },
   };
 }

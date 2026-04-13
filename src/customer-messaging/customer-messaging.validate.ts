@@ -27,6 +27,12 @@ export function validateCustomerMessagingTemplates(
   const qc = t.quotationEmail;
   const sc = t.signatureRequestEmail;
   const pc = t.quotationPdf;
+  const simple = [
+    ['invoiceSentEmail', t.invoiceSentEmail],
+    ['paymentReceiptEmail', t.paymentReceiptEmail],
+    ['overdueReminderEmail', t.overdueReminderEmail],
+    ['jobStatusEmail', t.jobStatusEmail],
+  ] as const;
 
   for (const [label, hex] of [
     ['quotationEmail.primaryHex', qc.primaryHex],
@@ -61,6 +67,66 @@ export function validateCustomerMessagingTemplates(
   }
 
   assertColor(pc.primaryHex, 'quotationPdf.primaryHex');
+
+  for (const [key, cfg] of simple) {
+    for (const [label, hex] of [
+      [`${key}.primaryHex`, cfg.primaryHex],
+      [`${key}.heroAccentHex`, cfg.heroAccentHex],
+      [`${key}.heroBgHex`, cfg.heroBgHex],
+      [`${key}.heroLeadHex`, cfg.heroLeadHex],
+      [`${key}.bodyTextHex`, cfg.bodyTextHex],
+      [`${key}.bodyMutedHex`, cfg.bodyMutedHex],
+      [`${key}.cardBgHex`, cfg.cardBgHex],
+      [`${key}.borderHex`, cfg.borderHex],
+      [`${key}.totalBarBgHex`, cfg.totalBarBgHex],
+      [`${key}.totalBarLabelHex`, cfg.totalBarLabelHex],
+      [`${key}.pageBgHex`, cfg.pageBgHex],
+    ] as const) {
+      assertColor(hex, label);
+    }
+
+    cfg.subjectTemplate = trim(
+      cfg.subjectTemplate,
+      200,
+      `${key}.subjectTemplate`,
+    );
+    cfg.brandName = trim(cfg.brandName, 120, `${key}.brandName`);
+    cfg.kickerTemplate = trim(cfg.kickerTemplate, 120, `${key}.kickerTemplate`);
+    cfg.heroTitleTemplate = trim(
+      cfg.heroTitleTemplate,
+      200,
+      `${key}.heroTitleTemplate`,
+    );
+    cfg.heroIntroTemplate = trim(
+      cfg.heroIntroTemplate,
+      2000,
+      `${key}.heroIntroTemplate`,
+    );
+    cfg.bodyTemplate = trim(cfg.bodyTemplate, 4000, `${key}.bodyTemplate`);
+    cfg.ctaLabel =
+      cfg.ctaLabel === null
+        ? null
+        : trim(cfg.ctaLabel, 80, `${key}.ctaLabel`);
+    cfg.ctaUrlTemplate =
+      cfg.ctaUrlTemplate === null
+        ? null
+        : trim(cfg.ctaUrlTemplate, 1000, `${key}.ctaUrlTemplate`);
+    cfg.footerBrandName = trim(
+      cfg.footerBrandName,
+      120,
+      `${key}.footerBrandName`,
+    );
+    cfg.footerLine1Template = trim(
+      cfg.footerLine1Template,
+      500,
+      `${key}.footerLine1Template`,
+    );
+    cfg.footerLine2Template = trim(
+      cfg.footerLine2Template,
+      500,
+      `${key}.footerLine2Template`,
+    );
+  }
 
   qc.subjectTemplate = trim(
     qc.subjectTemplate,
