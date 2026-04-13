@@ -10,6 +10,9 @@ import {
 import { User } from '../users/entities/user.entity';
 import type { CustomerMessagingTemplates } from '../customer-messaging/customer-messaging.types';
 import type { CrmAppearanceSettings } from '../crm-appearance/crm-appearance.types';
+import type { CompanyProfileSettings } from '../company-profile/company-profile.types';
+import type { BillingSettings } from '../billing/billing-settings.types';
+import type { DocumentNumberingSettings } from '../document-numbering/document-numbering.types';
 
 export const ADMIN_SETTINGS_SINGLETON_ID = 'global';
 
@@ -80,6 +83,15 @@ export class AdminSettings {
 
   @Column({ type: 'json', nullable: true })
   crmAppearanceSettings: CrmAppearanceSettings | null;
+
+  @Column({ type: 'json', nullable: true })
+  companyProfileSettings: CompanyProfileSettings | null;
+
+  @Column({ type: 'json', nullable: true })
+  billingSettings: BillingSettings | null;
+
+  @Column({ type: 'json', nullable: true })
+  documentNumberingSettings: DocumentNumberingSettings | null;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })

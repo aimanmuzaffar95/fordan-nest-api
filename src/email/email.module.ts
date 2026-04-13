@@ -10,10 +10,7 @@ import { createEmailProvider } from './email-provider.factory';
 
 @Global()
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([AdminSettings]),
-    RuntimeSettingsModule,
-  ],
+  imports: [TypeOrmModule.forFeature([AdminSettings]), RuntimeSettingsModule],
   controllers: [EmailController],
   providers: [
     {

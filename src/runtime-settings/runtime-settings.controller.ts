@@ -8,6 +8,7 @@ import {
   ParseEnumPipe,
   Patch,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -87,6 +88,19 @@ export class RuntimeSettingsController {
       throw new Error('Missing authenticated user context');
     }
     return this.settings.updateSettings(dto, userId);
+  }
+
+  @Get('audit-log')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'List settings audit log',
+    description:
+      'Admin-only. Returns the most recent settings change events (who changed what, and when).',
+  })
+  listAuditLog(@Query('limit') limit?: string) {
+    const parsed = limit ? Number(limit) : undefined;
+    const safeLimit = Number.isFinite(parsed) ? parsed : undefined;
+    return this.settings.listAuditLog({ limit: safeLimit });
   }
 
   @Post('branding/:slot')

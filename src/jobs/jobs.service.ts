@@ -51,6 +51,7 @@ import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 import { JobAuditValue } from './types/job-audit-value.type';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
+import { DocumentNumberingService } from '../document-numbering/document-numbering.service';
 
 export type JobListViewer = { userId: string; role: UserRole };
 
@@ -94,6 +95,7 @@ export class JobsService {
     @InjectRepository(Battery)
     private readonly batteriesRepo: Repository<Battery>,
     private readonly notificationsService: NotificationsService,
+    private readonly docNumbers: DocumentNumberingService,
   ) {}
 
   async list(query: FindJobsQueryDto, viewer?: JobListViewer) {
@@ -2039,7 +2041,7 @@ export class JobsService {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const job = jobsRepo.create({
         ...payload,
-        orderNumber: await this.generateOrderNumber(jobsRepo),
+        orderNumber: await this.docNumbers.allocateNextOrderNumber(),
       });
 
       try {
@@ -2054,41 +2056,6 @@ export class JobsService {
     }
 
     throw new BadRequestException('Failed to generate unique order number');
-  }
-
-  private async generateOrderNumber(jobsRepo: Repository<Job>) {
-    const existingOrderNumbers = await jobsRepo
-      .createQueryBuilder('job')
-      .select('job.orderNumber', 'orderNumber')
-      .where('job.orderNumber IS NOT NULL')
-      .getRawMany<{ orderNumber: string | null }>();
-
-    const highestOrderNumber = existingOrderNumbers.reduce((max, row) => {
-      const parsed = this.parseOrderNumber(row.orderNumber);
-      if (parsed === null || parsed <= max) {
-        return max;
-      }
-
-      return parsed;
-    }, JobsService.FIRST_ORDER_NUMBER - 1);
-
-    return `${JobsService.ORDER_NUMBER_PREFIX}${highestOrderNumber + 1}`;
-  }
-
-  private parseOrderNumber(value: string | null | undefined) {
-    if (!value) {
-      return null;
-    }
-
-    const match = new RegExp(`^${JobsService.ORDER_NUMBER_PREFIX}(\\d+)$`).exec(
-      value,
-    );
-    if (!match) {
-      return null;
-    }
-
-    const parsed = Number.parseInt(match[1], 10);
-    return Number.isFinite(parsed) ? parsed : null;
   }
 
   private isDuplicateOrderNumberError(error: unknown) {

@@ -28,9 +28,7 @@ export class SmtpProvider implements IEmailProvider {
     attachments: true,
   };
 
-  constructor(
-    private readonly adminSettingsRepo: Repository<AdminSettings>,
-  ) {}
+  constructor(private readonly adminSettingsRepo: Repository<AdminSettings>) {}
 
   async isConfigured(): Promise<boolean> {
     const cfg = await this.resolveConfig();
@@ -42,8 +40,7 @@ export class SmtpProvider implements IEmailProvider {
       where: { id: ADMIN_SETTINGS_SINGLETON_ID },
     });
 
-    const host =
-      row?.smtpHost?.trim() || process.env.SMTP_HOST?.trim() || '';
+    const host = row?.smtpHost?.trim() || process.env.SMTP_HOST?.trim() || '';
     if (!host) {
       return null;
     }
@@ -52,7 +49,9 @@ export class SmtpProvider implements IEmailProvider {
       row?.smtpPort ??
       (process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587);
     const port =
-      Number.isFinite(portRaw) && portRaw > 0 ? Math.floor(Number(portRaw)) : 587;
+      Number.isFinite(portRaw) && portRaw > 0
+        ? Math.floor(Number(portRaw))
+        : 587;
 
     let secure: boolean;
     if (row?.smtpSecure === true || row?.smtpSecure === false) {
@@ -63,10 +62,8 @@ export class SmtpProvider implements IEmailProvider {
       secure = port === 465;
     }
 
-    const user =
-      row?.smtpUser?.trim() || process.env.SMTP_USER?.trim() || '';
-    const pass =
-      row?.smtpPass?.trim() || process.env.SMTP_PASS?.trim() || '';
+    const user = row?.smtpUser?.trim() || process.env.SMTP_USER?.trim() || '';
+    const pass = row?.smtpPass?.trim() || process.env.SMTP_PASS?.trim() || '';
 
     const fromAddr =
       row?.mailFrom?.trim() ||
@@ -122,9 +119,7 @@ export class SmtpProvider implements IEmailProvider {
     if (!cfg) {
       return 'noreply@localhost';
     }
-    return cfg.fromName
-      ? `${cfg.fromName} <${cfg.fromAddr}>`
-      : cfg.fromAddr;
+    return cfg.fromName ? `${cfg.fromName} <${cfg.fromAddr}>` : cfg.fromAddr;
   }
 
   async send(options: EmailOptions): Promise<void> {

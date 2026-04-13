@@ -59,7 +59,9 @@ export class JobQuotationPdfService {
         .fillColor(accent)
         .font('Helvetica-Bold')
         .fontSize(20)
-        .text(args.pdfBrandName, doc.page.margins.left, 40, { width: pageWidth });
+        .text(args.pdfBrandName, doc.page.margins.left, 40, {
+          width: pageWidth,
+        });
 
       doc
         .fillColor('#111827')

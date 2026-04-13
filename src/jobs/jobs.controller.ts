@@ -160,10 +160,7 @@ export class JobsController {
     const safeName =
       attachmentFilename.replace(/[\r\n"]/g, '_').trim() || 'quotation.pdf';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${safeName}"`,
-    );
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
     res.send(pdfBuffer);
   }
 

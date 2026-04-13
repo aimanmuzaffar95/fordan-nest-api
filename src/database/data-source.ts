@@ -24,6 +24,7 @@ import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 import { Inverter } from '../inverters/entities/inverter.entity';
 import { Battery } from '../batteries/entities/battery.entity';
 import { AdminSettings } from '../runtime-settings/admin-settings.entity';
+import { SettingsAuditLog } from '../runtime-settings/settings-audit-log.entity';
 import { ComplianceFormTemplate } from '../compliance/entities/compliance-form-template.entity';
 import { JobComplianceSubmission } from '../compliance/entities/job-compliance-submission.entity';
 
@@ -120,6 +121,7 @@ export const AppDataSource = new DataSource({
     Inverter,
     Battery,
     AdminSettings,
+    SettingsAuditLog,
     ComplianceFormTemplate,
     JobComplianceSubmission,
   ],

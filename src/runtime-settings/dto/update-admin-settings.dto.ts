@@ -170,4 +170,16 @@ export class UpdateAdminSettingsDto {
   @IsOptional()
   @IsObject()
   crmAppearanceSettings?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  companyProfileSettings?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  billingSettings?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  documentNumberingSettings?: Record<string, unknown>;
 }

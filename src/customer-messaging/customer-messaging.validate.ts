@@ -62,34 +62,90 @@ export function validateCustomerMessagingTemplates(
 
   assertColor(pc.primaryHex, 'quotationPdf.primaryHex');
 
-  qc.subjectTemplate = trim(qc.subjectTemplate, 200, 'quotationEmail.subjectTemplate');
+  qc.subjectTemplate = trim(
+    qc.subjectTemplate,
+    200,
+    'quotationEmail.subjectTemplate',
+  );
   qc.brandName = trim(qc.brandName, 120, 'quotationEmail.brandName');
-  qc.kickerTemplate = trim(qc.kickerTemplate, 120, 'quotationEmail.kickerTemplate');
-  qc.heroTitleTemplate = trim(qc.heroTitleTemplate, 200, 'quotationEmail.heroTitleTemplate');
-  qc.heroIntroTemplate = trim(qc.heroIntroTemplate, 2000, 'quotationEmail.heroIntroTemplate');
+  qc.kickerTemplate = trim(
+    qc.kickerTemplate,
+    120,
+    'quotationEmail.kickerTemplate',
+  );
+  qc.heroTitleTemplate = trim(
+    qc.heroTitleTemplate,
+    200,
+    'quotationEmail.heroTitleTemplate',
+  );
+  qc.heroIntroTemplate = trim(
+    qc.heroIntroTemplate,
+    2000,
+    'quotationEmail.heroIntroTemplate',
+  );
   qc.introParagraphTemplate = trim(
     qc.introParagraphTemplate,
     2000,
     'quotationEmail.introParagraphTemplate',
   );
-  qc.nextStep1Template = trim(qc.nextStep1Template, 500, 'quotationEmail.nextStep1Template');
-  qc.nextStep2Template = trim(qc.nextStep2Template, 500, 'quotationEmail.nextStep2Template');
-  qc.nextStep3Template = trim(qc.nextStep3Template, 500, 'quotationEmail.nextStep3Template');
-  qc.footerBrandName = trim(qc.footerBrandName, 120, 'quotationEmail.footerBrandName');
-  qc.footerLine1Template = trim(qc.footerLine1Template, 500, 'quotationEmail.footerLine1Template');
-  qc.footerLine2Template = trim(qc.footerLine2Template, 500, 'quotationEmail.footerLine2Template');
+  qc.nextStep1Template = trim(
+    qc.nextStep1Template,
+    500,
+    'quotationEmail.nextStep1Template',
+  );
+  qc.nextStep2Template = trim(
+    qc.nextStep2Template,
+    500,
+    'quotationEmail.nextStep2Template',
+  );
+  qc.nextStep3Template = trim(
+    qc.nextStep3Template,
+    500,
+    'quotationEmail.nextStep3Template',
+  );
+  qc.footerBrandName = trim(
+    qc.footerBrandName,
+    120,
+    'quotationEmail.footerBrandName',
+  );
+  qc.footerLine1Template = trim(
+    qc.footerLine1Template,
+    500,
+    'quotationEmail.footerLine1Template',
+  );
+  qc.footerLine2Template = trim(
+    qc.footerLine2Template,
+    500,
+    'quotationEmail.footerLine2Template',
+  );
 
-  sc.subjectTemplate = trim(sc.subjectTemplate, 200, 'signatureRequestEmail.subjectTemplate');
+  sc.subjectTemplate = trim(
+    sc.subjectTemplate,
+    200,
+    'signatureRequestEmail.subjectTemplate',
+  );
   sc.brandName = trim(sc.brandName, 120, 'signatureRequestEmail.brandName');
-  sc.kickerTemplate = trim(sc.kickerTemplate, 120, 'signatureRequestEmail.kickerTemplate');
-  sc.heroTitleTemplate = trim(sc.heroTitleTemplate, 200, 'signatureRequestEmail.heroTitleTemplate');
+  sc.kickerTemplate = trim(
+    sc.kickerTemplate,
+    120,
+    'signatureRequestEmail.kickerTemplate',
+  );
+  sc.heroTitleTemplate = trim(
+    sc.heroTitleTemplate,
+    200,
+    'signatureRequestEmail.heroTitleTemplate',
+  );
   sc.heroIntroTemplate = trim(
     sc.heroIntroTemplate,
     2000,
     'signatureRequestEmail.heroIntroTemplate',
   );
   sc.ctaLabel = trim(sc.ctaLabel, 80, 'signatureRequestEmail.ctaLabel');
-  sc.footerBrandName = trim(sc.footerBrandName, 120, 'signatureRequestEmail.footerBrandName');
+  sc.footerBrandName = trim(
+    sc.footerBrandName,
+    120,
+    'signatureRequestEmail.footerBrandName',
+  );
   sc.footerLine1Template = trim(
     sc.footerLine1Template,
     500,
@@ -102,7 +158,19 @@ export function validateCustomerMessagingTemplates(
   );
 
   pc.brandName = trim(pc.brandName, 120, 'quotationPdf.brandName');
-  pc.headlineTemplate = trim(pc.headlineTemplate, 200, 'quotationPdf.headlineTemplate');
-  pc.thankYouTemplate = trim(pc.thankYouTemplate, 2000, 'quotationPdf.thankYouTemplate');
-  pc.footerNoteTemplate = trim(pc.footerNoteTemplate, 2000, 'quotationPdf.footerNoteTemplate');
+  pc.headlineTemplate = trim(
+    pc.headlineTemplate,
+    200,
+    'quotationPdf.headlineTemplate',
+  );
+  pc.thankYouTemplate = trim(
+    pc.thankYouTemplate,
+    2000,
+    'quotationPdf.thankYouTemplate',
+  );
+  pc.footerNoteTemplate = trim(
+    pc.footerNoteTemplate,
+    2000,
+    'quotationPdf.footerNoteTemplate',
+  );
 }

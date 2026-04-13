@@ -44,6 +44,7 @@ import { Inverter } from './inverters/entities/inverter.entity';
 import { BatteriesModule } from './batteries/batteries.module';
 import { Battery } from './batteries/entities/battery.entity';
 import { AdminSettings } from './runtime-settings/admin-settings.entity';
+import { SettingsAuditLog } from './runtime-settings/settings-audit-log.entity';
 import { ComplianceModule } from './compliance/compliance.module';
 import { ComplianceFormTemplate } from './compliance/entities/compliance-form-template.entity';
 import { JobComplianceSubmission } from './compliance/entities/job-compliance-submission.entity';
@@ -146,6 +147,7 @@ const publicLeadThrottleLimit = Number(
         Inverter,
         Battery,
         AdminSettings,
+        SettingsAuditLog,
         Notification,
         ComplianceFormTemplate,
         JobComplianceSubmission,

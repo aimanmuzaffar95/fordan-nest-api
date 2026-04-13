@@ -6,6 +6,7 @@ import {
   ADMIN_SETTINGS_SINGLETON_ID,
 } from './admin-settings.entity';
 import { UpdateAdminSettingsDto } from './dto/update-admin-settings.dto';
+import { SettingsAuditLog } from './settings-audit-log.entity';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -25,6 +26,33 @@ import {
   validateCrmAppearanceSettings,
 } from '../crm-appearance/crm-appearance.validate';
 import type { CrmAppearanceSettings } from '../crm-appearance/crm-appearance.types';
+import {
+  mergeCompanyProfilePatch,
+  mergeCompanyProfileSettings,
+} from '../company-profile/company-profile.merge';
+import {
+  normalizeCompanyProfileSettings,
+  validateCompanyProfileSettings,
+} from '../company-profile/company-profile.validate';
+import type { CompanyProfileSettings } from '../company-profile/company-profile.types';
+import {
+  mergeBillingPatch,
+  mergeBillingSettings,
+} from '../billing/billing-settings.merge';
+import {
+  normalizeBillingSettings,
+  validateBillingSettings,
+} from '../billing/billing-settings.validate';
+import type { BillingSettings } from '../billing/billing-settings.types';
+import {
+  mergeDocumentNumberingPatch,
+  mergeDocumentNumberingSettings,
+} from '../document-numbering/document-numbering.merge';
+import {
+  normalizeDocumentNumberingSettings,
+  validateDocumentNumberingSettings,
+} from '../document-numbering/document-numbering.validate';
+import type { DocumentNumberingSettings } from '../document-numbering/document-numbering.types';
 
 export type AdminSettingsPayload = {
   overridePreMeter: boolean;
@@ -48,6 +76,9 @@ export type AdminSettingsPayload = {
   mailFromName: string | null;
   customerMessagingTemplates: CustomerMessagingTemplates;
   crmAppearanceSettings: CrmAppearanceSettings;
+  companyProfileSettings: CompanyProfileSettings;
+  billingSettings: BillingSettings;
+  documentNumberingSettings: DocumentNumberingSettings;
 };
 
 @Injectable()
@@ -55,6 +86,8 @@ export class RuntimeSettingsService {
   constructor(
     @InjectRepository(AdminSettings)
     private readonly settingsRepo: Repository<AdminSettings>,
+    @InjectRepository(SettingsAuditLog)
+    private readonly settingsAuditRepo: Repository<SettingsAuditLog>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     private readonly notificationsService: NotificationsService,
@@ -81,6 +114,12 @@ export class RuntimeSettingsService {
     delete patch['customerMessagingTemplates'];
     const appearanceRaw = patch['crmAppearanceSettings'];
     delete patch['crmAppearanceSettings'];
+    const companyRaw = patch['companyProfileSettings'];
+    delete patch['companyProfileSettings'];
+    const billingRaw = patch['billingSettings'];
+    delete patch['billingSettings'];
+    const numberingRaw = patch['documentNumberingSettings'];
+    delete patch['documentNumberingSettings'];
     const cleaned = Object.fromEntries(
       Object.entries(patch).filter(([, v]) => v !== undefined),
     );
@@ -117,9 +156,51 @@ export class RuntimeSettingsService {
       validateCrmAppearanceSettings(normalized);
       settings.crmAppearanceSettings = normalized;
     }
+    if (companyRaw !== undefined) {
+      const current = mergeCompanyProfileSettings(
+        settings.companyProfileSettings,
+      );
+      const next = mergeCompanyProfilePatch(current, companyRaw);
+      const normalized = normalizeCompanyProfileSettings(next);
+      validateCompanyProfileSettings(normalized);
+      settings.companyProfileSettings = normalized;
+    }
+    if (billingRaw !== undefined) {
+      const current = mergeBillingSettings(settings.billingSettings);
+      const next = mergeBillingPatch(current, billingRaw);
+      const normalized = normalizeBillingSettings(next);
+      validateBillingSettings(normalized);
+      settings.billingSettings = normalized;
+    }
+    if (numberingRaw !== undefined) {
+      const current = mergeDocumentNumberingSettings(
+        settings.documentNumberingSettings,
+      );
+      const next = mergeDocumentNumberingPatch(current, numberingRaw);
+      const normalized = normalizeDocumentNumberingSettings(next);
+      validateDocumentNumberingSettings(normalized);
+      settings.documentNumberingSettings = normalized;
+    }
 
     const changedFields = Object.keys(updates).sort();
     const saved = await this.settingsRepo.save(settings);
+
+    const auditPatch: Record<string, unknown> = { ...updates } as Record<
+      string,
+      unknown
+    >;
+    if ('smtpPass' in auditPatch) {
+      // Never store plaintext credentials in audit.
+      auditPatch['smtpPass'] = auditPatch['smtpPass'] ? '[set]' : null;
+    }
+    await this.settingsAuditRepo.save(
+      this.settingsAuditRepo.create({
+        actorUserId: updatedByUserId,
+        action: 'settings_updated',
+        changedFields,
+        patch: auditPatch,
+      }),
+    );
 
     const adminUsers = await this.usersRepo.find({
       where: {
@@ -148,6 +229,49 @@ export class RuntimeSettingsService {
     );
 
     return this.toPayload(saved);
+  }
+
+  async listAuditLog(opts?: { limit?: number }): Promise<
+    Array<{
+      id: string;
+      actorUserId: string | null;
+      actorName: string | null;
+      action: string;
+      changedFields: string[];
+      patch: Record<string, unknown> | null;
+      createdAt: string;
+    }>
+  > {
+    const limit = Math.min(200, Math.max(1, opts?.limit ?? 50));
+    const rows = await this.settingsAuditRepo.find({
+      order: { createdAt: 'DESC' },
+      take: limit,
+      relations: { actorUser: true },
+      select: {
+        id: true,
+        actorUserId: true,
+        action: true,
+        changedFields: true,
+        patch: true,
+        createdAt: true,
+        actorUser: { id: true, firstName: true, lastName: true },
+      },
+    });
+
+    return rows.map((r) => {
+      const first = r.actorUser?.firstName?.trim() ?? '';
+      const last = r.actorUser?.lastName?.trim() ?? '';
+      const actorName = `${first} ${last}`.trim() || null;
+      return {
+        id: r.id,
+        actorUserId: r.actorUserId,
+        actorName,
+        action: r.action,
+        changedFields: r.changedFields ?? [],
+        patch: r.patch ?? null,
+        createdAt: r.createdAt.toISOString(),
+      };
+    });
   }
 
   async getCalendarScopeEnforced(): Promise<boolean> {
@@ -231,6 +355,13 @@ export class RuntimeSettingsService {
       ),
       crmAppearanceSettings: mergeCrmAppearanceSettings(
         settings.crmAppearanceSettings,
+      ),
+      companyProfileSettings: mergeCompanyProfileSettings(
+        settings.companyProfileSettings,
+      ),
+      billingSettings: mergeBillingSettings(settings.billingSettings),
+      documentNumberingSettings: mergeDocumentNumberingSettings(
+        settings.documentNumberingSettings,
       ),
     };
   }

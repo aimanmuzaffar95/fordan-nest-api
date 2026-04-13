@@ -20,6 +20,7 @@ import { InvoiceStatus } from './entities/invoice-status.enum';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { RecordPaymentDto } from './dto/record-payment.dto';
+import { DocumentNumberingService } from '../document-numbering/document-numbering.service';
 
 type InvoiceViewer = {
   userId: string;
@@ -49,6 +50,7 @@ export class InvoicesService {
     private readonly timelineEventsRepo: Repository<TimelineEvent>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
+    private readonly docNumbers: DocumentNumberingService,
   ) {}
 
   async list(query: QueryInvoicesDto, viewer?: InvoiceViewer) {
@@ -172,7 +174,7 @@ export class InvoicesService {
     invoice.status = InvoiceStatus.DRAFT;
     invoice.notes = dto.notes ?? null;
     invoice.terms = dto.terms ?? null;
-    invoice.invoiceNumber = await this.generateInvoiceNumber();
+    invoice.invoiceNumber = await this.docNumbers.allocateNextInvoiceNumber();
 
     const items: InvoiceItem[] = [];
     let subtotal = 0;
@@ -400,24 +402,6 @@ export class InvoicesService {
     );
 
     return this.getOne(id, viewer);
-  }
-
-  private async generateInvoiceNumber(): Promise<string> {
-    // Simple sequential pattern: INV-YYYYMMDD-XXXX
-    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-
-    for (let i = 0; i < 5; i += 1) {
-      const randomPart = Math.floor(Math.random() * 10000)
-        .toString()
-        .padStart(4, '0');
-      const candidate = `INV-${datePart}-${randomPart}`;
-      const exists = await this.invoicesRepo.findOne({
-        where: { invoiceNumber: candidate },
-      });
-      if (!exists) return candidate;
-    }
-
-    throw new Error('Failed to generate unique invoice number');
   }
 
   private applyViewerScope(

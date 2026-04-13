@@ -22,7 +22,7 @@ export class CustomerMessagingRendererService {
   }
 
   private compile(template: string, ctx: Record<string, unknown>): string {
-    return Handlebars.compile(template)(ctx) as string;
+    return Handlebars.compile(template)(ctx);
   }
 
   private baseCtx(

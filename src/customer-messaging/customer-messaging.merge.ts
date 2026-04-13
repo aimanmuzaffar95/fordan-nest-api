@@ -32,7 +32,9 @@ export function deepMergeMessagingPatch(
   patch: unknown,
 ): CustomerMessagingTemplates {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
-    throw new BadRequestException('customerMessagingTemplates must be an object');
+    throw new BadRequestException(
+      'customerMessagingTemplates must be an object',
+    );
   }
   const p = patch as Partial<CustomerMessagingTemplates>;
   return {
