@@ -6,6 +6,7 @@ import {
 import {
   BucketLocationConstraint,
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
@@ -73,6 +74,35 @@ export class FilesStorageService {
     }
 
     return this.storeInS3(input);
+  }
+
+  async deleteStoredFile(
+    file: Pick<FileEntity, 'storageBucket' | 'storageDriver' | 'storageKey'>,
+  ): Promise<void> {
+    if (file.storageDriver === 'local') {
+      const fullPath = join(
+        resolve(process.cwd(), this.config.localUploadDir),
+        file.storageKey,
+      );
+      await fs.unlink(fullPath).catch(() => undefined);
+      return;
+    }
+
+    const storageBucket = file.storageBucket?.trim();
+    if (!this.s3Client || !storageBucket) {
+      return;
+    }
+
+    try {
+      await this.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: storageBucket,
+          Key: file.storageKey,
+        }),
+      );
+    } catch {
+      /* best-effort cleanup */
+    }
   }
 
   async getStoredFile(

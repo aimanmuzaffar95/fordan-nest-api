@@ -11,4 +11,7 @@ export const DEFAULT_CRM_APPEARANCE_SETTINGS: CrmAppearanceSettings = {
   themePreference: 'system',
   compactSidebar: false,
   loginHideQuickFill: false,
+  uiFontId: 'inter',
+  monoFontId: 'jetbrains_mono',
+  borderRadiusPreset: 'default',
 };

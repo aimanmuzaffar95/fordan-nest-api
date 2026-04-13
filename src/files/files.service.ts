@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,6 +17,14 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { UploadOwnedFileDto } from './dto/upload-owned-file.dto';
 import { File as FileEntity } from './entities/file.entity';
 import { FilesStorageService } from './files-storage.service';
+import {
+  CRM_BRANDING_FILE_KIND,
+  CRM_BRANDING_FAVICON_MIME_TYPES,
+  CRM_BRANDING_LOGO_MIME_TYPES,
+  CRM_BRANDING_OWNER_ID,
+  CRM_BRANDING_OWNER_TYPE,
+  CrmBrandingUploadSlot,
+} from './crm-branding.constants';
 import {
   DEFAULT_METER_APPLICATION_UPLOAD_KIND,
   UploadKind,
@@ -427,6 +436,98 @@ export class FilesService {
 
     return {
       file,
+      stream: storedFile.stream,
+      contentLength: storedFile.contentLength,
+    };
+  }
+
+  async uploadCrmBrandingAsset(
+    slot: CrmBrandingUploadSlot,
+    uploadedFile: UploadedBinaryFile | undefined,
+    viewer: AuthenticatedViewer,
+  ): Promise<{ publicPath: string }> {
+    if (viewer.role !== UserRole.ADMIN) {
+      throw new ForbiddenException(
+        'Only admins can upload CRM branding assets',
+      );
+    }
+
+    const file = this.validateIncomingFile(uploadedFile);
+    const mimes =
+      slot === CrmBrandingUploadSlot.logo
+        ? CRM_BRANDING_LOGO_MIME_TYPES
+        : CRM_BRANDING_FAVICON_MIME_TYPES;
+    const mime = file.mimetype.trim().toLowerCase();
+    if (!(mimes as readonly string[]).includes(mime)) {
+      throw new BadRequestException(
+        `Unsupported type for ${slot}. Allowed: ${[...mimes].join(', ')}`,
+      );
+    }
+
+    const kind = CRM_BRANDING_FILE_KIND[slot];
+    const existing = await this.fileRepo.find({
+      where: {
+        ownerType: CRM_BRANDING_OWNER_TYPE,
+        ownerId: CRM_BRANDING_OWNER_ID,
+        kind,
+      },
+    });
+
+    for (const row of existing) {
+      await this.storageService.deleteStoredFile(row);
+      await this.fileRepo.remove(row);
+    }
+
+    const stored = await this.storageService.store({
+      ownerType: CRM_BRANDING_OWNER_TYPE,
+      ownerId: CRM_BRANDING_OWNER_ID,
+      kind: 'other' as UploadKind,
+      originalName: file.originalname,
+      contentType: file.mimetype,
+      buffer: file.buffer,
+    });
+
+    await this.fileRepo.save(
+      this.fileRepo.create({
+        ownerType: CRM_BRANDING_OWNER_TYPE,
+        ownerId: CRM_BRANDING_OWNER_ID,
+        kind,
+        storageDriver: stored.storageDriver,
+        storageBucket: stored.storageBucket,
+        storageKey: stored.storageKey,
+        originalName: file.originalname,
+        displayName:
+          slot === CrmBrandingUploadSlot.logo ? 'CRM logo' : 'CRM favicon',
+        contentType: file.mimetype,
+        sizeBytes: String(file.size),
+        uploadedByUserId: viewer.userId,
+      }),
+    );
+
+    return { publicPath: `/public/crm-branding/${slot}` };
+  }
+
+  async getPublicCrmBrandingDownload(
+    slot: CrmBrandingUploadSlot,
+  ): Promise<DownloadableFile> {
+    const kind = CRM_BRANDING_FILE_KIND[slot];
+    const row = await this.fileRepo.findOne({
+      where: {
+        ownerType: CRM_BRANDING_OWNER_TYPE,
+        ownerId: CRM_BRANDING_OWNER_ID,
+        kind,
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!row) {
+      throw new NotFoundException('Branding asset not found');
+    }
+
+    const storedFile = await this.storageService.getStoredFile(row);
+
+    return {
+      file: row,
       stream: storedFile.stream,
       contentLength: storedFile.contentLength,
     };

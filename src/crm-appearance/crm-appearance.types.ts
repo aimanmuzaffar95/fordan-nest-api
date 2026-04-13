@@ -1,5 +1,22 @@
 export type CrmThemePreference = 'system' | 'light' | 'dark';
 
+export type CrmUiFontId =
+  | 'inter'
+  | 'dm_sans'
+  | 'plus_jakarta_sans'
+  | 'source_sans_3'
+  | 'nunito_sans'
+  | 'work_sans'
+  | 'system';
+
+export type CrmMonoFontId =
+  | 'jetbrains_mono'
+  | 'fira_code'
+  | 'source_code_pro'
+  | 'system';
+
+export type CrmBorderRadiusPreset = 'default' | 'tight' | 'round';
+
 export type CrmAppearanceSettings = {
   appDisplayName: string;
   /** Shown on the login screen under the title. */
@@ -17,4 +34,10 @@ export type CrmAppearanceSettings = {
   compactSidebar: boolean;
   /** Hide dev-style quick credential buttons on the login page. */
   loginHideQuickFill: boolean;
+  /** Body / UI font (loaded from Google Fonts when not `system`). */
+  uiFontId: CrmUiFontId;
+  /** Monospace font for code-style UI. */
+  monoFontId: CrmMonoFontId;
+  /** Maps to global `--radius`. */
+  borderRadiusPreset: CrmBorderRadiusPreset;
 };

@@ -1,9 +1,29 @@
 import { BadRequestException } from '@nestjs/common';
+import { DEFAULT_CRM_APPEARANCE_SETTINGS } from './crm-appearance.defaults';
 import type { CrmAppearanceSettings } from './crm-appearance.types';
 
 const HEX_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
 
 const THEMES = new Set(['system', 'light', 'dark']);
+
+const UI_FONTS = new Set([
+  'inter',
+  'dm_sans',
+  'plus_jakarta_sans',
+  'source_sans_3',
+  'nunito_sans',
+  'work_sans',
+  'system',
+]);
+
+const MONO_FONTS = new Set([
+  'jetbrains_mono',
+  'fira_code',
+  'source_code_pro',
+  'system',
+]);
+
+const RADIUS_PRESETS = new Set(['default', 'tight', 'round']);
 
 function assertOptionalHttpUrl(label: string, v: string | null): void {
   if (v == null || v === '') return;
@@ -25,6 +45,13 @@ export function normalizeCrmAppearanceSettings(
   s: CrmAppearanceSettings,
 ): CrmAppearanceSettings {
   const primary = s.primaryBrandHex?.trim();
+  const def = DEFAULT_CRM_APPEARANCE_SETTINGS;
+  const uiOk = typeof s.uiFontId === 'string' && UI_FONTS.has(s.uiFontId);
+  const monoOk =
+    typeof s.monoFontId === 'string' && MONO_FONTS.has(s.monoFontId);
+  const radiusOk =
+    typeof s.borderRadiusPreset === 'string' &&
+    RADIUS_PRESETS.has(s.borderRadiusPreset);
   return {
     ...s,
     appDisplayName: s.appDisplayName.trim(),
@@ -34,6 +61,11 @@ export function normalizeCrmAppearanceSettings(
     logoUrl: s.logoUrl?.trim() || null,
     faviconUrl: s.faviconUrl?.trim() || null,
     primaryBrandHex: primary && primary.length > 0 ? primary : null,
+    uiFontId: uiOk ? s.uiFontId : def.uiFontId,
+    monoFontId: monoOk ? s.monoFontId : def.monoFontId,
+    borderRadiusPreset: radiusOk
+      ? s.borderRadiusPreset
+      : def.borderRadiusPreset,
   };
 }
 
@@ -108,6 +140,24 @@ export function validateCrmAppearanceSettings(s: CrmAppearanceSettings): void {
   if (typeof s.loginHideQuickFill !== 'boolean') {
     throw new BadRequestException(
       'crmAppearanceSettings.loginHideQuickFill must be a boolean',
+    );
+  }
+
+  if (!UI_FONTS.has(s.uiFontId)) {
+    throw new BadRequestException(
+      'crmAppearanceSettings.uiFontId is not a supported value',
+    );
+  }
+
+  if (!MONO_FONTS.has(s.monoFontId)) {
+    throw new BadRequestException(
+      'crmAppearanceSettings.monoFontId is not a supported value',
+    );
+  }
+
+  if (!RADIUS_PRESETS.has(s.borderRadiusPreset)) {
+    throw new BadRequestException(
+      'crmAppearanceSettings.borderRadiusPreset must be default, tight, or round',
     );
   }
 }
