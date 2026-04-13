@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
@@ -21,6 +23,8 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { DocumentNumberingService } from '../document-numbering/document-numbering.service';
+import { EmailService } from '../email/email.service';
+import { CustomerMessagingRendererService } from '../email/customer-messaging-renderer.service';
 
 type InvoiceViewer = {
   userId: string;
@@ -51,6 +55,8 @@ export class InvoicesService {
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     private readonly docNumbers: DocumentNumberingService,
+    private readonly email: EmailService,
+    private readonly customerMessaging: CustomerMessagingRendererService,
   ) {}
 
   async list(query: QueryInvoicesDto, viewer?: InvoiceViewer) {
@@ -311,6 +317,34 @@ export class InvoicesService {
         },
         viewer?.userId,
       );
+
+      // Customer payment receipt email (best-effort; hard-fail to keep accounting honest)
+      try {
+        const full = await this.invoicesRepo.findOne({
+          where: { id: invoice.id },
+          relations: { customer: true, job: true },
+        });
+        const customerEmail =
+          full?.customer?.email && full.customer.email.trim()
+            ? full.customer.email.trim()
+            : null;
+        if (full && customerEmail) {
+          const { subject, html } =
+            await this.customerMessaging.renderPaymentReceiptCustomerEmail({
+              customerName: `${full.customer.firstName ?? ''} ${full.customer.lastName ?? ''}`.trim() || 'Customer',
+              orderNumber: full.job?.orderNumber ?? '',
+              invoiceNumber: full.invoiceNumber,
+              paymentAmount: `${payment.amount} ${full.currency}`,
+              paymentDate: payment.paymentDate,
+            });
+          await this.email.send({ to: customerEmail, subject, html });
+        }
+      } catch {
+        throw new ServiceUnavailableException({
+          message: 'Email delivery failed. Payment receipt was not delivered.',
+          code: 'EMAIL_DELIVERY_FAILED',
+        });
+      }
     }
 
     // Re-fetch the full graph so the UI always gets items/payments/customer.
@@ -342,7 +376,82 @@ export class InvoicesService {
       viewer?.userId,
     );
 
+    // Customer invoice email (best-effort; hard-fail so "sent" means delivered)
+    try {
+      const full = await this.invoicesRepo.findOne({
+        where: { id: invoice.id },
+        relations: { customer: true, job: true },
+      });
+      const customerEmail =
+        full?.customer?.email && full.customer.email.trim()
+          ? full.customer.email.trim()
+          : null;
+      if (full && customerEmail) {
+        const due = full.dueDate ?? '';
+        const { subject, html } =
+          await this.customerMessaging.renderInvoiceSentCustomerEmail({
+            customerName: `${full.customer.firstName ?? ''} ${full.customer.lastName ?? ''}`.trim() || 'Customer',
+            orderNumber: full.job?.orderNumber ?? '',
+            invoiceNumber: full.invoiceNumber,
+            invoiceTotal: `${full.total} ${full.currency}`,
+            invoiceDueDate: due,
+          });
+        await this.email.send({ to: customerEmail, subject, html });
+      }
+    } catch {
+      throw new ServiceUnavailableException({
+        message: 'Email delivery failed. Invoice was not sent to customer.',
+        code: 'EMAIL_DELIVERY_FAILED',
+      });
+    }
+
     return this.getOne(id, viewer);
+  }
+
+  async sendOverdueReminder(id: string, viewer?: InvoiceViewer): Promise<void> {
+    const invoice = await this.invoicesRepo.findOne({
+      where: { id },
+      relations: { customer: true, job: true },
+    });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (viewer?.role === UserRole.MANAGER) {
+      this.assertManagerJobAccess(invoice.job, viewer.userId);
+    }
+    if (invoice.status === InvoiceStatus.CANCELLED) {
+      throw new BadRequestException('Cannot remind cancelled invoice');
+    }
+    const customerEmail =
+      invoice.customer?.email && invoice.customer.email.trim()
+        ? invoice.customer.email.trim()
+        : null;
+    if (!customerEmail) {
+      throw new BadRequestException('Customer email is missing');
+    }
+    try {
+      const { subject, html } =
+        await this.customerMessaging.renderOverdueReminderCustomerEmail({
+          customerName: `${invoice.customer.firstName ?? ''} ${invoice.customer.lastName ?? ''}`.trim() || 'Customer',
+          orderNumber: invoice.job?.orderNumber ?? '',
+          invoiceNumber: invoice.invoiceNumber,
+          invoiceTotal: `${invoice.total} ${invoice.currency}`,
+          invoiceDueDate: invoice.dueDate ?? '',
+        });
+      await this.email.send({ to: customerEmail, subject, html });
+    } catch {
+      throw new ServiceUnavailableException({
+        message: 'Email delivery failed. Overdue reminder was not delivered.',
+        code: 'EMAIL_DELIVERY_FAILED',
+      });
+    }
+  }
+
+  private assertManagerJobAccess(job: Job | null | undefined, userId: string) {
+    if (!job) {
+      throw new ForbiddenException('Manager access requires a job scope');
+    }
+    if (job.managerId !== userId) {
+      throw new ForbiddenException('You do not have access to this invoice');
+    }
   }
 
   async cancel(

@@ -7,11 +7,16 @@ import { EmailController } from './email.controller';
 import { EmailService } from './email.service';
 import { EMAIL_PROVIDER } from './providers/email-provider.interface';
 import { createEmailProvider } from './email-provider.factory';
+import { EmailTracking } from './email-tracking.entity';
+import { PublicEmailTrackingController } from './public-email-tracking.controller';
 
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([AdminSettings]), RuntimeSettingsModule],
-  controllers: [EmailController],
+  imports: [
+    TypeOrmModule.forFeature([AdminSettings, EmailTracking]),
+    RuntimeSettingsModule,
+  ],
+  controllers: [EmailController, PublicEmailTrackingController],
   providers: [
     {
       provide: EMAIL_PROVIDER,

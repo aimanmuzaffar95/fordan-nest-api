@@ -128,4 +128,19 @@ export class InvoicesController {
     }
     return this.invoices.addNote(id, dto, { userId, role });
   }
+
+  @Post(':id/remind-overdue')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  async remindOverdue(
+    @Param('id') id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+    await this.invoices.sendOverdueReminder(id, { userId, role });
+    return { ok: true };
+  }
 }

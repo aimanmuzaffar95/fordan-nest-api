@@ -51,6 +51,7 @@ import { JobComplianceSubmission } from './compliance/entities/job-compliance-su
 import { AlertsModule } from './alerts/alerts.module';
 import { Notification } from './notifications/entities/notification.entity';
 import { NotificationsModule } from './notifications/notifications.module';
+import { EmailTracking } from './email/email-tracking.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -148,6 +149,7 @@ const publicLeadThrottleLimit = Number(
         Battery,
         AdminSettings,
         SettingsAuditLog,
+        EmailTracking,
         Notification,
         ComplianceFormTemplate,
         JobComplianceSubmission,

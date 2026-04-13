@@ -27,6 +27,7 @@ import { AdminSettings } from '../runtime-settings/admin-settings.entity';
 import { SettingsAuditLog } from '../runtime-settings/settings-audit-log.entity';
 import { ComplianceFormTemplate } from '../compliance/entities/compliance-form-template.entity';
 import { JobComplianceSubmission } from '../compliance/entities/job-compliance-submission.entity';
+import { EmailTracking } from '../email/email-tracking.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -122,6 +123,7 @@ export const AppDataSource = new DataSource({
     Battery,
     AdminSettings,
     SettingsAuditLog,
+    EmailTracking,
     ComplianceFormTemplate,
     JobComplianceSubmission,
   ],

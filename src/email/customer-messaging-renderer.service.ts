@@ -33,6 +33,10 @@ export class CustomerMessagingRendererService {
     return Handlebars.compile(template)(ctx);
   }
 
+  private nlToBr(s: string): string {
+    return s.replace(/\n/g, '<br />');
+  }
+
   private baseCtx(
     theme: CustomerMessagingTemplates['quotationEmail'],
     extra: Record<string, unknown>,
@@ -190,5 +194,215 @@ export class CustomerMessagingRendererService {
       thankYou: this.compile(p.thankYouTemplate, ctx),
       footerNote: this.compile(p.footerNoteTemplate, ctx),
     };
+  }
+
+  async renderInvoiceSentCustomerEmail(input: {
+    customerName: string;
+    orderNumber: string;
+    invoiceNumber: string;
+    invoiceTotal: string;
+    invoiceDueDate: string;
+  }): Promise<{ subject: string; html: string }> {
+    const { templates, brandLogoUrl } = await this.templates();
+    const t = templates.invoiceSentEmail;
+    const ctx = {
+      brandName: t.brandName,
+      customerName: input.customerName,
+      orderNumber: input.orderNumber,
+      invoiceNumber: input.invoiceNumber,
+      invoiceTotal: input.invoiceTotal,
+      invoiceDueDate: input.invoiceDueDate,
+      currentYear: new Date().getFullYear(),
+    };
+    const subject = this.compile(t.subjectTemplate, ctx).trim();
+    const compiledBody = this.compile(t.bodyTemplate, ctx);
+    const ctaUrl =
+      t.ctaUrlTemplate && t.ctaUrlTemplate.trim()
+        ? this.compile(t.ctaUrlTemplate, ctx).trim()
+        : null;
+
+    const html = renderTemplate('simple-branded', {
+      primaryHex: t.primaryHex,
+      heroAccentHex: t.heroAccentHex,
+      heroBgHex: t.heroBgHex,
+      heroLeadHex: t.heroLeadHex,
+      bodyTextHex: t.bodyTextHex,
+      bodyMutedHex: t.bodyMutedHex,
+      cardBgHex: t.cardBgHex,
+      borderHex: t.borderHex,
+      totalBarBgHex: t.totalBarBgHex,
+      totalBarLabelHex: t.totalBarLabelHex,
+      pageBgHex: t.pageBgHex,
+      brandHeaderName: t.brandName,
+      brandLogoUrl,
+      footerBrandName: t.footerBrandName,
+      compiledKicker: this.compile(t.kickerTemplate, ctx),
+      compiledHeroTitle: this.compile(t.heroTitleTemplate, ctx),
+      compiledHeroIntro: this.compile(t.heroIntroTemplate, ctx),
+      compiledBodyHtml: this.nlToBr(compiledBody),
+      ctaLabel: t.ctaLabel,
+      ctaUrl,
+      compiledFooterLine1: this.compile(t.footerLine1Template, ctx),
+      compiledFooterLine2: this.compile(t.footerLine2Template, ctx),
+    });
+
+    return { subject, html };
+  }
+
+  async renderPaymentReceiptCustomerEmail(input: {
+    customerName: string;
+    orderNumber: string;
+    invoiceNumber: string;
+    paymentAmount: string;
+    paymentDate: string;
+  }): Promise<{ subject: string; html: string }> {
+    const { templates, brandLogoUrl } = await this.templates();
+    const t = templates.paymentReceiptEmail;
+    const ctx = {
+      brandName: t.brandName,
+      customerName: input.customerName,
+      orderNumber: input.orderNumber,
+      invoiceNumber: input.invoiceNumber,
+      paymentAmount: input.paymentAmount,
+      paymentDate: input.paymentDate,
+      currentYear: new Date().getFullYear(),
+    };
+    const subject = this.compile(t.subjectTemplate, ctx).trim();
+    const compiledBody = this.compile(t.bodyTemplate, ctx);
+    const ctaUrl =
+      t.ctaUrlTemplate && t.ctaUrlTemplate.trim()
+        ? this.compile(t.ctaUrlTemplate, ctx).trim()
+        : null;
+
+    const html = renderTemplate('simple-branded', {
+      primaryHex: t.primaryHex,
+      heroAccentHex: t.heroAccentHex,
+      heroBgHex: t.heroBgHex,
+      heroLeadHex: t.heroLeadHex,
+      bodyTextHex: t.bodyTextHex,
+      bodyMutedHex: t.bodyMutedHex,
+      cardBgHex: t.cardBgHex,
+      borderHex: t.borderHex,
+      totalBarBgHex: t.totalBarBgHex,
+      totalBarLabelHex: t.totalBarLabelHex,
+      pageBgHex: t.pageBgHex,
+      brandHeaderName: t.brandName,
+      brandLogoUrl,
+      footerBrandName: t.footerBrandName,
+      compiledKicker: this.compile(t.kickerTemplate, ctx),
+      compiledHeroTitle: this.compile(t.heroTitleTemplate, ctx),
+      compiledHeroIntro: this.compile(t.heroIntroTemplate, ctx),
+      compiledBodyHtml: this.nlToBr(compiledBody),
+      ctaLabel: t.ctaLabel,
+      ctaUrl,
+      compiledFooterLine1: this.compile(t.footerLine1Template, ctx),
+      compiledFooterLine2: this.compile(t.footerLine2Template, ctx),
+    });
+
+    return { subject, html };
+  }
+
+  async renderOverdueReminderCustomerEmail(input: {
+    customerName: string;
+    orderNumber: string;
+    invoiceNumber: string;
+    invoiceTotal: string;
+    invoiceDueDate: string;
+  }): Promise<{ subject: string; html: string }> {
+    const { templates, brandLogoUrl } = await this.templates();
+    const t = templates.overdueReminderEmail;
+    const ctx = {
+      brandName: t.brandName,
+      customerName: input.customerName,
+      orderNumber: input.orderNumber,
+      invoiceNumber: input.invoiceNumber,
+      invoiceTotal: input.invoiceTotal,
+      invoiceDueDate: input.invoiceDueDate,
+      currentYear: new Date().getFullYear(),
+    };
+    const subject = this.compile(t.subjectTemplate, ctx).trim();
+    const compiledBody = this.compile(t.bodyTemplate, ctx);
+    const ctaUrl =
+      t.ctaUrlTemplate && t.ctaUrlTemplate.trim()
+        ? this.compile(t.ctaUrlTemplate, ctx).trim()
+        : null;
+
+    const html = renderTemplate('simple-branded', {
+      primaryHex: t.primaryHex,
+      heroAccentHex: t.heroAccentHex,
+      heroBgHex: t.heroBgHex,
+      heroLeadHex: t.heroLeadHex,
+      bodyTextHex: t.bodyTextHex,
+      bodyMutedHex: t.bodyMutedHex,
+      cardBgHex: t.cardBgHex,
+      borderHex: t.borderHex,
+      totalBarBgHex: t.totalBarBgHex,
+      totalBarLabelHex: t.totalBarLabelHex,
+      pageBgHex: t.pageBgHex,
+      brandHeaderName: t.brandName,
+      brandLogoUrl,
+      footerBrandName: t.footerBrandName,
+      compiledKicker: this.compile(t.kickerTemplate, ctx),
+      compiledHeroTitle: this.compile(t.heroTitleTemplate, ctx),
+      compiledHeroIntro: this.compile(t.heroIntroTemplate, ctx),
+      compiledBodyHtml: this.nlToBr(compiledBody),
+      ctaLabel: t.ctaLabel,
+      ctaUrl,
+      compiledFooterLine1: this.compile(t.footerLine1Template, ctx),
+      compiledFooterLine2: this.compile(t.footerLine2Template, ctx),
+    });
+
+    return { subject, html };
+  }
+
+  async renderJobStatusCustomerEmail(input: {
+    customerName: string;
+    orderNumber: string;
+    jobStatusLabel: string;
+    jobStatusBody: string;
+  }): Promise<{ subject: string; html: string }> {
+    const { templates, brandLogoUrl } = await this.templates();
+    const t = templates.jobStatusEmail;
+    const ctx = {
+      brandName: t.brandName,
+      customerName: input.customerName,
+      orderNumber: input.orderNumber,
+      jobStatusLabel: input.jobStatusLabel,
+      jobStatusBody: input.jobStatusBody,
+      currentYear: new Date().getFullYear(),
+    };
+    const subject = this.compile(t.subjectTemplate, ctx).trim();
+    const compiledBody = this.compile(t.bodyTemplate, ctx);
+    const ctaUrl =
+      t.ctaUrlTemplate && t.ctaUrlTemplate.trim()
+        ? this.compile(t.ctaUrlTemplate, ctx).trim()
+        : null;
+
+    const html = renderTemplate('simple-branded', {
+      primaryHex: t.primaryHex,
+      heroAccentHex: t.heroAccentHex,
+      heroBgHex: t.heroBgHex,
+      heroLeadHex: t.heroLeadHex,
+      bodyTextHex: t.bodyTextHex,
+      bodyMutedHex: t.bodyMutedHex,
+      cardBgHex: t.cardBgHex,
+      borderHex: t.borderHex,
+      totalBarBgHex: t.totalBarBgHex,
+      totalBarLabelHex: t.totalBarLabelHex,
+      pageBgHex: t.pageBgHex,
+      brandHeaderName: t.brandName,
+      brandLogoUrl,
+      footerBrandName: t.footerBrandName,
+      compiledKicker: this.compile(t.kickerTemplate, ctx),
+      compiledHeroTitle: this.compile(t.heroTitleTemplate, ctx),
+      compiledHeroIntro: this.compile(t.heroIntroTemplate, ctx),
+      compiledBodyHtml: this.nlToBr(compiledBody),
+      ctaLabel: t.ctaLabel,
+      ctaUrl,
+      compiledFooterLine1: this.compile(t.footerLine1Template, ctx),
+      compiledFooterLine2: this.compile(t.footerLine2Template, ctx),
+    });
+
+    return { subject, html };
   }
 }

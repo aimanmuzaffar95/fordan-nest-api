@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
   PreconditionFailedException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -52,6 +53,8 @@ import { JobAuditValue } from './types/job-audit-value.type';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
 import { DocumentNumberingService } from '../document-numbering/document-numbering.service';
+import { EmailService } from '../email/email.service';
+import { CustomerMessagingRendererService } from '../email/customer-messaging-renderer.service';
 
 export type JobListViewer = { userId: string; role: UserRole };
 
@@ -96,6 +99,8 @@ export class JobsService {
     private readonly batteriesRepo: Repository<Battery>,
     private readonly notificationsService: NotificationsService,
     private readonly docNumbers: DocumentNumberingService,
+    private readonly email: EmailService,
+    private readonly customerMessaging: CustomerMessagingRendererService,
   ) {}
 
   async list(query: FindJobsQueryDto, viewer?: JobListViewer) {
@@ -1853,6 +1858,41 @@ export class JobsService {
     });
 
     await this.notifyNeedsAssignmentIfApplicable(updated);
+
+    const customerEmail =
+      updated.customer?.email && updated.customer.email.trim()
+        ? updated.customer.email.trim()
+        : null;
+    const customerName =
+      `${updated.customer?.firstName ?? ''} ${updated.customer?.lastName ?? ''}`.trim() ||
+      'Customer';
+    const orderNumber = updated.orderNumber ?? '';
+    if (customerEmail && (toStage === 'scheduled' || toStage === 'installed')) {
+      const statusLabel = toStage === 'scheduled' ? 'scheduled' : 'installed';
+      const statusBody =
+        toStage === 'scheduled'
+          ? `Your installation has been scheduled${
+              updated.scheduledDate ? ` for ${updated.scheduledDate}` : ''
+            }. We will contact you if we need any more details.`
+          : 'Your installation has been completed. Thank you for choosing us.';
+      try {
+        const { subject, html } =
+          await this.customerMessaging.renderJobStatusCustomerEmail({
+            customerName,
+            orderNumber,
+            jobStatusLabel: statusLabel,
+            jobStatusBody: statusBody,
+          });
+        await this.email.send({ to: customerEmail, subject, html });
+      } catch {
+        throw new ServiceUnavailableException({
+          message:
+            'Email delivery failed. Customer status notification was not delivered.',
+          code: 'EMAIL_DELIVERY_FAILED',
+        });
+      }
+    }
+
     return updated;
   }
 
