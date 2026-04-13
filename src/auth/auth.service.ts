@@ -65,8 +65,9 @@ export class AuthService implements OnModuleInit {
   }
 
   async login(loginDto: LoginDto): Promise<AuthLoginResult> {
+    const normalizedUsername = loginDto.username.trim();
     const credential = await this.credentialsRepository.findOne({
-      where: { username: loginDto.username },
+      where: { username: normalizedUsername },
     });
 
     if (!credential) {
@@ -110,16 +111,41 @@ export class AuthService implements OnModuleInit {
   ): Promise<{ mustChangePassword: boolean }> {
     const credential = await this.findCredentialByUserIdOrFail(userId);
 
-    const currentPasswordMatches = await comparePassword(
-      dto.currentPassword,
+    const currentPassword = dto.currentPassword;
+    const trimmedCurrentPassword = currentPassword.trim();
+
+    if (trimmedCurrentPassword.length === 0) {
+      throw new BadRequestException('Current password is required');
+    }
+
+    let matchedCurrentPassword = currentPassword;
+    let currentPasswordMatches = await comparePassword(
+      currentPassword,
       credential.passwordHash,
     );
+
+    // Temporary passwords are normalized when staff admins create/reset them.
+    // Accept surrounding whitespace during the forced first-login flow so
+    // copied values still validate even if the input picked up extra spaces.
+    if (
+      !currentPasswordMatches &&
+      credential.mustChangePassword &&
+      trimmedCurrentPassword !== currentPassword
+    ) {
+      currentPasswordMatches = await comparePassword(
+        trimmedCurrentPassword,
+        credential.passwordHash,
+      );
+      if (currentPasswordMatches) {
+        matchedCurrentPassword = trimmedCurrentPassword;
+      }
+    }
 
     if (!currentPasswordMatches) {
       throw new BadRequestException('Current password is incorrect');
     }
 
-    if (dto.currentPassword === dto.newPassword) {
+    if (matchedCurrentPassword === dto.newPassword) {
       throw new BadRequestException(
         'New password must be different from the current password',
       );
