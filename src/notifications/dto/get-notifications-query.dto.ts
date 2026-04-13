@@ -1,6 +1,13 @@
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class GetNotificationsQueryDto {
   @ApiPropertyOptional({
@@ -11,6 +18,25 @@ export class GetNotificationsQueryDto {
   @IsOptional()
   @IsIn(['all', 'unread'])
   status?: 'all' | 'unread';
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'Legacy alias for `status=unread`. When true, unread notifications only are returned.',
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === 'true') {
+      return true;
+    }
+    if (value === 'false') {
+      return false;
+    }
+
+    return value;
+  })
+  @IsBoolean()
+  unread?: boolean;
 
   @ApiPropertyOptional({
     example: 10,

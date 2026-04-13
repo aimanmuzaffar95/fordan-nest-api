@@ -10,7 +10,7 @@
     "build": "npm run clean && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
-    "start:dev": "npm run clean && nest start --watch",
+    "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "migration:show": "TS_NODE_TRANSPILE_ONLY=1 node ./node_modules/typeorm/cli-ts-node-commonjs.js migration:show -d src/database/data-source.ts",

@@ -50,6 +50,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { EmployeeRole } from './staff/entities/employee-role.entity';
 import { getSettingsEncryptionKey } from './common/crypto.util';
 import { loadEnvFile } from './common/load-env.util';
+import { AttendanceModule } from './attendance/attendance.module';
+import { AttendanceRecord } from './attendance/entities/attendance-record.entity';
 
 loadEnvFile();
 
@@ -159,6 +161,7 @@ getSettingsEncryptionKey();
         Battery,
         AdminSettings,
         Notification,
+        AttendanceRecord,
       ],
       migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,
@@ -190,6 +193,7 @@ getSettingsEncryptionKey();
     PublicLeadsModule,
     AlertsModule,
     NotificationsModule,
+    AttendanceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

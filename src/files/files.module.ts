@@ -21,6 +21,6 @@ import { FilesStorageService } from './files-storage.service';
     ]),
   ],
   providers: [FilesService, FilesStorageService],
-  exports: [FilesService],
+  exports: [FilesService, FilesStorageService],
 })
 export class FilesModule {}

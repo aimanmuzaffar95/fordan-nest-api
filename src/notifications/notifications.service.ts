@@ -125,7 +125,7 @@ export class NotificationsService {
     userId: string,
     query: GetNotificationsQueryDto,
   ): Promise<NotificationsListResponseDto> {
-    const status = query.status ?? 'all';
+    const status = query.unread ? 'unread' : (query.status ?? 'all');
     const limit = query.limit ?? 10;
 
     const where =

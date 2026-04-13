@@ -26,6 +26,7 @@ import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 import { Inverter } from '../inverters/entities/inverter.entity';
 import { Battery } from '../batteries/entities/battery.entity';
 import { AdminSettings } from '../runtime-settings/admin-settings.entity';
+import { AttendanceRecord } from '../attendance/entities/attendance-record.entity';
 
 loadEnvFile();
 
@@ -123,6 +124,7 @@ export const AppDataSource = new DataSource({
     Inverter,
     Battery,
     AdminSettings,
+    AttendanceRecord,
   ],
   migrations: isMigrationCli
     ? ['src/migrations/*.ts']

@@ -1225,6 +1225,10 @@ export class JobsService {
 
         return 'Assignment lock updated';
       }
+      case 'attendance_clock_in':
+        return 'Staff clocked in';
+      case 'attendance_clock_out':
+        return 'Staff clocked out';
       case 'quotation_sent': {
         const recipient =
           this.readTimelinePayloadString(payload, 'recipientEmail') ||
