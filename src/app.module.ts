@@ -44,6 +44,9 @@ import { Inverter } from './inverters/entities/inverter.entity';
 import { BatteriesModule } from './batteries/batteries.module';
 import { Battery } from './batteries/entities/battery.entity';
 import { AdminSettings } from './runtime-settings/admin-settings.entity';
+import { OrganizationProfile } from './organization-profile/organization-profile.entity';
+import { SystemAuditLog } from './system-audit/entities/system-audit-log.entity';
+import { OrganizationProfileModule } from './organization-profile/organization-profile.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { Notification } from './notifications/entities/notification.entity';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -160,6 +163,8 @@ getSettingsEncryptionKey();
         Inverter,
         Battery,
         AdminSettings,
+        OrganizationProfile,
+        SystemAuditLog,
         Notification,
         AttendanceRecord,
       ],
@@ -177,6 +182,7 @@ getSettingsEncryptionKey();
     ScheduleModule,
     MeteringModule,
     RuntimeSettingsModule,
+    OrganizationProfileModule,
     EmployeeFormsModule,
     SolarPanelsModule,
     InvertersModule,

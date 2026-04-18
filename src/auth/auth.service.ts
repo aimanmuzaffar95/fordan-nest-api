@@ -15,6 +15,8 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { UserCredential } from './entities/user-credential.entity';
 import { UserRole } from '../users/entities/user-role.enum';
+import { SystemAuditLogService } from '../system-audit/system-audit-log.service';
+import { SYSTEM_AUDIT_ACTION } from '../system-audit/system-audit-action.constants';
 
 type ComparePasswordFn = (data: string, encrypted: string) => Promise<boolean>;
 type HashPasswordFn = (
@@ -49,6 +51,7 @@ export class AuthService implements OnModuleInit {
     private readonly usersService: UsersService,
     private readonly staffService: StaffService,
     private readonly jwtService: JwtService,
+    private readonly systemAudit: SystemAuditLogService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -71,10 +74,24 @@ export class AuthService implements OnModuleInit {
     });
 
     if (!credential) {
+      await this.systemAudit.record({
+        action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
+        actorUserId: null,
+        resourceType: 'auth',
+        resourceId: null,
+        metadata: { reason: 'unknown_user' },
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (credential.user.deletedAt) {
+      await this.systemAudit.record({
+        action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
+        actorUserId: credential.user.id,
+        resourceType: 'auth',
+        resourceId: credential.user.id,
+        metadata: { reason: 'account_inactive' },
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -84,6 +101,13 @@ export class AuthService implements OnModuleInit {
     );
 
     if (!passwordMatches) {
+      await this.systemAudit.record({
+        action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
+        actorUserId: credential.user.id,
+        resourceType: 'auth',
+        resourceId: credential.user.id,
+        metadata: { reason: 'invalid_password' },
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -92,6 +116,14 @@ export class AuthService implements OnModuleInit {
       role: credential.user.role,
       isAdmin: credential.user.role === UserRole.ADMIN,
     };
+
+    await this.systemAudit.record({
+      action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_SUCCESS,
+      actorUserId: credential.user.id,
+      resourceType: 'auth',
+      resourceId: credential.user.id,
+      metadata: { role: credential.user.role },
+    });
 
     return {
       accessToken: await this.jwtService.signAsync(payload),

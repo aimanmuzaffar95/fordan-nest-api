@@ -10,6 +10,8 @@ import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
+import { SystemAuditLogService } from '../system-audit/system-audit-log.service';
+import { SYSTEM_AUDIT_ACTION } from '../system-audit/system-audit-action.constants';
 import {
   decryptSettingsValue,
   encryptSettingsValue,
@@ -84,6 +86,7 @@ export class RuntimeSettingsService {
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     private readonly notificationsService: NotificationsService,
+    private readonly systemAudit: SystemAuditLogService,
   ) {}
 
   async getSettings(): Promise<AdminSettingsPayload> {
@@ -134,6 +137,14 @@ export class RuntimeSettingsService {
         },
       },
     );
+
+    await this.systemAudit.record({
+      action: SYSTEM_AUDIT_ACTION.ADMIN_SETTINGS_UPDATED,
+      actorUserId: updatedByUserId,
+      resourceType: 'admin_settings',
+      resourceId: ADMIN_SETTINGS_SINGLETON_ID,
+      metadata: { changedFields },
+    });
 
     return this.toPayload(saved);
   }

@@ -9,6 +9,7 @@ import { StaffService } from '../staff/staff.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { UserCredential } from './entities/user-credential.entity';
+import { SystemAuditLogService } from '../system-audit/system-audit-log.service';
 
 type HashPasswordFn = (
   data: string,
@@ -52,6 +53,12 @@ describe('AuthService', () => {
           provide: JwtService,
           useValue: {
             signAsync: jest.fn().mockResolvedValue('mock-token'),
+          },
+        },
+        {
+          provide: SystemAuditLogService,
+          useValue: {
+            record: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
