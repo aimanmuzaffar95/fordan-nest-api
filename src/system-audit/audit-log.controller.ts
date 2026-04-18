@@ -1,11 +1,19 @@
-import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  NotFoundException,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -87,5 +95,22 @@ export class AuditLogController {
     });
 
     return { items, total, page, pageSize };
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Delete one system audit log row',
+    description:
+      'Removes a single `system_audit_logs` row. Intended for operational cleanup (for example removing the `auth.login_success` row from an automated smoke login). Prefer `API_SMOKE_SECRET` on the API plus `X-Fordan-Smoke-Secret` on `POST /auth/login` so login does not insert audit rows.',
+  })
+  async remove(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<{ deleted: true }> {
+    const result = await this.auditRepo.delete({ id });
+    if (!result.affected) {
+      throw new NotFoundException('Audit log entry not found');
+    }
+    return { deleted: true };
   }
 }

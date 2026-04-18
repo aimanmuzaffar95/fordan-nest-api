@@ -67,31 +67,39 @@ export class AuthService implements OnModuleInit {
     }
   }
 
-  async login(loginDto: LoginDto): Promise<AuthLoginResult> {
+  async login(
+    loginDto: LoginDto,
+    opts?: { skipLoginSystemAudit?: boolean },
+  ): Promise<AuthLoginResult> {
+    const skipAudit = opts?.skipLoginSystemAudit === true;
     const normalizedUsername = loginDto.username.trim();
     const credential = await this.credentialsRepository.findOne({
       where: { username: normalizedUsername },
     });
 
     if (!credential) {
-      await this.systemAudit.record({
-        action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
-        actorUserId: null,
-        resourceType: 'auth',
-        resourceId: null,
-        metadata: { reason: 'unknown_user' },
-      });
+      if (!skipAudit) {
+        await this.systemAudit.record({
+          action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
+          actorUserId: null,
+          resourceType: 'auth',
+          resourceId: null,
+          metadata: { reason: 'unknown_user' },
+        });
+      }
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (credential.user.deletedAt) {
-      await this.systemAudit.record({
-        action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
-        actorUserId: credential.user.id,
-        resourceType: 'auth',
-        resourceId: credential.user.id,
-        metadata: { reason: 'account_inactive' },
-      });
+      if (!skipAudit) {
+        await this.systemAudit.record({
+          action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
+          actorUserId: credential.user.id,
+          resourceType: 'auth',
+          resourceId: credential.user.id,
+          metadata: { reason: 'account_inactive' },
+        });
+      }
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -101,13 +109,15 @@ export class AuthService implements OnModuleInit {
     );
 
     if (!passwordMatches) {
-      await this.systemAudit.record({
-        action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
-        actorUserId: credential.user.id,
-        resourceType: 'auth',
-        resourceId: credential.user.id,
-        metadata: { reason: 'invalid_password' },
-      });
+      if (!skipAudit) {
+        await this.systemAudit.record({
+          action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
+          actorUserId: credential.user.id,
+          resourceType: 'auth',
+          resourceId: credential.user.id,
+          metadata: { reason: 'invalid_password' },
+        });
+      }
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -117,13 +127,15 @@ export class AuthService implements OnModuleInit {
       isAdmin: credential.user.role === UserRole.ADMIN,
     };
 
-    await this.systemAudit.record({
-      action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_SUCCESS,
-      actorUserId: credential.user.id,
-      resourceType: 'auth',
-      resourceId: credential.user.id,
-      metadata: { role: credential.user.role },
-    });
+    if (!skipAudit) {
+      await this.systemAudit.record({
+        action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_SUCCESS,
+        actorUserId: credential.user.id,
+        resourceType: 'auth',
+        resourceId: credential.user.id,
+        metadata: { role: credential.user.role },
+      });
+    }
 
     return {
       accessToken: await this.jwtService.signAsync(payload),

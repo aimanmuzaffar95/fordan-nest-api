@@ -9,7 +9,6 @@ import { EMAIL_PROVIDER } from './providers/email-provider.interface';
 import { createEmailProvider } from './email-provider.factory';
 import { EmailTracking } from './email-tracking.entity';
 import { PublicEmailTrackingController } from './public-email-tracking.controller';
-import { SmtpProvider } from './providers/smtp.provider';
 
 @Global()
 @Module({
@@ -19,7 +18,6 @@ import { SmtpProvider } from './providers/smtp.provider';
   ],
   controllers: [EmailController, PublicEmailTrackingController],
   providers: [
-    SmtpProvider,
     {
       provide: EMAIL_PROVIDER,
       useFactory: createEmailProvider,

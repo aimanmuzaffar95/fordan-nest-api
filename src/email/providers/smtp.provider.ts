@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
-import type { Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import {
   AdminSettings,
   ADMIN_SETTINGS_SINGLETON_ID,
@@ -29,7 +30,10 @@ export class SmtpProvider implements IEmailProvider {
     attachments: true,
   };
 
-  constructor(private readonly adminSettingsRepo: Repository<AdminSettings>) {}
+  constructor(
+    @InjectRepository(AdminSettings)
+    private readonly adminSettingsRepo: Repository<AdminSettings>,
+  ) {}
 
   async isConfigured(): Promise<boolean> {
     const cfg = await this.resolveConfig();
