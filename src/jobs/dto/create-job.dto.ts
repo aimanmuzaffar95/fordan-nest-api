@@ -65,10 +65,6 @@ export class CreateJobDto {
 
   @IsOptional()
   @IsDateString()
-  etaCompletionDate?: string | null;
-
-  @IsOptional()
-  @IsDateString()
   installDate?: string | null;
 
   @IsIn([...VALID_PIPELINE_STAGES])

@@ -284,10 +284,6 @@ export class JobsService {
           : job.depositAmount;
       const nextInstallDate =
         dto.installDate === undefined ? job.installDate : dto.installDate;
-      const nextEtaCompletionDate =
-        dto.etaCompletionDate === undefined
-          ? job.etaCompletionDate
-          : dto.etaCompletionDate;
       const nextDepositDate = nextDepositPaid
         ? (job.depositDate ?? new Date().toISOString().slice(0, 10))
         : null;
@@ -341,11 +337,6 @@ export class JobsService {
       markChanged('depositPaid', job.depositPaid, nextDepositPaid);
       markChanged('depositAmount', job.depositAmount, nextDepositAmount);
       markChanged('installDate', job.installDate, nextInstallDate);
-      markChanged(
-        'etaCompletionDate',
-        job.etaCompletionDate,
-        nextEtaCompletionDate,
-      );
       markChanged('managerId', job.managerId, validatedManagerId);
 
       if (changedSummaryFields.length === 0) {
@@ -366,7 +357,6 @@ export class JobsService {
       job.depositAmount = nextDepositAmount;
       job.depositDate = nextDepositDate;
       job.installDate = nextInstallDate;
-      job.etaCompletionDate = nextEtaCompletionDate;
       job.managerId = validatedManagerId;
 
       await jobsRepo.save(job);
@@ -1048,7 +1038,6 @@ export class JobsService {
         depositAmount: job.depositAmount,
         depositPaid: job.depositPaid,
         depositDate: job.depositDate,
-        etaCompletionDate: job.etaCompletionDate,
         installDate: job.installDate,
         scheduledDate: job.scheduledDate,
         scheduledSlot: job.scheduledSlot,
@@ -2170,7 +2159,6 @@ export class JobsService {
         depositPaid: dto.depositPaid,
         depositAmount: dto.depositAmount.toString(),
         depositDate: dto.depositPaid ? (dto.depositDate ?? today) : null,
-        etaCompletionDate: dto.etaCompletionDate ?? null,
         pipelineStage: dto.pipelineStage as JobPipelineStage,
         pipelinePosition: nextPipelinePosition,
         installDate: dto.installDate ?? null,

@@ -81,15 +81,6 @@ export class UpdateJobDto {
     return value;
   })
   @ValidateIf((_, value) => value !== null)
-  @IsDateString()
-  etaCompletionDate?: string | null;
-
-  @IsOptional()
-  @Transform(({ value }: { value: unknown }) => {
-    if (value === '') return null;
-    return value;
-  })
-  @ValidateIf((_, value) => value !== null)
   @IsUUID()
   managerId?: string | null;
 }

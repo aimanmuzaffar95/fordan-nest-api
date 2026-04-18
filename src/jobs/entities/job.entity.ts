@@ -69,10 +69,6 @@ export class Job {
   @Column({ type: 'date', nullable: true })
   depositDate: string | null;
 
-  // UI seed currently provides etaCompletionDate.
-  @Column({ type: 'date', nullable: true })
-  etaCompletionDate: string | null;
-
   // Canonical enum keys from apps/web/src/data/models.ts
   @Column({ type: 'varchar', length: 50, default: 'lead' })
   pipelineStage: string;

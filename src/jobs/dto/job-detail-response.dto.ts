@@ -27,7 +27,6 @@ export type JobDetailJobDto = {
   depositAmount: string;
   depositPaid: boolean;
   depositDate: string | null;
-  etaCompletionDate: string | null;
   installDate: string | null;
   scheduledDate: string | null;
   scheduledSlot: string | null;
