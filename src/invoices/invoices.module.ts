@@ -11,12 +11,16 @@ import { InvoiceItem } from './entities/invoice-item.entity';
 import { InvoicePayment } from './entities/invoice-payment.entity';
 import { InvoicesController } from './invoices.controller';
 import { InvoicesService } from './invoices.service';
+import { RuntimeSettingsModule } from '../runtime-settings/runtime-settings.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'development-secret',
     }),
+    RuntimeSettingsModule,
+    EmailModule,
     TypeOrmModule.forFeature([
       Invoice,
       InvoiceActivity,

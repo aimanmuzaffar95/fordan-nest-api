@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,6 +17,14 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { UploadOwnedFileDto } from './dto/upload-owned-file.dto';
 import { File as FileEntity } from './entities/file.entity';
 import { FilesStorageService } from './files-storage.service';
+import {
+  CRM_BRANDING_FILE_KIND,
+  CRM_BRANDING_FAVICON_MIME_TYPES,
+  CRM_BRANDING_LOGO_MIME_TYPES,
+  CRM_BRANDING_OWNER_ID,
+  CRM_BRANDING_OWNER_TYPE,
+  CrmBrandingUploadSlot,
+} from './crm-branding.constants';
 import {
   DEFAULT_METER_APPLICATION_UPLOAD_KIND,
   UploadKind,
@@ -266,6 +275,82 @@ export class FilesService {
     );
   }
 
+  /**
+   * Store a server-generated PDF for a job (e.g. e-signed quotation) with optional timeline row.
+   */
+  async persistJobGeneratedPdf(args: {
+    jobId: string;
+    buffer: Buffer;
+    displayName: string;
+    kind: UploadKind;
+    contentType: string;
+    uploadedByUserId: string | null;
+    timelineActorUserId: string | null;
+  }): Promise<FileEntity> {
+    const job = await this.jobsRepo.findOne({ where: { id: args.jobId } });
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    const stored = await this.storageService.store({
+      ownerType: 'job',
+      ownerId: args.jobId,
+      kind: args.kind,
+      originalName: `${args.displayName.replace(/[^a-zA-Z0-9._-]+/g, '_')}.pdf`,
+      contentType: args.contentType,
+      buffer: args.buffer,
+    });
+
+    const savedUpload = await this.dataSource.transaction(async (manager) => {
+      const fileRepository = manager.getRepository(FileEntity);
+      const timelineRepository = manager.getRepository(TimelineEvent);
+      const usersRepository = manager.getRepository(User);
+
+      const uploadedByUser = args.uploadedByUserId
+        ? await usersRepository.findOne({
+            where: { id: args.uploadedByUserId },
+            select: ['id', 'firstName', 'lastName'],
+          })
+        : null;
+
+      const savedFile = await fileRepository.save(
+        fileRepository.create({
+          ownerType: 'job',
+          ownerId: args.jobId,
+          kind: args.kind,
+          storageDriver: stored.storageDriver,
+          storageBucket: stored.storageBucket,
+          storageKey: stored.storageKey,
+          originalName: null,
+          displayName: args.displayName,
+          contentType: args.contentType,
+          sizeBytes: String(args.buffer.length),
+          uploadedByUserId: args.uploadedByUserId,
+        }),
+      );
+
+      await timelineRepository.save(
+        timelineRepository.create({
+          jobId: args.jobId,
+          type: 'job_file_uploaded',
+          payload: {
+            fileId: savedFile.id,
+            kind: savedFile.kind,
+            displayName: savedFile.displayName,
+            contentType: savedFile.contentType,
+            sizeBytes: savedFile.sizeBytes,
+            source: 'esign_completion',
+          },
+          createdByUserId: args.timelineActorUserId,
+        }),
+      );
+
+      return { savedFile, uploadedByUser };
+    });
+
+    return savedUpload.savedFile;
+  }
+
   async getJobFileDownload(
     jobId: string,
     fileId: string,
@@ -282,6 +367,40 @@ export class FilesService {
     });
 
     if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    const storedFile = await this.storageService.getStoredFile(file);
+
+    return {
+      file,
+      stream: storedFile.stream,
+      contentLength: storedFile.contentLength,
+    };
+  }
+
+  /**
+   * Stream a job-owned file when the caller has already authorized access (e.g. public e-sign token).
+   * Returns **404** when the file is missing or its `kind` is not in `allowedKinds`.
+   */
+  async getJobFileStreamWithKindGate(params: {
+    jobId: string;
+    fileId: string;
+    allowedKinds: readonly UploadKind[];
+  }): Promise<DownloadableFile> {
+    const file = await this.fileRepo.findOne({
+      where: {
+        id: params.fileId,
+        ownerType: 'job',
+        ownerId: params.jobId,
+      },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    if (!params.allowedKinds.includes(file.kind as UploadKind)) {
       throw new NotFoundException('File not found');
     }
 
@@ -317,6 +436,98 @@ export class FilesService {
 
     return {
       file,
+      stream: storedFile.stream,
+      contentLength: storedFile.contentLength,
+    };
+  }
+
+  async uploadCrmBrandingAsset(
+    slot: CrmBrandingUploadSlot,
+    uploadedFile: UploadedBinaryFile | undefined,
+    viewer: AuthenticatedViewer,
+  ): Promise<{ publicPath: string }> {
+    if (viewer.role !== UserRole.ADMIN) {
+      throw new ForbiddenException(
+        'Only admins can upload CRM branding assets',
+      );
+    }
+
+    const file = this.validateIncomingFile(uploadedFile);
+    const mimes =
+      slot === CrmBrandingUploadSlot.logo
+        ? CRM_BRANDING_LOGO_MIME_TYPES
+        : CRM_BRANDING_FAVICON_MIME_TYPES;
+    const mime = file.mimetype.trim().toLowerCase();
+    if (!(mimes as readonly string[]).includes(mime)) {
+      throw new BadRequestException(
+        `Unsupported type for ${slot}. Allowed: ${[...mimes].join(', ')}`,
+      );
+    }
+
+    const kind = CRM_BRANDING_FILE_KIND[slot];
+    const existing = await this.fileRepo.find({
+      where: {
+        ownerType: CRM_BRANDING_OWNER_TYPE,
+        ownerId: CRM_BRANDING_OWNER_ID,
+        kind,
+      },
+    });
+
+    for (const row of existing) {
+      await this.storageService.deleteStoredFile(row);
+      await this.fileRepo.remove(row);
+    }
+
+    const stored = await this.storageService.store({
+      ownerType: CRM_BRANDING_OWNER_TYPE,
+      ownerId: CRM_BRANDING_OWNER_ID,
+      kind: 'other' as UploadKind,
+      originalName: file.originalname,
+      contentType: file.mimetype,
+      buffer: file.buffer,
+    });
+
+    await this.fileRepo.save(
+      this.fileRepo.create({
+        ownerType: CRM_BRANDING_OWNER_TYPE,
+        ownerId: CRM_BRANDING_OWNER_ID,
+        kind,
+        storageDriver: stored.storageDriver,
+        storageBucket: stored.storageBucket,
+        storageKey: stored.storageKey,
+        originalName: file.originalname,
+        displayName:
+          slot === CrmBrandingUploadSlot.logo ? 'CRM logo' : 'CRM favicon',
+        contentType: file.mimetype,
+        sizeBytes: String(file.size),
+        uploadedByUserId: viewer.userId,
+      }),
+    );
+
+    return { publicPath: `/public/crm-branding/${slot}` };
+  }
+
+  async getPublicCrmBrandingDownload(
+    slot: CrmBrandingUploadSlot,
+  ): Promise<DownloadableFile> {
+    const kind = CRM_BRANDING_FILE_KIND[slot];
+    const row = await this.fileRepo.findOne({
+      where: {
+        ownerType: CRM_BRANDING_OWNER_TYPE,
+        ownerId: CRM_BRANDING_OWNER_ID,
+        kind,
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!row) {
+      throw new NotFoundException('Branding asset not found');
+    }
+
+    const storedFile = await this.storageService.getStoredFile(row);
+
+    return {
+      file: row,
       stream: storedFile.stream,
       contentLength: storedFile.contentLength,
     };

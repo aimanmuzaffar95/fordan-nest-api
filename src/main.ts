@@ -24,6 +24,7 @@ async function bootstrap() {
       'Authorization',
       'X-Installer-Setup-Token',
       'X-Public-Lead-Secret',
+      'X-Public-Web-Base-Url',
     ],
     credentials: false,
   });

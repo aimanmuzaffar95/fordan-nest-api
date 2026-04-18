@@ -14,12 +14,14 @@ import { JobInternalComment } from './jobs/entities/job-internal-comment.entity'
 import { JobProposalSelection } from './jobs/entities/job-proposal-selection.entity';
 import { JobsModule } from './jobs/jobs.module';
 import { Job } from './jobs/entities/job.entity';
+import { JobSignatureRequest } from './jobs/entities/job-signature-request.entity';
 import { Invoice } from './invoices/entities/invoice.entity';
 import { InvoiceActivity } from './invoices/entities/invoice-activity.entity';
 import { InvoiceItem } from './invoices/entities/invoice-item.entity';
 import { InvoicePayment } from './invoices/entities/invoice-payment.entity';
 import { InvoicesModule } from './invoices/invoices.module';
 import { StaffRole } from './staff/entities/staff-role.entity';
+import { EmployeeRole } from './staff/entities/employee-role.entity';
 import { StaffModule } from './staff/staff.module';
 
 import { Assignment } from './assignments/entities/assignment.entity';
@@ -44,17 +46,19 @@ import { Inverter } from './inverters/entities/inverter.entity';
 import { BatteriesModule } from './batteries/batteries.module';
 import { Battery } from './batteries/entities/battery.entity';
 import { AdminSettings } from './runtime-settings/admin-settings.entity';
-import { OrganizationProfile } from './organization-profile/organization-profile.entity';
-import { SystemAuditLog } from './system-audit/entities/system-audit-log.entity';
-import { OrganizationProfileModule } from './organization-profile/organization-profile.module';
+import { SettingsAuditLog } from './runtime-settings/settings-audit-log.entity';
+import { ComplianceModule } from './compliance/compliance.module';
+import { ComplianceFormTemplate } from './compliance/entities/compliance-form-template.entity';
+import { JobComplianceSubmission } from './compliance/entities/job-compliance-submission.entity';
 import { AlertsModule } from './alerts/alerts.module';
 import { Notification } from './notifications/entities/notification.entity';
 import { NotificationsModule } from './notifications/notifications.module';
-import { EmployeeRole } from './staff/entities/employee-role.entity';
-import { getSettingsEncryptionKey } from './common/crypto.util';
+import { EmailTracking } from './email/email-tracking.entity';
+import { OrganizationProfile } from './organization-profile/organization-profile.entity';
+import { SystemAuditLog } from './system-audit/entities/system-audit-log.entity';
+import { OrganizationProfileModule } from './organization-profile/organization-profile.module';
 import { loadEnvFile } from './common/load-env.util';
-import { AttendanceModule } from './attendance/attendance.module';
-import { AttendanceRecord } from './attendance/entities/attendance-record.entity';
+import { getSettingsEncryptionKey } from './common/crypto.util';
 
 loadEnvFile();
 
@@ -143,6 +147,7 @@ getSettingsEncryptionKey();
         Customer,
         CustomerAuditLog,
         Job,
+        JobSignatureRequest,
         JobAuditLog,
         JobInternalComment,
         JobProposalSelection,
@@ -163,10 +168,13 @@ getSettingsEncryptionKey();
         Inverter,
         Battery,
         AdminSettings,
+        SettingsAuditLog,
+        EmailTracking,
+        Notification,
+        ComplianceFormTemplate,
+        JobComplianceSubmission,
         OrganizationProfile,
         SystemAuditLog,
-        Notification,
-        AttendanceRecord,
       ],
       migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,
@@ -199,7 +207,7 @@ getSettingsEncryptionKey();
     PublicLeadsModule,
     AlertsModule,
     NotificationsModule,
-    AttendanceModule,
+    ComplianceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -13,6 +13,13 @@ type BuildQuotationPdfArgs = {
   batterySizeLabel: string;
   proposalItems: ProposalConfigItem[];
   proposalTotal: number;
+  pdfBrandName: string;
+  pdfPrimaryHex: string;
+  pdfHeadline: string;
+  pdfThankYou: string;
+  pdfFooterNote: string;
+  currency: string;
+  logoImageBytes?: Buffer;
 };
 
 @Injectable()
@@ -24,8 +31,8 @@ export class JobQuotationPdfService {
         margin: 48,
         info: {
           Title: args.attachmentFilename,
-          Author: 'Fordan Solar CRM',
-          Subject: `Quotation for ${args.customerName}`,
+          Author: `${args.pdfBrandName} CRM`,
+          Subject: args.pdfHeadline.slice(0, 240),
         },
       });
       const chunks: Buffer[] = [];
@@ -39,7 +46,7 @@ export class JobQuotationPdfService {
       const formatCurrency = (value: number) =>
         new Intl.NumberFormat('en-US', {
           style: 'currency',
-          currency: 'USD',
+          currency: args.currency,
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         }).format(value);
@@ -48,11 +55,33 @@ export class JobQuotationPdfService {
         doc.page.width - doc.page.margins.left - doc.page.margins.right;
       const contentRight = doc.page.width - doc.page.margins.right;
 
+      const accent = args.pdfPrimaryHex;
+
+      const headerY = 40;
+      const headerX = doc.page.margins.left;
+      const logoMaxH = 34;
+      let brandTextX = headerX;
+
+      if (args.logoImageBytes) {
+        try {
+          doc.image(args.logoImageBytes, headerX, headerY - 6, {
+            fit: [160, logoMaxH],
+            valign: 'center',
+          });
+          brandTextX = headerX + 172;
+        } catch {
+          // If the logo can't be decoded, fall back to text branding.
+          brandTextX = headerX;
+        }
+      }
+
       doc
-        .fillColor('#855300')
+        .fillColor(accent)
         .font('Helvetica-Bold')
         .fontSize(20)
-        .text('Fordan Solar', doc.page.margins.left, 40, { width: pageWidth });
+        .text(args.pdfBrandName, brandTextX, headerY, {
+          width: pageWidth - (brandTextX - headerX),
+        });
 
       doc
         .fillColor('#111827')
@@ -68,16 +97,14 @@ export class JobQuotationPdfService {
         .font('Helvetica-Bold')
         .fontSize(18)
         .fillColor('#111827')
-        .text(`Solar project quotation for ${args.customerName}`);
+        .text(args.pdfHeadline);
 
       doc
         .moveDown(0.4)
         .font('Helvetica')
         .fontSize(10.5)
         .fillColor('#4b5563')
-        .text(
-          'Thank you for considering Fordan Solar. This quotation has been prepared using the saved proposal configuration for your project.',
-        );
+        .text(args.pdfThankYou);
 
       doc.moveDown(1.1);
       const summaryTop = doc.y;
@@ -88,7 +115,7 @@ export class JobQuotationPdfService {
       doc
         .font('Helvetica-Bold')
         .fontSize(10)
-        .fillColor('#855300')
+        .fillColor(accent)
         .text('Customer details', doc.page.margins.left, summaryTop);
       doc
         .moveDown(0.3)
@@ -102,7 +129,7 @@ export class JobQuotationPdfService {
       doc
         .font('Helvetica-Bold')
         .fontSize(10)
-        .fillColor('#855300')
+        .fillColor(accent)
         .text('Project summary', rightColX, summaryTop, {
           width: rightColWidth,
         });
@@ -129,7 +156,7 @@ export class JobQuotationPdfService {
 
       const drawTableHeader = () => {
         const y = doc.y;
-        doc.fillColor('#855300').font('Helvetica-Bold').fontSize(9);
+        doc.fillColor(accent).font('Helvetica-Bold').fontSize(9);
         doc.text('Item', doc.page.margins.left, y, {
           width: pageWidth * 0.54,
         });
@@ -255,9 +282,7 @@ export class JobQuotationPdfService {
         .font('Helvetica')
         .fontSize(9.5)
         .fillColor('#4b5563')
-        .text(
-          'This quotation is generated from the saved proposal configuration in Fordan Solar CRM. Please contact our team if you would like any adjustments before moving forward.',
-        );
+        .text(args.pdfFooterNote);
 
       doc.end();
     });

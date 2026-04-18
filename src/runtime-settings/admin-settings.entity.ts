@@ -8,6 +8,11 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../users/entities/user.entity';
+import type { CustomerMessagingTemplates } from '../customer-messaging/customer-messaging.types';
+import type { CrmAppearanceSettings } from '../crm-appearance/crm-appearance.types';
+import type { CompanyProfileSettings } from '../company-profile/company-profile.types';
+import type { BillingSettings } from '../billing/billing-settings.types';
+import type { DocumentNumberingSettings } from '../document-numbering/document-numbering.types';
 
 export const ADMIN_SETTINGS_SINGLETON_ID = 'global';
 
@@ -43,26 +48,50 @@ export class AdminSettings {
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
   quickLeadDefaultProjectPrice: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  esignPublicBaseUrl: string | null;
+
+  @Column({ type: 'int', default: 14 })
+  esignTokenTtlDays: number;
+
+  @Column({ type: 'boolean', default: true })
+  complianceRequireSignature: boolean;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
   smtpHost: string | null;
 
-  @Column({ type: 'text', nullable: true })
-  smtpPort: string | null;
+  @Column({ type: 'int', nullable: true })
+  smtpPort: number | null;
 
-  @Column({ type: 'text', nullable: true })
-  smtpSecure: string | null;
-
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   smtpUser: string | null;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'varchar', length: 512, nullable: true })
   smtpPass: string | null;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'boolean', nullable: true })
+  smtpSecure: boolean | null;
+
+  @Column({ type: 'varchar', length: 320, nullable: true })
   mailFrom: string | null;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'varchar', length: 200, nullable: true })
   mailFromName: string | null;
+
+  @Column({ type: 'json', nullable: true })
+  customerMessagingTemplates: CustomerMessagingTemplates | null;
+
+  @Column({ type: 'json', nullable: true })
+  crmAppearanceSettings: CrmAppearanceSettings | null;
+
+  @Column({ type: 'json', nullable: true })
+  companyProfileSettings: CompanyProfileSettings | null;
+
+  @Column({ type: 'json', nullable: true })
+  billingSettings: BillingSettings | null;
+
+  @Column({ type: 'json', nullable: true })
+  documentNumberingSettings: DocumentNumberingSettings | null;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })
