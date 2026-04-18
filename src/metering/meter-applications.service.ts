@@ -23,12 +23,15 @@ export type MeterApplicationListItem = {
   status: string;
   dateSubmitted: string;
   approvalDate: string | null;
+  approvedByName: string | null;
   submittedByUserId: string;
   submittedByName: string | null;
   rejectionReason: string | null;
 };
 
 type MeterApplicationListRow = MeterApplicationListItem & {
+  approvedByFirstName: string | null;
+  approvedByLastName: string | null;
   submittedByFirstName: string | null;
   submittedByLastName: string | null;
 };
@@ -48,6 +51,7 @@ export class MeterApplicationsService {
     const qb = this.meterRepo
       .createQueryBuilder('meterApplication')
       .leftJoin('meterApplication.submittedByUser', 'submittedByUser')
+      .leftJoin('meterApplication.approvedByUser', 'approvedByUser')
       .select([
         'meterApplication.id AS id',
         'meterApplication.jobId AS "jobId"',
@@ -55,6 +59,8 @@ export class MeterApplicationsService {
         'meterApplication.status AS status',
         'meterApplication.dateSubmitted AS "dateSubmitted"',
         'meterApplication.approvalDate AS "approvalDate"',
+        'approvedByUser.firstName AS "approvedByFirstName"',
+        'approvedByUser.lastName AS "approvedByLastName"',
         'meterApplication.submittedByUserId AS "submittedByUserId"',
         'submittedByUser.firstName AS "submittedByFirstName"',
         'submittedByUser.lastName AS "submittedByLastName"',
@@ -75,6 +81,10 @@ export class MeterApplicationsService {
         status: row.status,
         dateSubmitted: row.dateSubmitted,
         approvalDate: row.approvalDate,
+        approvedByName: this.buildUserFullName(
+          row.approvedByFirstName,
+          row.approvedByLastName,
+        ),
         submittedByUserId: row.submittedByUserId,
         submittedByName: this.buildUserFullName(
           row.submittedByFirstName,

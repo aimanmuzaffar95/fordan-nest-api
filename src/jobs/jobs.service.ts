@@ -1676,7 +1676,9 @@ export class JobsService {
       if (remainingAmountNumber !== null && remainingAmountNumber <= 0.0001) {
         return 'paid';
       }
-      return 'invoiced';
+      return this.mapInvoiceStatusForJob(
+        latestOutstandingInvoice?.status ?? latestInvoice?.status,
+      );
     })();
 
     return {
@@ -1691,6 +1693,23 @@ export class JobsService {
           ? (latestPaymentDate ?? job.paidDate)
           : job.paidDate,
     };
+  }
+
+  private mapInvoiceStatusForJob(status?: InvoiceStatus | null): string {
+    switch (status) {
+      case InvoiceStatus.DRAFT:
+        return 'draft';
+      case InvoiceStatus.SENT:
+        return 'sent';
+      case InvoiceStatus.PARTIALLY_PAID:
+        return 'partially_paid';
+      case InvoiceStatus.OVERDUE:
+        return 'overdue';
+      case InvoiceStatus.PAID:
+        return 'paid';
+      default:
+        return 'invoiced';
+    }
   }
 
   async updateJobPipeline(
@@ -1749,6 +1768,77 @@ export class JobsService {
       }
     }
 
+    if (toStage === 'invoiced') {
+      const sentInvoice = await this.dataSource.getRepository(Invoice).findOne({
+        where: {
+          jobId,
+          status: In([
+            InvoiceStatus.SENT,
+            InvoiceStatus.PARTIALLY_PAID,
+            InvoiceStatus.OVERDUE,
+            InvoiceStatus.PAID,
+          ]),
+        },
+        order: { sentAt: 'DESC', createdAt: 'DESC' },
+      });
+
+      if (!sentInvoice) {
+        throw new PreconditionFailedException({
+          message:
+            'Cannot move to Invoiced — generate and send an invoice first.',
+          code: 'PRECONDITION_FAILED',
+        });
+      }
+    }
+
+    if (toStage === 'paid') {
+      const activeInvoices = await this.dataSource.getRepository(Invoice).find({
+        where: {
+          jobId,
+          status: In([
+            InvoiceStatus.DRAFT,
+            InvoiceStatus.SENT,
+            InvoiceStatus.PARTIALLY_PAID,
+            InvoiceStatus.OVERDUE,
+            InvoiceStatus.PAID,
+          ]),
+        },
+      });
+
+      const hasActiveInvoices = activeInvoices.length > 0;
+      const hasUnpaidInvoices = activeInvoices.some(
+        (invoice) => invoice.status !== InvoiceStatus.PAID,
+      );
+
+      if (!hasActiveInvoices || hasUnpaidInvoices) {
+        throw new PreconditionFailedException({
+          message:
+            'Cannot move to Paid — all invoices for this job must be fully paid.',
+          code: 'PRECONDITION_FAILED',
+        });
+      }
+    }
+
+    if (
+      toStage === 'pre_meter_submitted' &&
+      (!dto.preMeterSubmittedDate ||
+        dto.preMeterSubmittedDate.trim().length === 0)
+    ) {
+      throw new BadRequestException(
+        'preMeterSubmittedDate is required when moving to pre_meter_submitted.',
+      );
+    }
+
+    if (
+      toStage === 'post_meter_submitted' &&
+      (!dto.postMeterSubmittedDate ||
+        dto.postMeterSubmittedDate.trim().length === 0)
+    ) {
+      throw new BadRequestException(
+        'postMeterSubmittedDate is required when moving to post_meter_submitted.',
+      );
+    }
+
     const desiredPosition = dto.pipelinePosition;
 
     const clamp = (value: number, min: number, max: number) =>
@@ -1760,6 +1850,7 @@ export class JobsService {
 
       const currentJob = await jobRepo.findOne({ where: { id: jobId } });
       if (!currentJob) throw new NotFoundException('Job not found');
+      const meterApplicationsRepo = manager.getRepository(MeterApplication);
 
       const actualFromStage = currentJob.pipelineStage as JobPipelineStage;
       const actualToStage = toStage as JobPipelineStage;
@@ -1836,6 +1927,131 @@ export class JobsService {
               pipelinePosition: idx,
             },
           );
+        }
+      }
+
+      if (
+        actualFromStage !== actualToStage &&
+        actualToStage === JobPipelineStage.PRE_METER_SUBMITTED
+      ) {
+        const submittedDate =
+          dto.preMeterSubmittedDate?.slice(0, 10) ??
+          new Date().toISOString().slice(0, 10);
+        const preMeterApplication = await meterApplicationsRepo.findOne({
+          where: { jobId, type: 'pre_meter' },
+          order: { createdAt: 'DESC' },
+        });
+
+        if (preMeterApplication) {
+          preMeterApplication.status = 'pending';
+          preMeterApplication.dateSubmitted = submittedDate;
+          preMeterApplication.submittedByUserId = userId;
+          preMeterApplication.approvalDate = null;
+          preMeterApplication.approvedByUserId = null;
+          preMeterApplication.rejectedAt = null;
+          preMeterApplication.rejectedByUserId = null;
+          preMeterApplication.rejectionReason = null;
+          await meterApplicationsRepo.save(preMeterApplication);
+        } else {
+          await meterApplicationsRepo.save(
+            meterApplicationsRepo.create({
+              jobId,
+              type: 'pre_meter',
+              status: 'pending',
+              dateSubmitted: submittedDate,
+              submittedByUserId: userId,
+              approvalDate: null,
+              approvedByUserId: null,
+              rejectedAt: null,
+              rejectedByUserId: null,
+              rejectionReason: null,
+            }),
+          );
+        }
+      }
+
+      if (
+        actualFromStage !== actualToStage &&
+        actualToStage === JobPipelineStage.PRE_METER_APPROVED
+      ) {
+        const preMeterApplication = await meterApplicationsRepo.findOne({
+          where: { jobId, type: 'pre_meter' },
+          order: { createdAt: 'DESC' },
+        });
+
+        if (preMeterApplication && preMeterApplication.status !== 'approved') {
+          const today = new Date().toISOString().slice(0, 10);
+          preMeterApplication.status = 'approved';
+          preMeterApplication.approvalDate = today;
+          preMeterApplication.approvedByUserId = userId;
+          preMeterApplication.rejectedAt = null;
+          preMeterApplication.rejectedByUserId = null;
+          preMeterApplication.rejectionReason = null;
+          await meterApplicationsRepo.save(preMeterApplication);
+        }
+      }
+
+      if (
+        actualFromStage !== actualToStage &&
+        actualToStage === JobPipelineStage.POST_METER_SUBMITTED
+      ) {
+        const submittedDate =
+          dto.postMeterSubmittedDate?.slice(0, 10) ??
+          new Date().toISOString().slice(0, 10);
+        const postMeterApplication = await meterApplicationsRepo.findOne({
+          where: { jobId, type: 'post_meter' },
+          order: { createdAt: 'DESC' },
+        });
+
+        if (postMeterApplication) {
+          postMeterApplication.status = 'pending';
+          postMeterApplication.dateSubmitted = submittedDate;
+          postMeterApplication.submittedByUserId = userId;
+          postMeterApplication.approvalDate = null;
+          postMeterApplication.approvedByUserId = null;
+          postMeterApplication.rejectedAt = null;
+          postMeterApplication.rejectedByUserId = null;
+          postMeterApplication.rejectionReason = null;
+          await meterApplicationsRepo.save(postMeterApplication);
+        } else {
+          await meterApplicationsRepo.save(
+            meterApplicationsRepo.create({
+              jobId,
+              type: 'post_meter',
+              status: 'pending',
+              dateSubmitted: submittedDate,
+              submittedByUserId: userId,
+              approvalDate: null,
+              approvedByUserId: null,
+              rejectedAt: null,
+              rejectedByUserId: null,
+              rejectionReason: null,
+            }),
+          );
+        }
+      }
+
+      if (
+        actualFromStage !== actualToStage &&
+        actualToStage === JobPipelineStage.COMPLETED
+      ) {
+        const postMeterApplication = await meterApplicationsRepo.findOne({
+          where: { jobId, type: 'post_meter' },
+          order: { createdAt: 'DESC' },
+        });
+
+        if (
+          postMeterApplication &&
+          postMeterApplication.status !== 'approved'
+        ) {
+          const today = new Date().toISOString().slice(0, 10);
+          postMeterApplication.status = 'approved';
+          postMeterApplication.approvalDate = today;
+          postMeterApplication.approvedByUserId = userId;
+          postMeterApplication.rejectedAt = null;
+          postMeterApplication.rejectedByUserId = null;
+          postMeterApplication.rejectionReason = null;
+          await meterApplicationsRepo.save(postMeterApplication);
         }
       }
 

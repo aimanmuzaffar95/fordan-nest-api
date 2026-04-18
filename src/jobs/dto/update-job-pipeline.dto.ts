@@ -1,5 +1,15 @@
 import { Transform } from 'class-transformer';
-import { IsInt, IsIn, IsOptional, IsString, MaxLength, MinLength, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsInt,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  Max,
+  Min,
+} from 'class-validator';
 
 const VALID_PIPELINE_STAGES = [
   'lead',
@@ -33,4 +43,12 @@ export class UpdateJobPipelineDto {
   @MinLength(5)
   @MaxLength(500)
   backstageReason?: string;
+
+  @IsOptional()
+  @IsDateString()
+  preMeterSubmittedDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  postMeterSubmittedDate?: string;
 }

@@ -93,21 +93,24 @@ export class CreateAdminSettingsTable20260327_1700000000014 implements Migration
       }),
     );
 
-    await queryRunner.manager
-      .createQueryBuilder()
-      .insert()
-      .into('admin_settings')
-      .values({
-        id: 'global',
-        overridePreMeter: false,
-        calendarScopeEnforced: true,
-        invoiceOverdueDays: 14,
-        preMeterPendingDays: 7,
-        installWarningDays: 3,
-        postMeterDeadlineDays: 2,
-        maxJobsPerTeamPerDay: 2,
-      })
-      .execute();
+    // Seed only the columns introduced by this migration. Using TypeORM's
+    // insert builder against the registered entity can pull in fields added by
+    // later migrations, which breaks fresh bootstraps.
+    await queryRunner.query(
+      `
+        INSERT INTO "admin_settings" (
+          "id",
+          "overridePreMeter",
+          "calendarScopeEnforced",
+          "invoiceOverdueDays",
+          "preMeterPendingDays",
+          "installWarningDays",
+          "postMeterDeadlineDays",
+          "maxJobsPerTeamPerDay"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `,
+      ['global', false, true, 14, 7, 3, 2, 2],
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
