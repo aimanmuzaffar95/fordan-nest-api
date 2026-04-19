@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as Handlebars from 'handlebars';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
 import type { CustomerMessagingTemplates } from '../customer-messaging/customer-messaging.types';
@@ -14,6 +14,8 @@ export type QuotationEmailLineItem = {
 
 @Injectable()
 export class CustomerMessagingRendererService {
+  private readonly log = new Logger(CustomerMessagingRendererService.name);
+
   constructor(private readonly runtimeSettings: RuntimeSettingsService) {}
 
   private async templates(): Promise<{
@@ -35,6 +37,38 @@ export class CustomerMessagingRendererService {
 
   private nlToBr(s: string): string {
     return s.replace(/\n/g, '<br />');
+  }
+
+  /** Inserts compiled `emailSignatureHtml` before `</body>` when allowed. */
+  private appendGlobalEmailSignature(
+    html: string,
+    full: CustomerMessagingTemplates,
+    append: boolean | undefined,
+    ctx: Record<string, unknown>,
+  ): string {
+    if (append === false) {
+      return html;
+    }
+    const raw = (full.emailSignatureHtml ?? '').trim();
+    if (!raw) {
+      return html;
+    }
+    let compiled: string;
+    try {
+      compiled = Handlebars.compile(raw)(ctx);
+    } catch (err) {
+      this.log.warn(
+        `emailSignatureHtml Handlebars compile failed: ${(err as Error)?.message ?? err}`,
+      );
+      return html;
+    }
+    const block = `<div class="crm-email-signature" style="margin-top:24px;">${compiled}</div>`;
+    const lower = html.toLowerCase();
+    const idx = lower.lastIndexOf('</body>');
+    if (idx !== -1) {
+      return html.slice(0, idx) + block + html.slice(idx);
+    }
+    return html + block;
   }
 
   private baseCtx(
@@ -84,7 +118,7 @@ export class CustomerMessagingRendererService {
     });
 
     const subject = this.compile(q.subjectTemplate, ctx).trim();
-    const html = renderTemplate('quotation-branded', {
+    let html = renderTemplate('quotation-branded', {
       primaryHex: q.primaryHex,
       heroAccentHex: q.heroAccentHex,
       heroBgHex: q.heroBgHex,
@@ -116,6 +150,12 @@ export class CustomerMessagingRendererService {
       proposalTotal: input.proposalTotal,
     });
 
+    html = this.appendGlobalEmailSignature(
+      html,
+      templates,
+      q.appendEmailSignature,
+      ctx,
+    );
     return { subject, html };
   }
 
@@ -144,7 +184,7 @@ export class CustomerMessagingRendererService {
       referenceCode: input.referenceCode,
     }).trim();
 
-    const html = renderTemplate('signature-request-branded', {
+    let html = renderTemplate('signature-request-branded', {
       primaryHex: s.primaryHex,
       heroAccentHex: s.heroAccentHex,
       heroBgHex: s.heroBgHex,
@@ -166,6 +206,12 @@ export class CustomerMessagingRendererService {
       compiledFooterLine2: this.compile(s.footerLine2Template, ctx),
     });
 
+    html = this.appendGlobalEmailSignature(
+      html,
+      templates,
+      s.appendEmailSignature,
+      ctx,
+    );
     return { subject, html };
   }
 
@@ -221,7 +267,7 @@ export class CustomerMessagingRendererService {
         ? this.compile(t.ctaUrlTemplate, ctx).trim()
         : null;
 
-    const html = renderTemplate('simple-branded', {
+    let html = renderTemplate('simple-branded', {
       primaryHex: t.primaryHex,
       heroAccentHex: t.heroAccentHex,
       heroBgHex: t.heroBgHex,
@@ -246,6 +292,12 @@ export class CustomerMessagingRendererService {
       compiledFooterLine2: this.compile(t.footerLine2Template, ctx),
     });
 
+    html = this.appendGlobalEmailSignature(
+      html,
+      templates,
+      t.appendEmailSignature,
+      ctx,
+    );
     return { subject, html };
   }
 
@@ -274,7 +326,7 @@ export class CustomerMessagingRendererService {
         ? this.compile(t.ctaUrlTemplate, ctx).trim()
         : null;
 
-    const html = renderTemplate('simple-branded', {
+    let html = renderTemplate('simple-branded', {
       primaryHex: t.primaryHex,
       heroAccentHex: t.heroAccentHex,
       heroBgHex: t.heroBgHex,
@@ -299,6 +351,12 @@ export class CustomerMessagingRendererService {
       compiledFooterLine2: this.compile(t.footerLine2Template, ctx),
     });
 
+    html = this.appendGlobalEmailSignature(
+      html,
+      templates,
+      t.appendEmailSignature,
+      ctx,
+    );
     return { subject, html };
   }
 
@@ -327,7 +385,7 @@ export class CustomerMessagingRendererService {
         ? this.compile(t.ctaUrlTemplate, ctx).trim()
         : null;
 
-    const html = renderTemplate('simple-branded', {
+    let html = renderTemplate('simple-branded', {
       primaryHex: t.primaryHex,
       heroAccentHex: t.heroAccentHex,
       heroBgHex: t.heroBgHex,
@@ -352,6 +410,12 @@ export class CustomerMessagingRendererService {
       compiledFooterLine2: this.compile(t.footerLine2Template, ctx),
     });
 
+    html = this.appendGlobalEmailSignature(
+      html,
+      templates,
+      t.appendEmailSignature,
+      ctx,
+    );
     return { subject, html };
   }
 
@@ -378,7 +442,7 @@ export class CustomerMessagingRendererService {
         ? this.compile(t.ctaUrlTemplate, ctx).trim()
         : null;
 
-    const html = renderTemplate('simple-branded', {
+    let html = renderTemplate('simple-branded', {
       primaryHex: t.primaryHex,
       heroAccentHex: t.heroAccentHex,
       heroBgHex: t.heroBgHex,
@@ -403,6 +467,12 @@ export class CustomerMessagingRendererService {
       compiledFooterLine2: this.compile(t.footerLine2Template, ctx),
     });
 
+    html = this.appendGlobalEmailSignature(
+      html,
+      templates,
+      t.appendEmailSignature,
+      ctx,
+    );
     return { subject, html };
   }
 }

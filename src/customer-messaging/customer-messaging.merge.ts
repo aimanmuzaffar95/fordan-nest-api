@@ -18,6 +18,10 @@ export function mergeCustomerMessagingTemplates(
   }
   const s = stored as Partial<CustomerMessagingTemplates>;
   return {
+    emailSignatureHtml:
+      typeof s.emailSignatureHtml === 'string'
+        ? s.emailSignatureHtml
+        : base.emailSignatureHtml,
     quotationEmail: { ...base.quotationEmail, ...s.quotationEmail },
     signatureRequestEmail: {
       ...base.signatureRequestEmail,
@@ -48,6 +52,10 @@ export function deepMergeMessagingPatch(
   }
   const p = patch as Partial<CustomerMessagingTemplates>;
   return {
+    emailSignatureHtml:
+      p.emailSignatureHtml !== undefined
+        ? String(p.emailSignatureHtml)
+        : current.emailSignatureHtml,
     quotationEmail: { ...current.quotationEmail, ...p.quotationEmail },
     signatureRequestEmail: {
       ...current.signatureRequestEmail,

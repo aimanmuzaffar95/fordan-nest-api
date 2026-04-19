@@ -21,9 +21,27 @@ function assertColor(value: string, label: string): void {
   }
 }
 
+function assertOptionalBoolean(
+  value: unknown,
+  path: string,
+): asserts value is boolean | undefined {
+  if (value === undefined) {
+    return;
+  }
+  if (typeof value !== 'boolean') {
+    throw new BadRequestException(`${path} must be a boolean`);
+  }
+}
+
 export function validateCustomerMessagingTemplates(
   t: CustomerMessagingTemplates,
 ): void {
+  t.emailSignatureHtml = trim(
+    String(t.emailSignatureHtml ?? ''),
+    24_000,
+    'emailSignatureHtml',
+  );
+
   const qc = t.quotationEmail;
   const sc = t.signatureRequestEmail;
   const pc = t.quotationPdf;
@@ -33,6 +51,21 @@ export function validateCustomerMessagingTemplates(
     ['overdueReminderEmail', t.overdueReminderEmail],
     ['jobStatusEmail', t.jobStatusEmail],
   ] as const;
+
+  assertOptionalBoolean(
+    qc.appendEmailSignature,
+    'quotationEmail.appendEmailSignature',
+  );
+  assertOptionalBoolean(
+    sc.appendEmailSignature,
+    'signatureRequestEmail.appendEmailSignature',
+  );
+  for (const [key, cfg] of simple) {
+    assertOptionalBoolean(
+      cfg.appendEmailSignature,
+      `${key}.appendEmailSignature`,
+    );
+  }
 
   for (const [label, hex] of [
     ['quotationEmail.primaryHex', qc.primaryHex],

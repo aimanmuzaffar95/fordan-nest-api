@@ -14,7 +14,13 @@ export type BrandColorsHex = {
   pageBgHex: string;
 };
 
-export type QuotationEmailTemplateConfig = BrandColorsHex & {
+/** When false, the global `emailSignatureHtml` block is not appended for this email type. */
+export type EmailSignatureToggle = {
+  appendEmailSignature?: boolean;
+};
+
+export type QuotationEmailTemplateConfig = BrandColorsHex &
+  EmailSignatureToggle & {
   subjectTemplate: string;
   brandName: string;
   kickerTemplate: string;
@@ -29,7 +35,8 @@ export type QuotationEmailTemplateConfig = BrandColorsHex & {
   footerLine2Template: string;
 };
 
-export type SignatureRequestEmailTemplateConfig = BrandColorsHex & {
+export type SignatureRequestEmailTemplateConfig = BrandColorsHex &
+  EmailSignatureToggle & {
   subjectTemplate: string;
   brandName: string;
   kickerTemplate: string;
@@ -41,7 +48,8 @@ export type SignatureRequestEmailTemplateConfig = BrandColorsHex & {
   footerLine2Template: string;
 };
 
-export type SimpleBrandedEmailTemplateConfig = BrandColorsHex & {
+export type SimpleBrandedEmailTemplateConfig = BrandColorsHex &
+  EmailSignatureToggle & {
   subjectTemplate: string;
   brandName: string;
   kickerTemplate: string;
@@ -65,6 +73,12 @@ export type QuotationPdfTemplateConfig = {
 };
 
 export type CustomerMessagingTemplates = {
+  /**
+   * Raw HTML appended inside outgoing customer emails (before `</body>`) when the
+   * template’s `appendEmailSignature` is not false. Compiled with Handlebars using the
+   * same context as the rest of that email (e.g. `{{brandName}}`, `{{customerName}}`).
+   */
+  emailSignatureHtml: string;
   quotationEmail: QuotationEmailTemplateConfig;
   signatureRequestEmail: SignatureRequestEmailTemplateConfig;
   quotationPdf: QuotationPdfTemplateConfig;
