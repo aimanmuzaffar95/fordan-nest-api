@@ -111,44 +111,25 @@ export class AuthService implements OnModuleInit {
   ): Promise<{ mustChangePassword: boolean }> {
     const credential = await this.findCredentialByUserIdOrFail(userId);
 
-    const currentPassword = dto.currentPassword;
-    const trimmedCurrentPassword = currentPassword.trim();
+    if (!credential.mustChangePassword) {
+      if (!dto.currentPassword || dto.currentPassword.trim().length === 0) {
+        throw new BadRequestException('Current password is required');
+      }
 
-    if (trimmedCurrentPassword.length === 0) {
-      throw new BadRequestException('Current password is required');
-    }
-
-    let matchedCurrentPassword = currentPassword;
-    let currentPasswordMatches = await comparePassword(
-      currentPassword,
-      credential.passwordHash,
-    );
-
-    // Temporary passwords are normalized when staff admins create/reset them.
-    // Accept surrounding whitespace during the forced first-login flow so
-    // copied values still validate even if the input picked up extra spaces.
-    if (
-      !currentPasswordMatches &&
-      credential.mustChangePassword &&
-      trimmedCurrentPassword !== currentPassword
-    ) {
-      currentPasswordMatches = await comparePassword(
-        trimmedCurrentPassword,
+      const currentPasswordMatches = await comparePassword(
+        dto.currentPassword,
         credential.passwordHash,
       );
-      if (currentPasswordMatches) {
-        matchedCurrentPassword = trimmedCurrentPassword;
+
+      if (!currentPasswordMatches) {
+        throw new BadRequestException('Current password is incorrect');
       }
-    }
 
-    if (!currentPasswordMatches) {
-      throw new BadRequestException('Current password is incorrect');
-    }
-
-    if (matchedCurrentPassword === dto.newPassword) {
-      throw new BadRequestException(
-        'New password must be different from the current password',
-      );
+      if (dto.currentPassword === dto.newPassword) {
+        throw new BadRequestException(
+          'New password must be different from the current password',
+        );
+      }
     }
 
     credential.passwordHash = await hashPassword(dto.newPassword, 10);

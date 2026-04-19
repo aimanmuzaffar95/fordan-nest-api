@@ -8,6 +8,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
+import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
+import { NotificationsService } from '../notifications/notifications.service';
 import { EmployeeForm } from './entities/employee-form.entity';
 import { UpsertEmployeeFormDto } from './dto/upsert-employee-form.dto';
 
@@ -47,6 +49,7 @@ export class EmployeeFormsService {
     private readonly employeeFormsRepository: Repository<EmployeeForm>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async list(): Promise<EmployeeFormResponse[]> {
@@ -112,6 +115,14 @@ export class EmployeeFormsService {
         submittedAt,
       }),
     );
+
+    const fullName = `${user.firstName} ${user.lastName}`.trim();
+    await this.notificationsService.sendToRole(UserRole.ADMIN, {
+      type: NOTIFICATION_TYPE.EMPLOYEE_FORM_SUBMITTED,
+      title: 'Employee form submitted',
+      body: `${fullName} has submitted their employee registration form.`,
+      metadata: { employeeFormId: saved.id, installerUserId: userId },
+    });
 
     return this.toResponse(saved);
   }

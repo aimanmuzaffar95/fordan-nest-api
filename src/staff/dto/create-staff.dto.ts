@@ -30,11 +30,10 @@ export class CreateStaffDto {
   @MaxLength(255)
   address: string;
 
-  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(255)
-  identificationNumber?: string;
+  identificationNumber: string;
 
   @IsIn([UserRole.MANAGER, UserRole.INSTALLER, UserRole.EMPLOYEE])
   staffType: UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE;
