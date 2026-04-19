@@ -59,6 +59,15 @@ function parseDate(dateStr: string): Date {
   return new Date(dateStr + 'T00:00:00Z');
 }
 
+function getJobReference(job: Job): string {
+  const orderNumber = job.orderNumber?.trim();
+  if (orderNumber) {
+    return orderNumber;
+  }
+
+  return job.id;
+}
+
 function toResponseDto(alert: Alert): AlertResponseDto {
   return {
     id: alert.id,
@@ -300,6 +309,7 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
       message: string;
     }> = [];
     const hasApprovedPreMeter = approvedPreMeterJobIds.has(job.id);
+    const jobReference = getJobReference(job);
 
     if (job.installDate) {
       const installDate = parseDate(job.installDate);
@@ -316,7 +326,7 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
           severity: 'high',
           message:
             'Pre-meter not approved and install date is approaching for job ' +
-            job.id,
+            jobReference,
         });
       }
 
@@ -333,7 +343,7 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
             'Install is within ' +
             installWarningDays +
             ' days and pre-meter is not approved for job ' +
-            job.id,
+            jobReference,
         });
       }
 
@@ -350,7 +360,7 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
             'Post-meter not submitted more than ' +
             postMeterDeadlineDays +
             ' days after install for job ' +
-            job.id,
+            jobReference,
         });
       }
     }
@@ -376,7 +386,7 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
             'Invoice not paid after ' +
             invoiceOverdueDays +
             ' days past due date for job ' +
-            job.id,
+            jobReference,
         });
         break; // one alert per job is enough
       }
