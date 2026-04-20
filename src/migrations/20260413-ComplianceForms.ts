@@ -7,7 +7,7 @@ import {
   TableUnique,
 } from 'typeorm';
 
-export class ComplianceForms2026041312000000000 implements MigrationInterface {
+export class ComplianceForms1776081600000 implements MigrationInterface {
   private getDialectDefaults(queryRunner: QueryRunner) {
     const dialect = queryRunner.connection.options.type;
     const uuidDefault =

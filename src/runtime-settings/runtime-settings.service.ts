@@ -66,6 +66,25 @@ export type AdminSettingsPayload = {
   quickLeadDefaultProjectPrice: number;
   esignPublicBaseUrl: string | null;
   esignTokenTtlDays: number;
+  esignRequireVerificationToView: boolean;
+  esignEmailMagicLinkEnabled: boolean;
+  esignSmsOtpEnabled: boolean;
+  esignProposalTermsMarkdown: string | null;
+  esignProposalTermsVersion: number;
+  esignProposalAcceptanceMarkdown: string | null;
+  esignProposalAcceptanceVersion: number;
+  esignProposalShowSystemDetails: boolean;
+  esignProposalShowIncludedServices: boolean;
+  esignProposalIncludedServicesMarkdown: string | null;
+  esignProposalIncludedServicesVersion: number;
+  esignProposalShowWarranty: boolean;
+  esignProposalWarrantyMarkdown: string | null;
+  esignProposalWarrantyVersion: number;
+  esignProposalShowAssumptions: boolean;
+  esignProposalAssumptionsMarkdown: string | null;
+  esignProposalAssumptionsVersion: number;
+  esignProposalQuoteAdjustmentsJson: string | null;
+  esignProposalQuoteAdjustmentsVersion: number;
   complianceRequireSignature: boolean;
   smtpHost: string | null;
   smtpPort: number | null;
@@ -306,6 +325,25 @@ export class RuntimeSettingsService {
       quickLeadDefaultProjectPrice: '0',
       esignPublicBaseUrl: null,
       esignTokenTtlDays: 14,
+      esignRequireVerificationToView: true,
+      esignEmailMagicLinkEnabled: true,
+      esignSmsOtpEnabled: false,
+      esignProposalTermsMarkdown: null,
+      esignProposalTermsVersion: 1,
+      esignProposalAcceptanceMarkdown: null,
+      esignProposalAcceptanceVersion: 1,
+      esignProposalShowSystemDetails: true,
+      esignProposalShowIncludedServices: true,
+      esignProposalIncludedServicesMarkdown: null,
+      esignProposalIncludedServicesVersion: 1,
+      esignProposalShowWarranty: true,
+      esignProposalWarrantyMarkdown: null,
+      esignProposalWarrantyVersion: 1,
+      esignProposalShowAssumptions: true,
+      esignProposalAssumptionsMarkdown: null,
+      esignProposalAssumptionsVersion: 1,
+      esignProposalQuoteAdjustmentsJson: null,
+      esignProposalQuoteAdjustmentsVersion: 1,
       complianceRequireSignature: true,
       updatedByUserId: null,
     });
@@ -334,6 +372,57 @@ export class RuntimeSettingsService {
         ? settings.esignPublicBaseUrl.trim()
         : null,
       esignTokenTtlDays: settings.esignTokenTtlDays ?? 14,
+      esignRequireVerificationToView:
+        settings.esignRequireVerificationToView !== false,
+      esignEmailMagicLinkEnabled: settings.esignEmailMagicLinkEnabled !== false,
+      esignSmsOtpEnabled: settings.esignSmsOtpEnabled === true,
+      esignProposalTermsMarkdown:
+        typeof settings.esignProposalTermsMarkdown === 'string'
+          ? settings.esignProposalTermsMarkdown
+          : null,
+      esignProposalTermsVersion: Number(settings.esignProposalTermsVersion ?? 1),
+      esignProposalAcceptanceMarkdown:
+        typeof settings.esignProposalAcceptanceMarkdown === 'string'
+          ? settings.esignProposalAcceptanceMarkdown
+          : null,
+      esignProposalAcceptanceVersion: Number(
+        settings.esignProposalAcceptanceVersion ?? 1,
+      ),
+      esignProposalShowSystemDetails:
+        settings.esignProposalShowSystemDetails !== false,
+      esignProposalShowIncludedServices:
+        settings.esignProposalShowIncludedServices !== false,
+      esignProposalIncludedServicesMarkdown:
+        typeof settings.esignProposalIncludedServicesMarkdown === 'string'
+          ? settings.esignProposalIncludedServicesMarkdown
+          : null,
+      esignProposalIncludedServicesVersion: Number(
+        settings.esignProposalIncludedServicesVersion ?? 1,
+      ),
+      esignProposalShowWarranty: settings.esignProposalShowWarranty !== false,
+      esignProposalWarrantyMarkdown:
+        typeof settings.esignProposalWarrantyMarkdown === 'string'
+          ? settings.esignProposalWarrantyMarkdown
+          : null,
+      esignProposalWarrantyVersion: Number(
+        settings.esignProposalWarrantyVersion ?? 1,
+      ),
+      esignProposalShowAssumptions:
+        settings.esignProposalShowAssumptions !== false,
+      esignProposalAssumptionsMarkdown:
+        typeof settings.esignProposalAssumptionsMarkdown === 'string'
+          ? settings.esignProposalAssumptionsMarkdown
+          : null,
+      esignProposalAssumptionsVersion: Number(
+        settings.esignProposalAssumptionsVersion ?? 1,
+      ),
+      esignProposalQuoteAdjustmentsJson:
+        typeof settings.esignProposalQuoteAdjustmentsJson === 'string'
+          ? settings.esignProposalQuoteAdjustmentsJson
+          : null,
+      esignProposalQuoteAdjustmentsVersion: Number(
+        settings.esignProposalQuoteAdjustmentsVersion ?? 1,
+      ),
       complianceRequireSignature: settings.complianceRequireSignature !== false,
       smtpHost: settings.smtpHost?.trim() ? settings.smtpHost.trim() : null,
       smtpPort:

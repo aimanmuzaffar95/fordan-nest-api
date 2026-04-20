@@ -54,6 +54,72 @@ export class AdminSettings {
   @Column({ type: 'int', default: 14 })
   esignTokenTtlDays: number;
 
+  /**
+   * When true, public signing links require verification (magic link / OTP)
+   * before any proposal content is returned.
+   */
+  @Column({ type: 'boolean', default: true })
+  esignRequireVerificationToView: boolean;
+
+  /** Email magic-link verification (recommended baseline). */
+  @Column({ type: 'boolean', default: true })
+  esignEmailMagicLinkEnabled: boolean;
+
+  /** Optional SMS OTP verification (provider integration is future). */
+  @Column({ type: 'boolean', default: false })
+  esignSmsOtpEnabled: boolean;
+
+  /** Proposal terms/policies shown on the public proposal page (frozen into snapshot). */
+  @Column({ type: 'text', nullable: true })
+  esignProposalTermsMarkdown: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  esignProposalTermsVersion: number;
+
+  /** Acceptance block copy shown above signature pad (frozen into snapshot). */
+  @Column({ type: 'text', nullable: true })
+  esignProposalAcceptanceMarkdown: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  esignProposalAcceptanceVersion: number;
+
+  @Column({ type: 'boolean', default: true })
+  esignProposalShowSystemDetails: boolean;
+
+  @Column({ type: 'boolean', default: true })
+  esignProposalShowIncludedServices: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  esignProposalIncludedServicesMarkdown: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  esignProposalIncludedServicesVersion: number;
+
+  @Column({ type: 'boolean', default: true })
+  esignProposalShowWarranty: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  esignProposalWarrantyMarkdown: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  esignProposalWarrantyVersion: number;
+
+  @Column({ type: 'boolean', default: true })
+  esignProposalShowAssumptions: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  esignProposalAssumptionsMarkdown: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  esignProposalAssumptionsVersion: number;
+
+  /** Optional quote adjustments (discounts/incentives) as JSON array (frozen into snapshot). */
+  @Column({ type: 'text', nullable: true })
+  esignProposalQuoteAdjustmentsJson: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  esignProposalQuoteAdjustmentsVersion: number;
+
   @Column({ type: 'boolean', default: true })
   complianceRequireSignature: boolean;
 

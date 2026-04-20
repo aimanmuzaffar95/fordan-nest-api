@@ -43,6 +43,22 @@ export class JobSignatureRequest {
   @Column({ type: 'timestamp' })
   expiresAt: Date;
 
+  /**
+   * When enabled by settings, proposal content is gated until verification is complete.
+   * We store only the token hash; the raw token is sent via email as a magic link.
+   */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  emailVerifyTokenHash: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  emailVerifySentAt: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  emailVerifiedAt: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  verifiedAt: Date | null;
+
   @Column({ type: 'timestamp', nullable: true })
   sentAt: Date | null;
 
@@ -57,6 +73,13 @@ export class JobSignatureRequest {
 
   @Column({ type: 'varchar', length: 200, nullable: true })
   signerName: string | null;
+
+  /**
+   * Frozen proposal payload used by the public proposal page.
+   * This prevents “quote changed after sending” issues.
+   */
+  @Column({ type: 'json', nullable: true })
+  proposalSnapshot: Record<string, unknown> | null;
 
   @Column({ type: 'uuid', nullable: true })
   signedFileId: string | null;

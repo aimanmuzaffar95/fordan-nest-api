@@ -6,7 +6,7 @@ import {
   TableIndex,
 } from 'typeorm';
 
-export class AddSettingsAuditLogTable2026041615000000000 implements MigrationInterface {
+export class AddSettingsAuditLogTable1776351600000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const has = await queryRunner.hasTable('settings_audit_log');
     if (has) return;

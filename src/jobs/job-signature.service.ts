@@ -26,10 +26,12 @@ import { Job } from './entities/job.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import type { CompletePublicSignatureDto } from './dto/complete-public-signature.dto';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
+import { User } from '../users/entities/user.entity';
 
 export const ESIGN_CONSENT_VERSION = '1';
 
 const SIGNED_FILE_KIND = 'signed_paperwork' as UploadKind;
+const EMAIL_VERIFY_MIN_RESEND_MS = 60_000;
 
 function sha256Hex(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
@@ -44,6 +46,8 @@ function referenceCode(): string {
 }
 
 const HEADER_PUBLIC_WEB_BASE_URL = 'x-public-web-base-url';
+const HEADER_FORWARDED_PROTO = 'x-forwarded-proto';
+const HEADER_FORWARDED_HOST = 'x-forwarded-host';
 
 function stripTrailingSlashes(s: string): string {
   return s.replace(/\/+$/, '');
@@ -125,6 +129,26 @@ function tryPublicBaseUrlFromRequest(req?: Request): string | null {
   return null;
 }
 
+function tryPublicApiBaseUrlFromRequest(req?: Request): string | null {
+  if (!req?.headers) return null;
+  const xfProto = req.headers[HEADER_FORWARDED_PROTO];
+  const xfHost = req.headers[HEADER_FORWARDED_HOST];
+  const proto = Array.isArray(xfProto) ? xfProto[0] : xfProto;
+  const host = Array.isArray(xfHost) ? xfHost[0] : xfHost;
+
+  const effectiveProto =
+    (typeof proto === 'string' && proto.trim()) ||
+    (typeof req.protocol === 'string' && req.protocol.trim()) ||
+    'http';
+  const effectiveHost =
+    (typeof host === 'string' && host.trim()) ||
+    (typeof req.headers.host === 'string' && req.headers.host.trim()) ||
+    '';
+
+  if (!effectiveHost) return null;
+  return stripTrailingSlashes(`${effectiveProto}://${effectiveHost}`);
+}
+
 function parsePngBase64(raw: string): Buffer {
   const trimmed = raw.trim();
   const b64 = trimmed.includes(',')
@@ -163,6 +187,8 @@ export class JobSignatureService {
     private readonly jobsRepo: Repository<Job>,
     @InjectRepository(TimelineEvent)
     private readonly timelineRepo: Repository<TimelineEvent>,
+    @InjectRepository(User)
+    private readonly usersRepo: Repository<User>,
     private readonly jobs: JobsService,
     private readonly jobQuotation: JobQuotationService,
     private readonly pdfMerge: JobSignaturePdfMergeService,
@@ -223,6 +249,199 @@ export class JobSignatureService {
     }
   }
 
+  private async requireVerificationToView(): Promise<boolean> {
+    const settings = await this.runtimeSettings.getSettings();
+    return settings.esignRequireVerificationToView === true;
+  }
+
+  private async emailMagicLinkEnabled(): Promise<boolean> {
+    const settings = await this.runtimeSettings.getSettings();
+    return settings.esignEmailMagicLinkEnabled === true;
+  }
+
+  private maskEmail(email: string): string {
+    const e = email.trim();
+    const at = e.indexOf('@');
+    if (at <= 0) return '***';
+    const name = e.slice(0, at);
+    const domain = e.slice(at + 1);
+    const visible = name.length <= 2 ? name[0] ?? '*' : name.slice(0, 2);
+    return `${visible}${'*'.repeat(
+      Math.min(8, Math.max(1, name.length - visible.length)),
+    )}@${domain}`;
+  }
+
+  private buildProposalSnapshot(ctx: {
+    orderNumber: string;
+    customerName: string;
+    customerEmail: string;
+    customerAddress?: string;
+    company?: {
+      legalName?: string;
+      tradingName?: string;
+      abn?: string;
+      email?: string;
+      phone?: string;
+      website?: string;
+      address?: string;
+    };
+    preparedBy?: { name: string; email?: string | null; phone?: string | null };
+    preparedAtIso?: string;
+    expiresAtIso?: string;
+    system?: {
+      systemTypeLabel?: string;
+      systemSizeLabel?: string;
+      batterySizeLabel?: string;
+      installDate?: string | null;
+      depositAmount?: number | null;
+      projectPrice?: number | null;
+    };
+    terms?: { markdown: string | null; version: number };
+    acceptance?: { markdown: string | null; version: number };
+    payment?: { instructions: string | null };
+    money?: { currency: string; taxRatePercent: number };
+    sections?: {
+      showSystemDetails: boolean;
+      showIncludedServices: boolean;
+      showWarranty: boolean;
+      showAssumptions: boolean;
+    };
+    includedServices?: { markdown: string | null; version: number };
+    warranty?: { markdown: string | null; version: number };
+    assumptions?: { markdown: string | null; version: number };
+    adjustments?: Array<{ label: string; amountExclTax: number }>;
+    adjustmentsVersion?: number;
+    proposalItems: Array<{
+      name: string;
+      subtitle: string;
+      quantity: number;
+      proposalUnitPrice: number;
+      lineTotal: number;
+      equipmentType: string;
+      wattage: number | null;
+      inverterCapacityKw: number | null;
+      batteryCapacityKwh: number | null;
+      stockStatus: string | null;
+    }>;
+    proposalTotal: number;
+  }): Record<string, unknown> {
+    const currency = ctx.money?.currency?.trim() || 'USD';
+    const taxRatePercent =
+      Number.isFinite(ctx.money?.taxRatePercent) && (ctx.money?.taxRatePercent ?? 0) >= 0
+        ? Number(ctx.money?.taxRatePercent)
+        : 0;
+    const subtotalExclTax = ctx.proposalTotal;
+    const adjustments = Array.isArray(ctx.adjustments) ? ctx.adjustments : [];
+    const adjustmentsTotalExclTax = adjustments.reduce(
+      (sum, a) => sum + (Number(a.amountExclTax) || 0),
+      0,
+    );
+    const adjustedSubtotalExclTax = subtotalExclTax + adjustmentsTotalExclTax;
+    const taxAmount = adjustedSubtotalExclTax * (taxRatePercent / 100);
+    const totalInclTax = adjustedSubtotalExclTax + taxAmount;
+
+    return {
+      kind: 'job_signature_request_proposal_v1',
+      orderNumber: ctx.orderNumber,
+      preparedAt: ctx.preparedAtIso ?? new Date().toISOString(),
+      lastUpdatedAt: ctx.preparedAtIso ?? new Date().toISOString(),
+      expiresAt: ctx.expiresAtIso ?? null,
+      currency,
+      company: ctx.company ?? null,
+      preparedBy: ctx.preparedBy ?? null,
+      customer: {
+        name: ctx.customerName,
+        email: ctx.customerEmail,
+        address: ctx.customerAddress ?? '',
+      },
+      sections: ctx.sections ?? {
+        showSystemDetails: true,
+        showIncludedServices: true,
+        showWarranty: true,
+        showAssumptions: true,
+      },
+      system: ctx.system ?? null,
+      quote: {
+        items: ctx.proposalItems.map((i) => ({
+          label: i.name,
+          subtitle: i.subtitle,
+          quantity: i.quantity,
+          unitPrice: i.proposalUnitPrice,
+          total: i.lineTotal,
+          meta: {
+            equipmentType: i.equipmentType,
+            wattage: i.wattage,
+            inverterCapacityKw: i.inverterCapacityKw,
+            batteryCapacityKwh: i.batteryCapacityKwh,
+            stockStatus: i.stockStatus,
+          },
+        })),
+        subtotalExclTax,
+        adjustments: adjustments.map((a) => ({
+          label: String(a.label ?? 'Adjustment'),
+          amountExclTax: Number(a.amountExclTax) || 0,
+        })),
+        adjustmentsVersion: Number(ctx.adjustmentsVersion ?? 1),
+        adjustedSubtotalExclTax,
+        taxRatePercent,
+        taxAmount,
+        totalInclTax,
+      },
+      acceptance: {
+        markdown: ctx.acceptance?.markdown ?? null,
+        version: ctx.acceptance?.version ?? 1,
+      },
+      includedServices: {
+        markdown: ctx.includedServices?.markdown ?? null,
+        version: ctx.includedServices?.version ?? 1,
+      },
+      warranty: {
+        markdown: ctx.warranty?.markdown ?? null,
+        version: ctx.warranty?.version ?? 1,
+      },
+      assumptions: {
+        markdown: ctx.assumptions?.markdown ?? null,
+        version: ctx.assumptions?.version ?? 1,
+      },
+      policies: {
+        termsMarkdown: ctx.terms?.markdown ?? null,
+        termsVersion: ctx.terms?.version ?? 1,
+      },
+      payment: {
+        instructions: ctx.payment?.instructions ?? null,
+      },
+    };
+  }
+
+  private parseQuoteAdjustmentsJson(raw: string | null): Array<{
+    label: string;
+    amountExclTax: number;
+  }> {
+    const trimmed = (raw ?? '').trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((row) => {
+          if (!row || typeof row !== 'object') return null;
+          const r = row as Record<string, unknown>;
+          const label = typeof r.label === 'string' ? r.label.trim() : '';
+          const amount =
+            typeof r.amountExclTax === 'number'
+              ? r.amountExclTax
+              : typeof r.amountExclTax === 'string'
+                ? Number(r.amountExclTax)
+                : NaN;
+          if (!label || !Number.isFinite(amount)) return null;
+          return { label, amountExclTax: amount };
+        })
+        .filter((x): x is { label: string; amountExclTax: number } => Boolean(x));
+    } catch {
+      return [];
+    }
+  }
+
   async listForJob(jobId: string, viewer: JobListViewer) {
     this.assertStaff(viewer);
     await this.jobs.getOne(jobId, viewer);
@@ -259,27 +478,119 @@ export class JobSignatureService {
     expiresAt: string;
   }> {
     this.assertStaff(viewer);
-    const ctx = await this.jobQuotation.validateQuotationPrerequisites(
-      jobId,
-      viewer,
-    );
+    const [ctx, preparedByUser] = await Promise.all([
+      this.jobQuotation.validateQuotationPrerequisites(jobId, viewer),
+      this.usersRepo.findOne({
+        where: { id: viewer.userId },
+        select: ['id', 'firstName', 'lastName', 'emailAddress', 'phoneNumber'],
+      }),
+    ]);
     const base = await this.resolvePublicBaseUrl(req);
     const rawToken = randomToken();
     const tokenHash = sha256Hex(rawToken);
     const ref = await this.uniqueReferenceCode();
     const expiresAt = new Date(Date.now() + (await this.resolveTokenTtlMs()));
     await this.cancelOpenRequests(jobId);
+    const runtime = await this.runtimeSettings.getSettings();
+    const company = runtime.companyProfileSettings;
+    const companySnapshot = {
+      legalName: company.legalName?.trim() ?? '',
+      tradingName: company.tradingName?.trim() ?? '',
+      abn: company.abn?.trim() ?? '',
+      email: company.supportEmail?.trim() ?? '',
+      phone: company.supportPhone?.trim() ?? '',
+      website: company.websiteUrl?.trim() ?? '',
+      address: [
+        company.addressLine1,
+        company.addressLine2,
+        [company.suburb, company.state, company.postcode].filter(Boolean).join(' '),
+        company.country,
+      ]
+        .filter((s) => typeof s === 'string' && s.trim())
+        .map((s) => String(s).trim())
+        .join(', '),
+    };
+
     const row = this.signatureRepo.create({
       jobId,
       status: 'pending' as JobSignatureRequestStatus,
       tokenHash,
       referenceCode: ref,
       expiresAt,
+      emailVerifyTokenHash: null,
+      emailVerifySentAt: null,
+      emailVerifiedAt: null,
+      verifiedAt: null,
       sentAt: null,
       viewedAt: null,
       signedAt: null,
       signerEmail: ctx.customerEmail,
       signerName: ctx.customerName,
+      proposalSnapshot: this.buildProposalSnapshot({
+        orderNumber: ctx.orderNumber,
+        customerName: ctx.customerName,
+        customerEmail: ctx.customerEmail,
+        customerAddress: ctx.jobDetail.customer?.address?.trim() ?? '',
+        company: companySnapshot,
+        preparedBy: {
+          name: preparedByUser
+            ? `${preparedByUser.firstName} ${preparedByUser.lastName}`.trim()
+            : viewer.role === UserRole.ADMIN
+              ? 'Admin'
+              : 'Manager',
+          email: preparedByUser?.emailAddress ?? null,
+          phone: preparedByUser?.phoneNumber ?? null,
+        },
+        preparedAtIso: new Date().toISOString(),
+        expiresAtIso: expiresAt.toISOString(),
+        system: {
+          systemTypeLabel: String(ctx.jobDetail.job.systemType ?? ''),
+          systemSizeLabel: String(ctx.jobDetail.job.systemSizeKw ?? ''),
+          batterySizeLabel: String(ctx.jobDetail.job.batterySizeKwh ?? ''),
+          installDate: ctx.jobDetail.job.installDate ?? null,
+          depositAmount: Number(ctx.jobDetail.job.depositAmount ?? 0),
+          projectPrice: Number(ctx.jobDetail.job.projectPrice ?? 0),
+        },
+        terms: {
+          markdown: runtime.esignProposalTermsMarkdown,
+          version: runtime.esignProposalTermsVersion,
+        },
+        acceptance: {
+          markdown: runtime.esignProposalAcceptanceMarkdown,
+          version: runtime.esignProposalAcceptanceVersion,
+        },
+        sections: {
+          showSystemDetails: runtime.esignProposalShowSystemDetails,
+          showIncludedServices: runtime.esignProposalShowIncludedServices,
+          showWarranty: runtime.esignProposalShowWarranty,
+          showAssumptions: runtime.esignProposalShowAssumptions,
+        },
+        includedServices: {
+          markdown: runtime.esignProposalIncludedServicesMarkdown,
+          version: runtime.esignProposalIncludedServicesVersion,
+        },
+        warranty: {
+          markdown: runtime.esignProposalWarrantyMarkdown,
+          version: runtime.esignProposalWarrantyVersion,
+        },
+        assumptions: {
+          markdown: runtime.esignProposalAssumptionsMarkdown,
+          version: runtime.esignProposalAssumptionsVersion,
+        },
+        payment: {
+          instructions: runtime.billingSettings.paymentInstructions,
+        },
+        money: {
+          currency: runtime.companyProfileSettings.currency,
+          taxRatePercent: runtime.billingSettings.defaultTaxRatePercent,
+        },
+        adjustments: this.parseQuoteAdjustmentsJson(
+          runtime.esignProposalQuoteAdjustmentsJson,
+        ),
+        adjustmentsVersion: runtime.esignProposalQuoteAdjustmentsVersion,
+        proposalItems: ctx.proposalItems,
+        proposalTotal: ctx.proposalTotal,
+      }),
       signedFileId: null,
       auditPayload: null,
       createdByUserId: viewer.userId,
@@ -379,6 +690,38 @@ export class JobSignatureService {
     if (row.status === 'expired' || row.status === 'cancelled') {
       throw new NotFoundException('Invalid or expired signing link');
     }
+
+    const requireVerify = await this.requireVerificationToView();
+    const hasVerify = row.verifiedAt != null || row.status === 'signed';
+
+    const base = {
+      referenceCode: row.referenceCode,
+      expiresAt: row.expiresAt.toISOString(),
+      consentVersion: ESIGN_CONSENT_VERSION,
+      verification: {
+        required: requireVerify,
+        unlocked: hasVerify,
+        methods: {
+          emailMagicLinkEnabled: await this.emailMagicLinkEnabled(),
+          smsOtpEnabled:
+            (await this.runtimeSettings.getSettings()).esignSmsOtpEnabled ===
+            true,
+        },
+        masked: {
+          email: this.maskEmail(row.signerEmail),
+        },
+      },
+    };
+
+    if (requireVerify && !hasVerify) {
+      return {
+        ...base,
+        state: 'locked' as const,
+        signingComplete: row.status === 'signed',
+        signedAt: row.signedAt?.toISOString() ?? null,
+      };
+    }
+
     const jobFull = await this.jobsRepo.findOne({
       where: { id: row.jobId },
       relations: { customer: true },
@@ -387,22 +730,24 @@ export class JobSignatureService {
       throw new NotFoundException('Invalid or expired signing link');
     }
     const firstName = jobFull.customer?.firstName?.trim() || 'Customer';
-    const base = {
-      orderNumber: jobFull.orderNumber,
-      customerFirstName: firstName,
-      referenceCode: row.referenceCode,
-      expiresAt: row.expiresAt.toISOString(),
-      consentVersion: ESIGN_CONSENT_VERSION,
-    };
+    const proposal = row.proposalSnapshot ?? null;
     if (row.status === 'signed') {
       return {
         ...base,
+        state: 'unlocked' as const,
+        orderNumber: jobFull.orderNumber,
+        customerFirstName: firstName,
+        proposal,
         signingComplete: true,
         signedAt: row.signedAt?.toISOString() ?? null,
       };
     }
     return {
       ...base,
+      state: 'unlocked' as const,
+      orderNumber: jobFull.orderNumber,
+      customerFirstName: firstName,
+      proposal,
       signingComplete: false,
       signedAt: null,
     };
@@ -415,6 +760,13 @@ export class JobSignatureService {
     }
     await this.expireIfNeeded(row);
     if (row.status === 'expired' || row.status === 'cancelled') {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    if (
+      (await this.requireVerificationToView()) &&
+      !row.verifiedAt &&
+      row.status !== 'signed'
+    ) {
       throw new NotFoundException('Invalid or expired signing link');
     }
     if (row.status === 'signed') {
@@ -453,6 +805,13 @@ export class JobSignatureService {
     }
     await this.expireIfNeeded(row);
     if (row.status === 'expired' || row.status === 'cancelled') {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    if (
+      (await this.requireVerificationToView()) &&
+      !row.verifiedAt &&
+      row.status !== 'signed'
+    ) {
       throw new NotFoundException('Invalid or expired signing link');
     }
     const { pdfBuffer, attachmentFilename } =
@@ -494,6 +853,153 @@ export class JobSignatureService {
     };
   }
 
+  async startPublicEmailVerification(
+    rawToken: string,
+    req: Request,
+  ): Promise<{ ok: true }> {
+    const requireVerify = await this.requireVerificationToView();
+    if (!requireVerify) {
+      return { ok: true };
+    }
+    if (!(await this.emailMagicLinkEnabled())) {
+      throw new BadRequestException('Email verification is disabled');
+    }
+
+    const row = await this.findSignatureRowByRawToken(rawToken);
+    if (!row) {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    await this.expireIfNeeded(row);
+    if (row.status === 'expired' || row.status === 'cancelled') {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    if (row.verifiedAt || row.status === 'signed') {
+      return { ok: true };
+    }
+    if (
+      row.emailVerifySentAt &&
+      Date.now() - row.emailVerifySentAt.getTime() < EMAIL_VERIFY_MIN_RESEND_MS
+    ) {
+      throw new BadRequestException({
+        message: 'Please wait before requesting another verification email.',
+        code: 'VERIFY_EMAIL_RATE_LIMIT',
+      });
+    }
+
+    const rawMagic = randomToken();
+    row.emailVerifyTokenHash = sha256Hex(rawMagic);
+    row.emailVerifySentAt = new Date();
+    await this.signatureRepo.save(row);
+
+    const publicWebBase = await this.resolvePublicBaseUrl(req);
+    const apiBase =
+      process.env.PUBLIC_API_BASE_URL?.trim() ||
+      tryPublicApiBaseUrlFromRequest(req);
+    if (!apiBase) {
+      throw new ServiceUnavailableException(
+        'Public API base URL is not configured',
+      );
+    }
+    const verifyUrl = `${stripTrailingSlashes(apiBase)}/api/public/sign/verify-email/${rawMagic}?accessToken=${encodeURIComponent(
+      rawToken,
+    )}`;
+
+    const subject = `Verify to view your proposal (${row.referenceCode})`;
+    const html = `
+      <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;">
+        <h2 style="margin:0 0 12px 0;">Verify to view your proposal</h2>
+        <p style="margin:0 0 16px 0;">Click the button below to unlock and view your proposal.</p>
+        <p style="margin:0 0 20px 0;">
+          <a href="${verifyUrl}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:10px 14px;border-radius:8px;">
+            Verify email & view proposal
+          </a>
+        </p>
+        <p style="margin:0;color:#6b7280;font-size:12px;">If you didn’t request this, you can ignore this email.</p>
+      </div>
+    `.trim();
+
+    await this.email.send({
+      to: row.signerEmail,
+      subject,
+      html,
+    });
+
+    await this.timelineRepo.save(
+      this.timelineRepo.create({
+        jobId: row.jobId,
+        type: 'signature_view_verification_email_sent',
+        payload: {
+          signatureRequestId: row.id,
+          referenceCode: row.referenceCode,
+          sentAt: row.emailVerifySentAt.toISOString(),
+        },
+        createdByUserId: null,
+      }),
+    );
+
+    return { ok: true };
+  }
+
+  async completePublicEmailVerification(
+    rawMagicToken: string,
+    accessToken: string,
+    req: Request,
+  ): Promise<{ redirectUrl: string }> {
+    const publicWebBase = await this.resolvePublicBaseUrl(req);
+    const requireVerify = await this.requireVerificationToView();
+    if (!requireVerify) {
+      return {
+        redirectUrl: `${publicWebBase}/sign/${encodeURIComponent(accessToken)}`,
+      };
+    }
+    if (!(await this.emailMagicLinkEnabled())) {
+      throw new NotFoundException('Invalid verification link');
+    }
+    const magic = rawMagicToken?.trim();
+    if (!magic || magic.length < 16) {
+      throw new NotFoundException('Invalid verification link');
+    }
+    const row = await this.signatureRepo.findOne({
+      where: { emailVerifyTokenHash: sha256Hex(magic) },
+    });
+    if (!row) {
+      throw new NotFoundException('Invalid verification link');
+    }
+    await this.expireIfNeeded(row);
+    if (row.status === 'expired' || row.status === 'cancelled') {
+      throw new NotFoundException('Invalid verification link');
+    }
+    if (sha256Hex(accessToken) !== row.tokenHash) {
+      throw new NotFoundException('Invalid verification link');
+    }
+    if (!row.emailVerifiedAt) {
+      row.emailVerifiedAt = new Date();
+    }
+    if (!row.verifiedAt) {
+      row.verifiedAt = new Date();
+    }
+    row.emailVerifyTokenHash = null;
+    await this.signatureRepo.save(row);
+
+    await this.timelineRepo.save(
+      this.timelineRepo.create({
+        jobId: row.jobId,
+        type: 'signature_view_verified',
+        payload: {
+          signatureRequestId: row.id,
+          referenceCode: row.referenceCode,
+          verifiedAt: row.verifiedAt.toISOString(),
+          method: 'email_magic_link',
+        },
+        createdByUserId: null,
+      }),
+    );
+
+    return {
+      redirectUrl: `${publicWebBase}/sign/${encodeURIComponent(accessToken)}`,
+    };
+  }
+
   async completePublicSign(
     rawToken: string,
     dto: CompletePublicSignatureDto,
@@ -518,6 +1024,13 @@ export class JobSignatureService {
     }
     await this.expireIfNeeded(row);
     if (row.status === 'expired' || row.status === 'cancelled') {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    if (
+      (await this.requireVerificationToView()) &&
+      !row.verifiedAt &&
+      row.status !== 'signed'
+    ) {
       throw new NotFoundException('Invalid or expired signing link');
     }
     if (row.status === 'signed') {

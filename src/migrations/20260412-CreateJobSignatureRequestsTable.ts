@@ -79,6 +79,27 @@ export class CreateJobSignatureRequestsTable20260412_2200000000001 implements Mi
           },
           { name: 'signedFileId', type: 'uuid', isNullable: true },
           { name: 'auditPayload', type: 'json', isNullable: true },
+          // E-sign verification & snapshot fields (kept here so fresh DBs bootstrap cleanly even if
+          // later migrations that add these fields are reordered or skipped).
+          {
+            name: 'emailVerifyTokenHash',
+            type: 'varchar',
+            length: '64',
+            isNullable: true,
+          },
+          { name: 'emailVerifySentAt', type: 'timestamp', isNullable: true },
+          { name: 'emailVerifiedAt', type: 'timestamp', isNullable: true },
+          { name: 'verifiedAt', type: 'timestamp', isNullable: true },
+          {
+            name: 'proposalSnapshot',
+            type:
+              dialect === 'postgres'
+                ? 'jsonb'
+                : dialect === 'mysql' || dialect === 'mariadb'
+                  ? 'json'
+                  : 'json',
+            isNullable: true,
+          },
           { name: 'createdByUserId', type: 'uuid', isNullable: true },
           {
             name: 'createdAt',

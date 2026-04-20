@@ -86,6 +86,136 @@ export class UpdateAdminSettingsDto {
 
   @IsOptional()
   @IsBoolean()
+  esignRequireVerificationToView?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  esignEmailMagicLinkEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  esignSmsOtpEnabled?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }): string | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'string') return value;
+    return undefined;
+  })
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  esignProposalTermsMarkdown?: string | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(1)
+  @Max(1000000)
+  esignProposalTermsVersion?: number;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }): string | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'string') return value;
+    return undefined;
+  })
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  esignProposalAcceptanceMarkdown?: string | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(1)
+  @Max(1000000)
+  esignProposalAcceptanceVersion?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  esignProposalShowSystemDetails?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  esignProposalShowIncludedServices?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }): string | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'string') return value;
+    return undefined;
+  })
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  esignProposalIncludedServicesMarkdown?: string | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(1)
+  @Max(1000000)
+  esignProposalIncludedServicesVersion?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  esignProposalShowWarranty?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }): string | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'string') return value;
+    return undefined;
+  })
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  esignProposalWarrantyMarkdown?: string | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(1)
+  @Max(1000000)
+  esignProposalWarrantyVersion?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  esignProposalShowAssumptions?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }): string | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'string') return value;
+    return undefined;
+  })
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  esignProposalAssumptionsMarkdown?: string | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(1)
+  @Max(1000000)
+  esignProposalAssumptionsVersion?: number;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }): string | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'string') return value;
+    return undefined;
+  })
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  esignProposalQuoteAdjustmentsJson?: string | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(1)
+  @Max(1000000)
+  esignProposalQuoteAdjustmentsVersion?: number;
+
+  @IsOptional()
+  @IsBoolean()
   complianceRequireSignature?: boolean;
 
   @IsOptional()

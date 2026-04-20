@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   Req,
   Res,
   StreamableFile,
@@ -24,6 +25,26 @@ import { JobSignatureService } from './job-signature.service';
 export class PublicSignatureController {
   constructor(private readonly signatures: JobSignatureService) {}
 
+  @Get('verify-email/:magicToken')
+  @ApiOperation({
+    summary: 'Complete email verification (magic link)',
+    description:
+      'No JWT. Marks the signature request as verified-to-view, then redirects to the public proposal page.',
+  })
+  async verifyEmail(
+    @Param('magicToken') magicToken: string,
+    @Query('accessToken') accessToken: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { redirectUrl } = await this.signatures.completePublicEmailVerification(
+      magicToken,
+      accessToken,
+      req,
+    );
+    res.redirect(redirectUrl);
+  }
+
   @Get(':token')
   @ApiOperation({
     summary: 'Public signing session metadata',
@@ -32,6 +53,17 @@ export class PublicSignatureController {
   })
   getSession(@Param('token') token: string) {
     return this.signatures.getPublicSession(token);
+  }
+
+  @Post(':token/verify/email/start')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Send email magic link to unlock proposal',
+    description:
+      'No JWT. Sends a verification email (magic link) to the signer email on the signature request. Rate-limited. **404** when token is invalid/expired.',
+  })
+  startEmailVerify(@Param('token') token: string, @Req() req: Request) {
+    return this.signatures.startPublicEmailVerification(token, req);
   }
 
   @Get(':token/quotation.pdf')

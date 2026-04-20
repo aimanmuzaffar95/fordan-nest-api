@@ -19,6 +19,14 @@ type ResolvedSmtp = {
   fromName: string;
 };
 
+const envInt = (v: string | undefined, fallback: number): number => {
+  if (v === undefined) return fallback;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  const i = Math.floor(n);
+  return i > 0 ? i : fallback;
+};
+
 export class SmtpProvider implements IEmailProvider {
   private readonly logger = new Logger(SmtpProvider.name);
   private transporter: Transporter | null = null;
@@ -103,11 +111,26 @@ export class SmtpProvider implements IEmailProvider {
     }
 
     if (!this.transporter) {
+      // Fail fast: without timeouts, nodemailer can hang on connect/handshake
+      // for a very long time depending on network conditions.
+      const connectionTimeout = envInt(
+        process.env.SMTP_CONNECTION_TIMEOUT_MS,
+        10_000,
+      );
+      const greetingTimeout = envInt(
+        process.env.SMTP_GREETING_TIMEOUT_MS,
+        10_000,
+      );
+      const socketTimeout = envInt(process.env.SMTP_SOCKET_TIMEOUT_MS, 15_000);
+
       this.transporter = nodemailer.createTransport({
         host: cfg.host,
         port: cfg.port,
         secure: cfg.secure,
         auth: cfg.auth,
+        connectionTimeout,
+        greetingTimeout,
+        socketTimeout,
       });
     }
 
