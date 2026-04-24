@@ -533,7 +533,10 @@ export class AttendanceService {
       const durationLabel =
         event === 'clock_out'
           ? this.formatDurationForNotification(
-              this.calculateDurationMinutes(record.clockInAt, record.clockOutAt),
+              this.calculateDurationMinutes(
+                record.clockInAt,
+                record.clockOutAt,
+              ),
             )
           : null;
       const body =
@@ -628,5 +631,4 @@ export class AttendanceService {
 
     return `${remainderMinutes}m`;
   }
-
 }

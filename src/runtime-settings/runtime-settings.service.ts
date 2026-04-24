@@ -327,16 +327,6 @@ export class RuntimeSettingsService {
   }
 
   private toPayload(settings: AdminSettings): AdminSettingsPayload {
-    const decoded = this.decodeSmtpSettings(settings);
-    const smtpConfigured =
-      decoded.smtpHost !== null &&
-      decoded.smtpPort !== null &&
-      decoded.smtpSecure !== null &&
-      decoded.smtpUser !== null &&
-      decoded.smtpPass !== null &&
-      decoded.mailFrom !== null &&
-      decoded.mailFromName !== null;
-
     return {
       overridePreMeter: settings.overridePreMeter,
       calendarScopeEnforced: settings.calendarScopeEnforced,

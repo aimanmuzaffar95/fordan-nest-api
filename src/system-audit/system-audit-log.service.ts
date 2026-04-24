@@ -8,7 +8,7 @@ export type RecordSystemAuditInput = {
   actorUserId?: string | null;
   resourceType?: string | null;
   resourceId?: string | null;
-  metadata?: unknown | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 @Injectable()

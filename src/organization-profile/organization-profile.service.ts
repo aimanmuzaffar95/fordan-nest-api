@@ -122,7 +122,8 @@ export class OrganizationProfileService {
 
     const row = before;
     if (dto.legalName !== undefined) row.legalName = trimOrNull(dto.legalName);
-    if (dto.tradingName !== undefined) row.tradingName = trimOrNull(dto.tradingName);
+    if (dto.tradingName !== undefined)
+      row.tradingName = trimOrNull(dto.tradingName);
     if (dto.registeredAddressLine1 !== undefined) {
       row.registeredAddressLine1 = trimOrNull(dto.registeredAddressLine1);
     }
@@ -131,7 +132,8 @@ export class OrganizationProfileService {
     }
     if (dto.city !== undefined) row.city = trimOrNull(dto.city);
     if (dto.state !== undefined) row.state = trimOrNull(dto.state);
-    if (dto.postalCode !== undefined) row.postalCode = trimOrNull(dto.postalCode);
+    if (dto.postalCode !== undefined)
+      row.postalCode = trimOrNull(dto.postalCode);
     if (dto.country !== undefined) row.country = trimOrNull(dto.country);
     if (dto.billingSameAsRegistered !== undefined) {
       row.billingSameAsRegistered = dto.billingSameAsRegistered;
@@ -142,15 +144,18 @@ export class OrganizationProfileService {
     if (dto.billingAddressLine2 !== undefined) {
       row.billingAddressLine2 = trimOrNull(dto.billingAddressLine2);
     }
-    if (dto.billingCity !== undefined) row.billingCity = trimOrNull(dto.billingCity);
-    if (dto.billingState !== undefined) row.billingState = trimOrNull(dto.billingState);
+    if (dto.billingCity !== undefined)
+      row.billingCity = trimOrNull(dto.billingCity);
+    if (dto.billingState !== undefined)
+      row.billingState = trimOrNull(dto.billingState);
     if (dto.billingPostalCode !== undefined) {
       row.billingPostalCode = trimOrNull(dto.billingPostalCode);
     }
     if (dto.billingCountry !== undefined) {
       row.billingCountry = trimOrNull(dto.billingCountry);
     }
-    if (dto.taxIdPrimary !== undefined) row.taxIdPrimary = trimOrNull(dto.taxIdPrimary);
+    if (dto.taxIdPrimary !== undefined)
+      row.taxIdPrimary = trimOrNull(dto.taxIdPrimary);
     if (dto.taxIdSecondary !== undefined) {
       row.taxIdSecondary = trimOrNull(dto.taxIdSecondary);
     }

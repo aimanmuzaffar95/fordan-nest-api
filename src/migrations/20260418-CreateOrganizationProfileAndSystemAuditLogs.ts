@@ -5,9 +5,7 @@ import {
   TableForeignKey,
 } from 'typeorm';
 
-export class CreateOrganizationProfileAndSystemAuditLogs20260418_1700000000200
-  implements MigrationInterface
-{
+export class CreateOrganizationProfileAndSystemAuditLogs20260418_1700000000200 implements MigrationInterface {
   private getDialectDefaults(queryRunner: QueryRunner) {
     const dialect = queryRunner.connection.options.type;
     const uuidDefault =
@@ -37,8 +35,18 @@ export class CreateOrganizationProfileAndSystemAuditLogs20260418_1700000000200
               isPrimary: true,
               isNullable: false,
             },
-            { name: 'legalName', type: 'varchar', length: '255', isNullable: true },
-            { name: 'tradingName', type: 'varchar', length: '255', isNullable: true },
+            {
+              name: 'legalName',
+              type: 'varchar',
+              length: '255',
+              isNullable: true,
+            },
+            {
+              name: 'tradingName',
+              type: 'varchar',
+              length: '255',
+              isNullable: true,
+            },
             {
               name: 'registeredAddressLine1',
               type: 'varchar',
@@ -53,8 +61,18 @@ export class CreateOrganizationProfileAndSystemAuditLogs20260418_1700000000200
             },
             { name: 'city', type: 'varchar', length: '120', isNullable: true },
             { name: 'state', type: 'varchar', length: '80', isNullable: true },
-            { name: 'postalCode', type: 'varchar', length: '30', isNullable: true },
-            { name: 'country', type: 'varchar', length: '80', isNullable: true },
+            {
+              name: 'postalCode',
+              type: 'varchar',
+              length: '30',
+              isNullable: true,
+            },
+            {
+              name: 'country',
+              type: 'varchar',
+              length: '80',
+              isNullable: true,
+            },
             {
               name: 'billingSameAsRegistered',
               type: 'boolean',
@@ -73,8 +91,18 @@ export class CreateOrganizationProfileAndSystemAuditLogs20260418_1700000000200
               length: '255',
               isNullable: true,
             },
-            { name: 'billingCity', type: 'varchar', length: '120', isNullable: true },
-            { name: 'billingState', type: 'varchar', length: '80', isNullable: true },
+            {
+              name: 'billingCity',
+              type: 'varchar',
+              length: '120',
+              isNullable: true,
+            },
+            {
+              name: 'billingState',
+              type: 'varchar',
+              length: '80',
+              isNullable: true,
+            },
             {
               name: 'billingPostalCode',
               type: 'varchar',
@@ -87,7 +115,12 @@ export class CreateOrganizationProfileAndSystemAuditLogs20260418_1700000000200
               length: '80',
               isNullable: true,
             },
-            { name: 'taxIdPrimary', type: 'varchar', length: '80', isNullable: true },
+            {
+              name: 'taxIdPrimary',
+              type: 'varchar',
+              length: '80',
+              isNullable: true,
+            },
             {
               name: 'taxIdSecondary',
               type: 'varchar',
@@ -183,9 +216,24 @@ export class CreateOrganizationProfileAndSystemAuditLogs20260418_1700000000200
               default: 'now()',
             },
             { name: 'actorUserId', type: 'uuid', isNullable: true },
-            { name: 'action', type: 'varchar', length: '96', isNullable: false },
-            { name: 'resourceType', type: 'varchar', length: '64', isNullable: true },
-            { name: 'resourceId', type: 'varchar', length: '64', isNullable: true },
+            {
+              name: 'action',
+              type: 'varchar',
+              length: '96',
+              isNullable: false,
+            },
+            {
+              name: 'resourceType',
+              type: 'varchar',
+              length: '64',
+              isNullable: true,
+            },
+            {
+              name: 'resourceId',
+              type: 'varchar',
+              length: '64',
+              isNullable: true,
+            },
             { name: 'metadata', type: 'json', isNullable: true },
           ],
           foreignKeys: [

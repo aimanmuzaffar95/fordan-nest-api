@@ -137,9 +137,7 @@ export function validateCustomerMessagingTemplates(
     );
     cfg.bodyTemplate = trim(cfg.bodyTemplate, 4000, `${key}.bodyTemplate`);
     cfg.ctaLabel =
-      cfg.ctaLabel === null
-        ? null
-        : trim(cfg.ctaLabel, 80, `${key}.ctaLabel`);
+      cfg.ctaLabel === null ? null : trim(cfg.ctaLabel, 80, `${key}.ctaLabel`);
     cfg.ctaUrlTemplate =
       cfg.ctaUrlTemplate === null
         ? null

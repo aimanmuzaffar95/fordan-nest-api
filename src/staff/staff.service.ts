@@ -134,8 +134,7 @@ export class StaffService {
       );
 
       const identificationNumber =
-        payload.identificationNumber?.trim() ||
-        (await this.generateStaffId());
+        payload.identificationNumber?.trim() || (await this.generateStaffId());
 
       await this.ensureActiveIdentificationAvailable(identificationNumber);
       await this.ensureEmailAvailable(payload.emailAddress);
@@ -187,14 +186,10 @@ export class StaffService {
     );
 
     if (!payload.username) {
-      throw new BadRequestException(
-        'Username is required for technical staff',
-      );
+      throw new BadRequestException('Username is required for technical staff');
     }
     if (!payload.password) {
-      throw new BadRequestException(
-        'Password is required for technical staff',
-      );
+      throw new BadRequestException('Password is required for technical staff');
     }
 
     const username = payload.username;
@@ -268,7 +263,10 @@ export class StaffService {
 
     const nextStaffType =
       payload.staffType ??
-      (existing.role as UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE);
+      (existing.role as
+        | UserRole.MANAGER
+        | UserRole.INSTALLER
+        | UserRole.EMPLOYEE);
 
     // Check credential boundary: prevent type changes between employee and technical staff
     const isCurrentlyEmployee = existing.role === UserRole.EMPLOYEE;
@@ -832,9 +830,15 @@ export class StaffService {
       phoneNumber: user.phoneNumber,
       address: user.address ?? '',
       identificationNumber: user.identificationNumber ?? '',
-      staffType: user.role as UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE,
+      staffType: user.role as
+        | UserRole.MANAGER
+        | UserRole.INSTALLER
+        | UserRole.EMPLOYEE,
       emailAddress: user.emailAddress,
-      username: user.role === UserRole.EMPLOYEE ? '' : (user.credential?.username ?? ''),
+      username:
+        user.role === UserRole.EMPLOYEE
+          ? ''
+          : (user.credential?.username ?? ''),
       staffRole: user.staffRole
         ? {
             id: user.staffRole.id,

@@ -21,48 +21,48 @@ export type EmailSignatureToggle = {
 
 export type QuotationEmailTemplateConfig = BrandColorsHex &
   EmailSignatureToggle & {
-  subjectTemplate: string;
-  brandName: string;
-  kickerTemplate: string;
-  heroTitleTemplate: string;
-  heroIntroTemplate: string;
-  introParagraphTemplate: string;
-  nextStep1Template: string;
-  nextStep2Template: string;
-  nextStep3Template: string;
-  footerBrandName: string;
-  footerLine1Template: string;
-  footerLine2Template: string;
-};
+    subjectTemplate: string;
+    brandName: string;
+    kickerTemplate: string;
+    heroTitleTemplate: string;
+    heroIntroTemplate: string;
+    introParagraphTemplate: string;
+    nextStep1Template: string;
+    nextStep2Template: string;
+    nextStep3Template: string;
+    footerBrandName: string;
+    footerLine1Template: string;
+    footerLine2Template: string;
+  };
 
 export type SignatureRequestEmailTemplateConfig = BrandColorsHex &
   EmailSignatureToggle & {
-  subjectTemplate: string;
-  brandName: string;
-  kickerTemplate: string;
-  heroTitleTemplate: string;
-  heroIntroTemplate: string;
-  ctaLabel: string;
-  footerBrandName: string;
-  footerLine1Template: string;
-  footerLine2Template: string;
-};
+    subjectTemplate: string;
+    brandName: string;
+    kickerTemplate: string;
+    heroTitleTemplate: string;
+    heroIntroTemplate: string;
+    ctaLabel: string;
+    footerBrandName: string;
+    footerLine1Template: string;
+    footerLine2Template: string;
+  };
 
 export type SimpleBrandedEmailTemplateConfig = BrandColorsHex &
   EmailSignatureToggle & {
-  subjectTemplate: string;
-  brandName: string;
-  kickerTemplate: string;
-  heroTitleTemplate: string;
-  heroIntroTemplate: string;
-  bodyTemplate: string;
-  /** Optional CTA button */
-  ctaLabel: string | null;
-  ctaUrlTemplate: string | null;
-  footerBrandName: string;
-  footerLine1Template: string;
-  footerLine2Template: string;
-};
+    subjectTemplate: string;
+    brandName: string;
+    kickerTemplate: string;
+    heroTitleTemplate: string;
+    heroIntroTemplate: string;
+    bodyTemplate: string;
+    /** Optional CTA button */
+    ctaLabel: string | null;
+    ctaUrlTemplate: string | null;
+    footerBrandName: string;
+    footerLine1Template: string;
+    footerLine2Template: string;
+  };
 
 export type QuotationPdfTemplateConfig = {
   brandName: string;

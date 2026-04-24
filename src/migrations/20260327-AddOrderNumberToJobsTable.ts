@@ -29,24 +29,27 @@ export class AddOrderNumberToJobsTable20260327_1700000000016 implements Migratio
     }
 
     const jobsTableBeforeMigration = await queryRunner.getTable('jobs');
-    const existingOrderNumberColumn = jobsTableBeforeMigration?.findColumnByName(
-      'orderNumber',
-    );
+    const existingOrderNumberColumn =
+      jobsTableBeforeMigration?.findColumnByName('orderNumber');
     const hasUniqueOrderNumberConstraint = Boolean(
       jobsTableBeforeMigration?.uniques.some(
         (unique) =>
           unique.columnNames.length === 1 &&
           unique.columnNames[0] === 'orderNumber',
       ) ||
-        jobsTableBeforeMigration?.indices.some(
-          (index) =>
-            index.isUnique &&
-            index.columnNames.length === 1 &&
-            index.columnNames[0] === 'orderNumber',
-        ),
+      jobsTableBeforeMigration?.indices.some(
+        (index) =>
+          index.isUnique &&
+          index.columnNames.length === 1 &&
+          index.columnNames[0] === 'orderNumber',
+      ),
     );
 
-    if (existingOrderNumberColumn && !existingOrderNumberColumn.isNullable && hasUniqueOrderNumberConstraint) {
+    if (
+      existingOrderNumberColumn &&
+      !existingOrderNumberColumn.isNullable &&
+      hasUniqueOrderNumberConstraint
+    ) {
       return;
     }
 

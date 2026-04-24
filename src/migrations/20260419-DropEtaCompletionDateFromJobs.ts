@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class DropEtaCompletionDateFromJobs20260419_1700000000022
-  implements MigrationInterface
-{
+export class DropEtaCompletionDateFromJobs20260419_1700000000022 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const hasJobsTable = await queryRunner.hasTable('jobs');
     if (!hasJobsTable) {

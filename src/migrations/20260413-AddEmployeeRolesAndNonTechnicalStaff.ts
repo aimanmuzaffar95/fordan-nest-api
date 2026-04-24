@@ -20,7 +20,10 @@ export class AddEmployeeRolesAndNonTechnicalStaff1776000000000 implements Migrat
     `);
 
     // 2. Add employeeRoleId column to users table
-    const hasEmployeeRoleId = await queryRunner.hasColumn('users', 'employeeRoleId');
+    const hasEmployeeRoleId = await queryRunner.hasColumn(
+      'users',
+      'employeeRoleId',
+    );
     if (!hasEmployeeRoleId) {
       await queryRunner.addColumn(
         'users',
@@ -34,8 +37,8 @@ export class AddEmployeeRolesAndNonTechnicalStaff1776000000000 implements Migrat
 
     // 3. Add foreign key constraint
     const usersTable = await queryRunner.getTable('users');
-    const hasForeignKey = usersTable?.foreignKeys.some(
-      (fk) => fk.columnNames.includes('employeeRoleId'),
+    const hasForeignKey = usersTable?.foreignKeys.some((fk) =>
+      fk.columnNames.includes('employeeRoleId'),
     );
     if (!hasForeignKey) {
       await queryRunner.createForeignKey(
@@ -78,8 +81,8 @@ export class AddEmployeeRolesAndNonTechnicalStaff1776000000000 implements Migrat
 
     // Drop foreign key
     if (usersTable) {
-      const fk = usersTable.foreignKeys.find(
-        (f) => f.columnNames.includes('employeeRoleId'),
+      const fk = usersTable.foreignKeys.find((f) =>
+        f.columnNames.includes('employeeRoleId'),
       );
       if (fk) {
         await queryRunner.dropForeignKey('users', fk);
@@ -87,7 +90,10 @@ export class AddEmployeeRolesAndNonTechnicalStaff1776000000000 implements Migrat
     }
 
     // Drop column
-    const hasEmployeeRoleId = await queryRunner.hasColumn('users', 'employeeRoleId');
+    const hasEmployeeRoleId = await queryRunner.hasColumn(
+      'users',
+      'employeeRoleId',
+    );
     if (hasEmployeeRoleId) {
       await queryRunner.dropColumn('users', 'employeeRoleId');
     }

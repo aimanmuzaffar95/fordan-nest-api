@@ -331,7 +331,9 @@ export class InvoicesService {
         if (full && customerEmail) {
           const { subject, html } =
             await this.customerMessaging.renderPaymentReceiptCustomerEmail({
-              customerName: `${full.customer.firstName ?? ''} ${full.customer.lastName ?? ''}`.trim() || 'Customer',
+              customerName:
+                `${full.customer.firstName ?? ''} ${full.customer.lastName ?? ''}`.trim() ||
+                'Customer',
               orderNumber: full.job?.orderNumber ?? '',
               invoiceNumber: full.invoiceNumber,
               paymentAmount: `${payment.amount} ${full.currency}`,
@@ -390,7 +392,9 @@ export class InvoicesService {
         const due = full.dueDate ?? '';
         const { subject, html } =
           await this.customerMessaging.renderInvoiceSentCustomerEmail({
-            customerName: `${full.customer.firstName ?? ''} ${full.customer.lastName ?? ''}`.trim() || 'Customer',
+            customerName:
+              `${full.customer.firstName ?? ''} ${full.customer.lastName ?? ''}`.trim() ||
+              'Customer',
             orderNumber: full.job?.orderNumber ?? '',
             invoiceNumber: full.invoiceNumber,
             invoiceTotal: `${full.total} ${full.currency}`,
@@ -430,7 +434,9 @@ export class InvoicesService {
     try {
       const { subject, html } =
         await this.customerMessaging.renderOverdueReminderCustomerEmail({
-          customerName: `${invoice.customer.firstName ?? ''} ${invoice.customer.lastName ?? ''}`.trim() || 'Customer',
+          customerName:
+            `${invoice.customer.firstName ?? ''} ${invoice.customer.lastName ?? ''}`.trim() ||
+            'Customer',
           orderNumber: invoice.job?.orderNumber ?? '',
           invoiceNumber: invoice.invoiceNumber,
           invoiceTotal: `${invoice.total} ${invoice.currency}`,

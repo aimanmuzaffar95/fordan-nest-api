@@ -31,7 +31,7 @@ export type AuditLogItemDto = {
   actorName: string | null;
   resourceType: string | null;
   resourceId: string | null;
-  metadata: unknown | null;
+  metadata: Record<string, unknown> | null;
 };
 
 export type AuditLogListResponseDto = {

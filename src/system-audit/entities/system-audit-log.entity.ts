@@ -33,5 +33,5 @@ export class SystemAuditLog {
   resourceId: string | null;
 
   @Column({ type: 'json', nullable: true })
-  metadata: unknown | null;
+  metadata: Record<string, unknown> | null;
 }

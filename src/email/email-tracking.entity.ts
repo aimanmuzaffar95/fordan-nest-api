@@ -41,4 +41,3 @@ export class EmailTracking {
   @UpdateDateColumn()
   updatedAt: Date;
 }
-

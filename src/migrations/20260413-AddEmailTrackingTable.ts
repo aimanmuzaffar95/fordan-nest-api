@@ -57,4 +57,3 @@ export class AddEmailTrackingTable2026041315000000000 implements MigrationInterf
     await queryRunner.dropTable('email_tracking', true);
   }
 }
-

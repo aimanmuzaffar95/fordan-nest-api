@@ -36,8 +36,7 @@ export class EmailService {
     const base = this.getPublicApiBaseUrl();
     if (!base) return html;
     const url = `${base}/public/email-open/${messageId}.gif`;
-    const pixel =
-      `<img src="${url}" alt="" width="1" height="1" style="display:none !important; width:1px; height:1px;" />`;
+    const pixel = `<img src="${url}" alt="" width="1" height="1" style="display:none !important; width:1px; height:1px;" />`;
 
     if (html.includes('</body>')) {
       return html.replace('</body>', `${pixel}</body>`);
@@ -102,10 +101,7 @@ export class EmailService {
       });
 
       try {
-        await this.trackingRepo.update(
-          { messageId },
-          { sentAt: new Date() },
-        );
+        await this.trackingRepo.update({ messageId }, { sentAt: new Date() });
       } catch {
         // ignore
       }

@@ -13,17 +13,16 @@ export class PublicEmailTrackingController {
   constructor(private readonly email: EmailService) {}
 
   @Get(':messageId.gif')
-  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  @Header(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate',
+  )
   @Header('Pragma', 'no-cache')
   @Header('Expires', '0')
   @Header('Content-Type', 'image/gif')
-  async openPixel(
-    @Param('messageId') messageId: string,
-    @Res() res: Response,
-  ) {
+  async openPixel(@Param('messageId') messageId: string, @Res() res: Response) {
     // Never throw — pixels must always resolve.
     await this.email.recordOpen(messageId).catch(() => undefined);
     return res.status(200).send(ONE_BY_ONE_GIF_BYTES);
   }
 }
-
