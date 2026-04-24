@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StaffModule } from '../staff/staff.module';
 import { UsersModule } from '../users/users.module';
+import { SystemAuditModule } from '../system-audit/system-audit.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -14,6 +15,7 @@ import { resolveJwtSecret } from './jwt-secret.util';
     TypeOrmModule.forFeature([UserCredential]),
     UsersModule,
     StaffModule,
+    SystemAuditModule,
     JwtModule.register({
       secret: resolveJwtSecret(),
       signOptions: { expiresIn: '1h' },

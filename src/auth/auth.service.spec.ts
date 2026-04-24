@@ -9,6 +9,7 @@ import { StaffService } from '../staff/staff.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { UserCredential } from './entities/user-credential.entity';
+import { SystemAuditLogService } from '../system-audit/system-audit-log.service';
 
 type HashPasswordFn = (
   data: string,
@@ -23,6 +24,7 @@ const comparePassword = compare as unknown as (
 describe('AuthService', () => {
   let authService: AuthService;
   let credentialsRepository: Repository<UserCredential>;
+  let systemAuditLogService: { record: jest.Mock };
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -54,11 +56,18 @@ describe('AuthService', () => {
             signAsync: jest.fn().mockResolvedValue('mock-token'),
           },
         },
+        {
+          provide: SystemAuditLogService,
+          useValue: {
+            record: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compile();
 
     authService = moduleRef.get(AuthService);
     credentialsRepository = moduleRef.get(getRepositoryToken(UserCredential));
+    systemAuditLogService = moduleRef.get(SystemAuditLogService);
   });
 
   it('returns a token and role for valid admin credentials', async () => {
@@ -79,6 +88,31 @@ describe('AuthService', () => {
       role: UserRole.ADMIN,
       mustChangePassword: false,
     });
+  });
+
+  it('does not record system audit when skipLoginSystemAudit is true', async () => {
+    (credentialsRepository.findOne as jest.Mock).mockResolvedValue({
+      username: 'admin',
+      passwordHash: await hashPassword('admin', 1),
+      mustChangePassword: false,
+      user: {
+        id: 'user-id',
+        role: UserRole.ADMIN,
+      },
+    });
+
+    await expect(
+      authService.login(
+        { username: 'admin', password: 'admin' },
+        { skipLoginSystemAudit: true },
+      ),
+    ).resolves.toEqual({
+      accessToken: 'mock-token',
+      role: UserRole.ADMIN,
+      mustChangePassword: false,
+    });
+
+    expect(systemAuditLogService.record).not.toHaveBeenCalled();
   });
 
   it('rejects invalid credentials', async () => {

@@ -1,12 +1,17 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CustomerMessagingRendererService } from '../email/customer-messaging-renderer.service';
 import { EmailService } from '../email/email.service';
+import { FilesService } from '../files/files.service';
+import { CrmBrandingUploadSlot } from '../files/crm-branding.constants';
+import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { SendJobQuotationResponseDto } from './dto/send-job-quotation-response.dto';
 import { JobQuotationPdfService } from './job-quotation-pdf.service';
 import { JobsService, type JobListViewer } from './jobs.service';
+import type { JobDetailResponseDto } from './dto/job-detail-response.dto';
 
 export type ProposalConfigItem = {
   id: string;
@@ -25,21 +30,46 @@ export type ProposalConfigItem = {
   efficiency: number | null;
 };
 
+export type ValidatedQuotationContext = {
+  jobDetail: JobDetailResponseDto;
+  proposalItems: ProposalConfigItem[];
+  proposalTotal: number;
+  customerName: string;
+  orderNumber: string;
+  attachmentFilename: string;
+  customerEmail: string;
+};
+
+export type ValidatedQuotationPdfResult = ValidatedQuotationContext & {
+  pdfBuffer: Buffer;
+};
+
 @Injectable()
 export class JobQuotationService {
   constructor(
     private readonly jobs: JobsService,
     private readonly email: EmailService,
+    private readonly customerMessaging: CustomerMessagingRendererService,
     private readonly quotationPdf: JobQuotationPdfService,
+    private readonly settings: RuntimeSettingsService,
+    private readonly files: FilesService,
     @InjectRepository(TimelineEvent)
     private readonly timelineEventsRepo: Repository<TimelineEvent>,
   ) {}
 
-  async sendQuotation(
+  /**
+   * Validates proposal config + pricing (same rules as quotation email / signing).
+   * When `viewer` is omitted, skips installer/manager RBAC (internal signing pipeline only).
+   */
+  async validateQuotationPrerequisites(
     jobId: string,
-    viewer: JobListViewer,
-  ): Promise<SendJobQuotationResponseDto> {
-    if (viewer.role === UserRole.INSTALLER) {
+    viewer?: JobListViewer,
+    options?: { allowInstallerPdfDownload?: boolean },
+  ): Promise<ValidatedQuotationContext> {
+    if (
+      viewer?.role === UserRole.INSTALLER &&
+      !options?.allowInstallerPdfDownload
+    ) {
       throw new BadRequestException(
         'Installers cannot send customer quotations',
       );
@@ -78,32 +108,137 @@ export class JobQuotationService {
       `${customer.firstName} ${customer.lastName}`.trim() || 'Customer';
     const orderNumber = jobDetail.job.orderNumber;
     const attachmentFilename = `quotation_${orderNumber.toLowerCase()}.pdf`;
-    const sentAt = new Date().toISOString();
+
+    return {
+      jobDetail,
+      proposalItems,
+      proposalTotal,
+      customerName,
+      orderNumber,
+      attachmentFilename,
+      customerEmail: customer.email,
+    };
+  }
+
+  async buildValidatedQuotationPdf(
+    jobId: string,
+    viewer?: JobListViewer,
+    options?: { allowInstallerPdfDownload?: boolean },
+  ): Promise<ValidatedQuotationPdfResult> {
+    const ctx = await this.validateQuotationPrerequisites(
+      jobId,
+      viewer,
+      options,
+    );
+    const {
+      jobDetail,
+      proposalItems,
+      proposalTotal,
+      customerName,
+      orderNumber,
+      attachmentFilename,
+      customerEmail,
+    } = ctx;
+
+    const customer = jobDetail.customer;
+    if (!customer) {
+      throw new BadRequestException('Customer email is missing for this job');
+    }
+
+    const pdfCopy = await this.customerMessaging.resolveQuotationPdfCopy({
+      customerName,
+      orderNumber,
+    });
+
+    const runtime = await this.settings.getSettings();
+    const appearanceRaw = runtime.crmAppearanceSettings as unknown as Record<
+      string,
+      unknown
+    >;
+    const currency =
+      typeof runtime.companyProfileSettings.currency === 'string' &&
+      runtime.companyProfileSettings.currency.trim()
+        ? runtime.companyProfileSettings.currency.trim()
+        : 'USD';
+    const appearanceName =
+      typeof appearanceRaw.appDisplayName === 'string'
+        ? appearanceRaw.appDisplayName.trim()
+        : '';
+    const appearanceHex =
+      typeof appearanceRaw.primaryHex === 'string'
+        ? appearanceRaw.primaryHex.trim()
+        : '';
+    const brandName = appearanceName || pdfCopy.brandName;
+    const primaryHex = appearanceHex || pdfCopy.primaryHex;
+
+    let logoBytes: Buffer | undefined;
+    try {
+      const download = await this.files.getPublicCrmBrandingDownload(
+        CrmBrandingUploadSlot.logo,
+      );
+      logoBytes = await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        download.stream.on('data', (c: Buffer | Uint8Array) =>
+          chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)),
+        );
+        download.stream.on('end', () => resolve(Buffer.concat(chunks)));
+        download.stream.on('error', reject);
+      });
+    } catch {
+      // Logo is optional.
+      logoBytes = undefined;
+    }
 
     const pdfBuffer = await this.quotationPdf.buildQuotationPdf({
       attachmentFilename,
       customerName,
       customerAddress: customer.address?.trim() ?? '',
-      customerEmail: customer.email,
+      customerEmail,
       orderNumber,
       systemTypeLabel: this.toSystemTypeLabel(jobDetail.job.systemType),
       systemSizeLabel: this.toSystemSizeLabel(jobDetail.job.systemSizeKw),
       batterySizeLabel: this.toBatterySizeLabel(jobDetail.job.batterySizeKwh),
       proposalItems,
       proposalTotal,
+      pdfBrandName: brandName,
+      pdfPrimaryHex: primaryHex,
+      pdfHeadline: pdfCopy.headline,
+      pdfThankYou: pdfCopy.thankYou,
+      pdfFooterNote: pdfCopy.footerNote,
+      currency,
+      logoImageBytes: logoBytes,
     });
 
-    await this.email.send({
-      to: customer.email,
-      subject: `Your Fordan Solar quotation for ${orderNumber}`,
-      template: 'quotation',
-      context: {
+    return { ...ctx, pdfBuffer };
+  }
+
+  async sendQuotation(
+    jobId: string,
+    viewer: JobListViewer,
+  ): Promise<SendJobQuotationResponseDto> {
+    const {
+      pdfBuffer,
+      jobDetail,
+      proposalItems,
+      proposalTotal,
+      customerName,
+      orderNumber,
+      attachmentFilename,
+      customerEmail,
+    } = await this.buildValidatedQuotationPdf(jobId, viewer);
+
+    const customer = jobDetail.customer;
+    const sentAt = new Date().toISOString();
+
+    const { subject, html } =
+      await this.customerMessaging.renderQuotationCustomerEmail({
         customerName,
         orderNumber,
+        projectAddress:
+          customer?.address?.trim() || 'Address available on file',
         systemTypeLabel: this.toSystemTypeLabel(jobDetail.job.systemType),
         systemSizeLabel: this.toSystemSizeLabel(jobDetail.job.systemSizeKw),
         batterySizeLabel: this.toBatterySizeLabel(jobDetail.job.batterySizeKwh),
-        projectAddress: customer.address?.trim() || 'Address available on file',
         proposalItems: proposalItems.map((item) => ({
           label: item.name,
           subtitle: item.subtitle,
@@ -112,8 +247,12 @@ export class JobQuotationService {
           lineTotal: this.formatCurrency(item.lineTotal),
         })),
         proposalTotal: this.formatCurrency(proposalTotal),
-        currentYear: new Date().getFullYear(),
-      },
+      });
+
+    await this.email.send({
+      to: customerEmail,
+      subject,
+      html,
       attachments: [
         {
           filename: attachmentFilename,
@@ -128,7 +267,7 @@ export class JobQuotationService {
         jobId,
         type: 'quotation_sent',
         payload: {
-          recipientEmail: customer.email,
+          recipientEmail: customerEmail,
           proposalTotal: proposalTotal.toFixed(2),
           attachmentFilename,
           sentAt,
@@ -139,7 +278,7 @@ export class JobQuotationService {
 
     return {
       jobId,
-      recipientEmail: customer.email,
+      recipientEmail: customerEmail,
       sentAt,
       proposalTotal,
       attachmentFilename,

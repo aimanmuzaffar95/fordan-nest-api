@@ -52,6 +52,8 @@ import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.ser
 import { JobsService } from './jobs.service';
 import { JobQuotationService } from './job-quotation.service';
 import { SendJobQuotationResponseDto } from './dto/send-job-quotation-response.dto';
+import { CreateJobSignatureRequestDto } from './dto/create-job-signature-request.dto';
+import { JobSignatureService } from './job-signature.service';
 
 @ApiTags('Jobs')
 @ApiBearerAuth('JWT')
@@ -66,6 +68,7 @@ export class JobsController {
     private readonly jobQuotation: JobQuotationService,
     private readonly filesService: FilesService,
     private readonly leadCaptureInsightsService: LeadCaptureInsightsService,
+    private readonly jobSignatures: JobSignatureService,
   ) {}
 
   @Get()
@@ -126,6 +129,39 @@ export class JobsController {
       dto.toStage,
       dto.overridePreMeterLock ?? false,
     );
+  }
+
+  /** Must stay above `@Get(':id')` so `quotation.pdf` is not parsed as a UUID. */
+  @Get(':id/quotation.pdf')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Download quotation PDF',
+    description:
+      'Streams the same validated quotation PDF as **POST …/send-quotation** (proposal config + **Settings → Templates** PDF branding). **400** when prerequisites fail (same as send-quotation). **404** when the job is outside RBAC scope. **Installers** may download for assigned jobs only.',
+  })
+  async downloadQuotationPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+    @Res() res: Response,
+  ): Promise<void> {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+
+    const { pdfBuffer, attachmentFilename } =
+      await this.jobQuotation.buildValidatedQuotationPdf(
+        id,
+        { userId, role },
+        { allowInstallerPdfDownload: role === UserRole.INSTALLER },
+      );
+
+    const safeName =
+      attachmentFilename.replace(/[\r\n"]/g, '_').trim() || 'quotation.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.send(pdfBuffer);
   }
 
   @Get(':id')
@@ -385,6 +421,52 @@ export class JobsController {
       throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.jobs.updateProposalConfig(id, dto, { userId, role });
+  }
+
+  @Get(':id/signature-requests')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'List e-signature requests for a job',
+    description:
+      'Returns recent signature requests (pending, viewed, signed, etc.). **Manager:** only within your job scope.',
+  })
+  listSignatureRequests(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+    return this.jobSignatures.listForJob(id, { userId, role });
+  }
+
+  @Post(':id/signature-requests')
+  @HttpCode(HttpStatus.CREATED)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Create e-signature request (quotation)',
+    description:
+      'Creates a signing link for the current saved proposal quotation. Cancels other open requests for the job. Public signing URL: admin Settings, `ESIGN_PUBLIC_BASE_URL`, `ESIGN_ALLOWED_PUBLIC_ORIGINS`, or (localhost only) `Origin` / `X-Public-Web-Base-Url` from the browser. **503** when `sendEmail` is true and SMTP fails.',
+  })
+  createSignatureRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateJobSignatureRequestDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+    const sendEmail = dto.sendEmail !== false;
+    return this.jobSignatures.createRequest(
+      id,
+      { userId, role },
+      sendEmail,
+      req,
+    );
   }
 
   @Post(':id/send-quotation')

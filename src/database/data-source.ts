@@ -13,6 +13,7 @@ import { Job } from '../jobs/entities/job.entity';
 import { JobAuditLog } from '../jobs/entities/job-audit-log.entity';
 import { JobInternalComment } from '../jobs/entities/job-internal-comment.entity';
 import { JobProposalSelection } from '../jobs/entities/job-proposal-selection.entity';
+import { JobSignatureRequest } from '../jobs/entities/job-signature-request.entity';
 import { StaffRole } from '../staff/entities/staff-role.entity';
 import { EmployeeRole } from '../staff/entities/employee-role.entity';
 import { Assignment } from '../assignments/entities/assignment.entity';
@@ -26,9 +27,10 @@ import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 import { Inverter } from '../inverters/entities/inverter.entity';
 import { Battery } from '../batteries/entities/battery.entity';
 import { AdminSettings } from '../runtime-settings/admin-settings.entity';
-import { AttendanceRecord } from '../attendance/entities/attendance-record.entity';
-
-loadEnvFile();
+import { SettingsAuditLog } from '../runtime-settings/settings-audit-log.entity';
+import { ComplianceFormTemplate } from '../compliance/entities/compliance-form-template.entity';
+import { JobComplianceSubmission } from '../compliance/entities/job-compliance-submission.entity';
+import { EmailTracking } from '../email/email-tracking.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -107,6 +109,7 @@ export const AppDataSource = new DataSource({
     JobAuditLog,
     JobInternalComment,
     JobProposalSelection,
+    JobSignatureRequest,
     Invoice,
     InvoiceActivity,
     InvoiceItem,
@@ -124,7 +127,10 @@ export const AppDataSource = new DataSource({
     Inverter,
     Battery,
     AdminSettings,
-    AttendanceRecord,
+    SettingsAuditLog,
+    EmailTracking,
+    ComplianceFormTemplate,
+    JobComplianceSubmission,
   ],
   migrations: isMigrationCli
     ? ['src/migrations/*.ts']

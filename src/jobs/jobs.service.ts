@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
   PreconditionFailedException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -52,6 +53,9 @@ import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 import { JobAuditValue } from './types/job-audit-value.type';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
+import { DocumentNumberingService } from '../document-numbering/document-numbering.service';
+import { EmailService } from '../email/email.service';
+import { CustomerMessagingRendererService } from '../email/customer-messaging-renderer.service';
 
 export type JobListViewer = { userId: string; role: UserRole };
 
@@ -95,6 +99,9 @@ export class JobsService {
     @InjectRepository(Battery)
     private readonly batteriesRepo: Repository<Battery>,
     private readonly notificationsService: NotificationsService,
+    private readonly docNumbers: DocumentNumberingService,
+    private readonly email: EmailService,
+    private readonly customerMessaging: CustomerMessagingRendererService,
   ) {}
 
   async list(query: FindJobsQueryDto, viewer?: JobListViewer) {
@@ -1245,6 +1252,22 @@ export class JobsService {
         const labels = fields.map((field) => this.humanizeToken(field));
         return `${prefix}: ${labels.join(', ')}`;
       }
+      case 'compliance_form_submitted': {
+        const name = this.readTimelinePayloadString(payload, 'templateName');
+        const signed =
+          payload &&
+          typeof payload === 'object' &&
+          !Array.isArray(payload) &&
+          payload.signed === true;
+        if (name) {
+          return signed
+            ? `Compliance form signed and submitted: ${name}`
+            : `Compliance form submitted: ${name}`;
+        }
+        return signed
+          ? 'Compliance form signed and submitted'
+          : 'Compliance form submitted';
+      }
       default:
         return this.humanizeToken(entry.type);
     }
@@ -2094,6 +2117,41 @@ export class JobsService {
     }
 
     await this.notifyNeedsAssignmentIfApplicable(updated);
+
+    const customerEmail =
+      updated.customer?.email && updated.customer.email.trim()
+        ? updated.customer.email.trim()
+        : null;
+    const customerName =
+      `${updated.customer?.firstName ?? ''} ${updated.customer?.lastName ?? ''}`.trim() ||
+      'Customer';
+    const orderNumber = updated.orderNumber ?? '';
+    if (customerEmail && (toStage === 'scheduled' || toStage === 'installed')) {
+      const statusLabel = toStage === 'scheduled' ? 'scheduled' : 'installed';
+      const statusBody =
+        toStage === 'scheduled'
+          ? `Your installation has been scheduled${
+              updated.scheduledDate ? ` for ${updated.scheduledDate}` : ''
+            }. We will contact you if we need any more details.`
+          : 'Your installation has been completed. Thank you for choosing us.';
+      try {
+        const { subject, html } =
+          await this.customerMessaging.renderJobStatusCustomerEmail({
+            customerName,
+            orderNumber,
+            jobStatusLabel: statusLabel,
+            jobStatusBody: statusBody,
+          });
+        await this.email.send({ to: customerEmail, subject, html });
+      } catch {
+        throw new ServiceUnavailableException({
+          message:
+            'Email delivery failed. Customer status notification was not delivered.',
+          code: 'EMAIL_DELIVERY_FAILED',
+        });
+      }
+    }
+
     return updated;
   }
 
@@ -2281,7 +2339,7 @@ export class JobsService {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const job = jobsRepo.create({
         ...payload,
-        orderNumber: await this.generateOrderNumber(jobsRepo),
+        orderNumber: await this.docNumbers.allocateNextOrderNumber(),
       });
 
       try {
@@ -2296,41 +2354,6 @@ export class JobsService {
     }
 
     throw new BadRequestException('Failed to generate unique order number');
-  }
-
-  private async generateOrderNumber(jobsRepo: Repository<Job>) {
-    const existingOrderNumbers = await jobsRepo
-      .createQueryBuilder('job')
-      .select('job.orderNumber', 'orderNumber')
-      .where('job.orderNumber IS NOT NULL')
-      .getRawMany<{ orderNumber: string | null }>();
-
-    const highestOrderNumber = existingOrderNumbers.reduce((max, row) => {
-      const parsed = this.parseOrderNumber(row.orderNumber);
-      if (parsed === null || parsed <= max) {
-        return max;
-      }
-
-      return parsed;
-    }, JobsService.FIRST_ORDER_NUMBER - 1);
-
-    return `${JobsService.ORDER_NUMBER_PREFIX}${highestOrderNumber + 1}`;
-  }
-
-  private parseOrderNumber(value: string | null | undefined) {
-    if (!value) {
-      return null;
-    }
-
-    const match = new RegExp(`^${JobsService.ORDER_NUMBER_PREFIX}(\\d+)$`).exec(
-      value,
-    );
-    if (!match) {
-      return null;
-    }
-
-    const parsed = Number.parseInt(match[1], 10);
-    return Number.isFinite(parsed) ? parsed : null;
   }
 
   private isDuplicateOrderNumberError(error: unknown) {

@@ -14,6 +14,9 @@ async function bootstrap() {
       'http://localhost:8080', // docker dev web
       'http://localhost:8081', // local staging (vite preview)
       'http://localhost:5173', // host dev web (common vite default)
+      'http://127.0.0.1:8080',
+      'http://127.0.0.1:8081',
+      'http://127.0.0.1:5173',
       'https://crm.fordan.com.au',
       'https://api.fordan.com.au',
       'https://dbprovider.us-west-1.clawcloudrun.com',
@@ -24,6 +27,7 @@ async function bootstrap() {
       'Authorization',
       'X-Installer-Setup-Token',
       'X-Public-Lead-Secret',
+      'X-Public-Web-Base-Url',
     ],
     credentials: false,
   });

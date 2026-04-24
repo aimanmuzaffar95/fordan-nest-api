@@ -1,9 +1,12 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
@@ -19,6 +22,43 @@ import { EmailService } from './email.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EmailController {
   constructor(private readonly email: EmailService) {}
+
+  @Get('tracking')
+  @AdminOnly()
+  async listTracking(@Query('limit') limit?: string) {
+    const n = limit ? Number(limit) : 50;
+    const rows = await this.email.listTracking(n);
+    return rows.map((r) => ({
+      messageId: r.messageId,
+      to: r.to,
+      subject: r.subject,
+      sentAt: r.sentAt,
+      opened: Boolean(r.firstOpenedAt),
+      firstOpenedAt: r.firstOpenedAt,
+      lastOpenedAt: r.lastOpenedAt,
+      openCount: r.openCount,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  @Get('tracking/:messageId')
+  @AdminOnly()
+  async getTracking(@Param('messageId') messageId: string) {
+    const r = await this.email.getTracking(messageId);
+    if (!r) return { found: false };
+    return {
+      found: true,
+      messageId: r.messageId,
+      to: r.to,
+      subject: r.subject,
+      sentAt: r.sentAt,
+      opened: Boolean(r.firstOpenedAt),
+      firstOpenedAt: r.firstOpenedAt,
+      lastOpenedAt: r.lastOpenedAt,
+      openCount: r.openCount,
+      createdAt: r.createdAt,
+    };
+  }
 
   @Post('test')
   @AdminOnly()

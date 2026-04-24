@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign your quotation</title>
+</head>
+<body style="margin:0;padding:24px;background-color:{{pageBgHex}};font-family:'Plus Jakarta Sans',Arial,sans-serif;color:{{bodyTextHex}};">
+  <div style="max-width:600px;margin:0 auto;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 6px 24px rgba(17,24,39,0.08);">
+    <div style="padding:24px 32px;background-color:#ffffff;border-bottom:1px solid {{borderHex}};">
+      {{#if brandLogoUrl}}
+        <div style="display:flex;align-items:center;gap:12px;">
+          <img src="{{brandLogoUrl}}" alt="" style="height:34px;max-width:180px;object-fit:contain;display:block;">
+          <div style="font-size:28px;line-height:1.1;font-weight:800;color:{{primaryHex}};letter-spacing:-0.03em;">{{brandHeaderName}}</div>
+        </div>
+      {{else}}
+        <div style="font-size:28px;line-height:1.1;font-weight:800;color:{{primaryHex}};letter-spacing:-0.03em;">{{brandHeaderName}}</div>
+      {{/if}}
+    </div>
+    <div style="padding:40px 32px;background-color:{{heroBgHex}};">
+      <p style="margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:{{heroAccentHex}};">{{{compiledKicker}}}</p>
+      <h1 style="margin:0 0 16px;font-size:28px;line-height:1.2;font-weight:800;color:#ffffff;">{{{compiledHeroTitle}}}</h1>
+      <p style="margin:0;font-size:17px;line-height:1.6;color:{{heroLeadHex}};">{{{compiledHeroIntro}}}</p>
+    </div>
+    <div style="padding:32px;">
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:{{bodyMutedHex}};">Reference: <strong>{{referenceCode}}</strong></p>
+      <p style="margin:0 0 28px;">
+        <a href="{{signingUrl}}" style="display:inline-block;padding:14px 28px;border-radius:12px;background-color:{{primaryHex}};color:#ffffff;font-weight:700;text-decoration:none;font-size:16px;">{{ctaLabel}}</a>
+      </p>
+      <p style="margin:0;font-size:13px;line-height:1.6;color:#6b7280;">If the button does not work, copy and paste this URL into your browser:<br><span style="word-break:break-all;">{{signingUrl}}</span></p>
+    </div>
+    <div style="padding:20px 32px;background-color:{{cardBgHex}};border-top:1px solid {{borderHex}};font-size:12px;color:#6b7280;">
+      <p style="margin:0 0 8px;">{{{compiledFooterLine1}}}</p>
+      <p style="margin:0;">{{{compiledFooterLine2}}}</p>
+    </div>
+  </div>
+</body>
+</html>
