@@ -54,6 +54,9 @@ import { JobQuotationService } from './job-quotation.service';
 import { SendJobQuotationResponseDto } from './dto/send-job-quotation-response.dto';
 import { CreateJobSignatureRequestDto } from './dto/create-job-signature-request.dto';
 import { JobSignatureService } from './job-signature.service';
+import { PermissionsService } from '../permissions/permissions.service';
+import type { PermissionKey } from '../permissions/permission-catalog';
+import type { JobListViewer } from './jobs.service';
 
 @ApiTags('Jobs')
 @ApiBearerAuth('JWT')
@@ -69,7 +72,31 @@ export class JobsController {
     private readonly filesService: FilesService,
     private readonly leadCaptureInsightsService: LeadCaptureInsightsService,
     private readonly jobSignatures: JobSignatureService,
+    private readonly permissions: PermissionsService,
   ) {}
+
+  private async authorizeJobAction(
+    req: Request & { user?: { sub?: string; role?: UserRole } },
+    permission: PermissionKey,
+  ): Promise<JobListViewer> {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+
+    const effective = await this.permissions.getEffectiveForUser(userId);
+    this.permissions.assertPermission(effective, permission);
+    return {
+      userId,
+      role,
+      jobScope: effective.scopes.job === 'all' ? 'all' : 'own',
+      canViewJobFinancials: this.permissions.hasPermission(
+        effective,
+        'job:financials:view',
+      ),
+    };
+  }
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
@@ -78,16 +105,12 @@ export class JobsController {
     description:
       '**Manager:** only jobs where `managerId` matches the authenticated user. **Installer:** only jobs where you are `assignedStaffUserId` or have a direct assignment row. **Admin:** all jobs (subject to filters).',
   })
-  list(
+  async list(
     @Query() query: FindJobsQueryDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
-    return this.jobs.list(query, { userId, role });
+    const viewer = await this.authorizeJobAction(req, 'job:view');
+    return this.jobs.list(query, viewer);
   }
 
   /** Static path must stay above `@Get(':id')` so it is not swallowed as a UUID. */
@@ -111,23 +134,20 @@ export class JobsController {
 
   @Post(':id/stage')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  transitionStage(
+  async transitionStage(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: TransitionJobStageDto,
     @Req() req: Request & { user?: { sub: string; role: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
+    const viewer = await this.authorizeJobAction(req, 'job:pipeline:update');
 
     return this.jobs.transitionStage(
-      userId,
-      role,
+      viewer.userId,
+      viewer.role,
       id,
       dto.toStage,
       dto.overridePreMeterLock ?? false,
+      viewer.jobScope,
     );
   }
 
@@ -144,18 +164,12 @@ export class JobsController {
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
     @Res() res: Response,
   ): Promise<void> {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
+    const viewer = await this.authorizeJobAction(req, 'job:proposal:view');
 
     const { pdfBuffer, attachmentFilename } =
-      await this.jobQuotation.buildValidatedQuotationPdf(
-        id,
-        { userId, role },
-        { allowInstallerPdfDownload: role === UserRole.INSTALLER },
-      );
+      await this.jobQuotation.buildValidatedQuotationPdf(id, viewer, {
+        allowInstallerPdfDownload: viewer.role === UserRole.INSTALLER,
+      });
 
     const safeName =
       attachmentFilename.replace(/[\r\n"]/g, '_').trim() || 'quotation.pdf';
@@ -171,16 +185,12 @@ export class JobsController {
     description:
       '**Manager:** **404** if the job is not assigned to you via `managerId`. **Installer:** **404** if the job is not assigned to you (directly or via team). Same response as unknown id (no leak).',
   })
-  getOne(
+  async getOne(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
-    return this.jobs.getOne(id, { userId, role });
+    const viewer = await this.authorizeJobAction(req, 'job:view');
+    return this.jobs.getOne(id, viewer);
   }
 
   @Get(':id/files')
@@ -195,17 +205,13 @@ export class JobsController {
     description:
       'Unknown job id, or the authenticated manager/installer attempted to access a job outside their scope.',
   })
-  listFiles(
+  async listFiles(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
+    const viewer = await this.authorizeJobAction(req, 'job:file:view');
 
-    return this.filesService.listJobFiles(id, { userId, role });
+    return this.filesService.listJobFiles(id, viewer);
   }
 
   @Post(':id/files')
@@ -257,19 +263,15 @@ export class JobsController {
     description:
       'Unknown job id, or the authenticated manager/installer attempted to access a job outside their scope.',
   })
-  uploadFile(
+  async uploadFile(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UploadJobFileDto,
     @UploadedFile() file: UploadedBinaryFile | undefined,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
+    const viewer = await this.authorizeJobAction(req, 'job:file:upload');
 
-    return this.filesService.uploadJobFile(id, dto, file, { userId, role });
+    return this.filesService.uploadJobFile(id, dto, file, viewer);
   }
 
   @Get(':id/files/:fileId/download')
@@ -291,15 +293,11 @@ export class JobsController {
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
+    const viewer = await this.authorizeJobAction(req, 'job:file:view');
 
     const download = await this.filesService.getJobFileDownload(id, fileId, {
-      userId,
-      role,
+      userId: viewer.userId,
+      role: viewer.role,
     });
 
     const safeFileName = (
@@ -331,17 +329,13 @@ export class JobsController {
     description:
       'Updates live job detail summary fields such as system details, pricing, deposit/contract state, scheduling dates, and manager assignment. Returns the refreshed job detail payload.',
   })
-  updateJob(
+  async updateJob(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateJobDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
-    return this.jobs.updateJob(id, dto, { userId, role });
+    const viewer = await this.authorizeJobAction(req, 'job:update');
+    return this.jobs.updateJob(id, dto, viewer);
   }
 
   @Post(':id/notes')
@@ -351,17 +345,13 @@ export class JobsController {
     description:
       'Creates a persisted job note. Response includes the stored author and timestamps for immediate job-detail rendering.',
   })
-  createNote(
+  async createNote(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateJobTextEntryDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
-    return this.jobs.createNote(id, dto, { userId, role });
+    const viewer = await this.authorizeJobAction(req, 'job:note:create');
+    return this.jobs.createNote(id, dto, viewer);
   }
 
   @Post(':id/internal-comments')
@@ -371,17 +361,16 @@ export class JobsController {
     description:
       'Creates a persisted internal comment for the job. Response includes the stored author and timestamps for immediate job-detail rendering.',
   })
-  createInternalComment(
+  async createInternalComment(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateJobTextEntryDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
-    return this.jobs.createInternalComment(id, dto, { userId, role });
+    const viewer = await this.authorizeJobAction(
+      req,
+      'job:internal_comment:create',
+    );
+    return this.jobs.createInternalComment(id, dto, viewer);
   }
 
   @Get(':id/proposal-config')
@@ -391,16 +380,12 @@ export class JobsController {
     description:
       'Returns the persisted proposal-only equipment selections for a job. **Installer:** **404** if the job is not assigned to you.',
   })
-  getProposalConfig(
+  async getProposalConfig(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
-    return this.jobs.getProposalConfig(id, { userId, role });
+    const viewer = await this.authorizeJobAction(req, 'job:proposal:view');
+    return this.jobs.getProposalConfig(id, viewer);
   }
 
   @Put(':id/proposal-config')
@@ -410,17 +395,13 @@ export class JobsController {
     description:
       'Persists the proposal-only equipment selection set for the job. Existing proposal selections are replaced atomically, and the live job summary fields are re-derived from the saved proposal equipment and pricing.',
   })
-  updateProposalConfig(
+  async updateProposalConfig(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateJobProposalConfigDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
-    return this.jobs.updateProposalConfig(id, dto, { userId, role });
+    const viewer = await this.authorizeJobAction(req, 'job:proposal:update');
+    return this.jobs.updateProposalConfig(id, dto, viewer);
   }
 
   @Get(':id/signature-requests')
@@ -430,16 +411,12 @@ export class JobsController {
     description:
       'Returns recent signature requests (pending, viewed, signed, etc.). **Manager:** only within your job scope.',
   })
-  listSignatureRequests(
+  async listSignatureRequests(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
-    return this.jobSignatures.listForJob(id, { userId, role });
+    const viewer = await this.authorizeJobAction(req, 'job:signature:view');
+    return this.jobSignatures.listForJob(id, viewer);
   }
 
   @Post(':id/signature-requests')
@@ -450,23 +427,14 @@ export class JobsController {
     description:
       'Creates a signing link for the current saved proposal quotation. Cancels other open requests for the job. Public signing URL: admin Settings, `ESIGN_PUBLIC_BASE_URL`, `ESIGN_ALLOWED_PUBLIC_ORIGINS`, or (localhost only) `Origin` / `X-Public-Web-Base-Url` from the browser. **503** when `sendEmail` is true and SMTP fails.',
   })
-  createSignatureRequest(
+  async createSignatureRequest(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateJobSignatureRequestDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
+    const viewer = await this.authorizeJobAction(req, 'job:signature:create');
     const sendEmail = dto.sendEmail !== false;
-    return this.jobSignatures.createRequest(
-      id,
-      { userId, role },
-      sendEmail,
-      req,
-    );
+    return this.jobSignatures.createRequest(id, viewer, sendEmail, req);
   }
 
   @Post(':id/send-quotation')
@@ -481,17 +449,13 @@ export class JobsController {
     description: 'Quotation sent successfully',
     type: SendJobQuotationResponseDto,
   })
-  sendQuotation(
+  async sendQuotation(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
+    const viewer = await this.authorizeJobAction(req, 'job:quotation:send');
 
-    return this.jobQuotation.sendQuotation(id, { userId, role });
+    return this.jobQuotation.sendQuotation(id, viewer);
   }
 
   @Patch(':id/pipeline')
@@ -505,17 +469,18 @@ export class JobsController {
     description:
       'Stage gating failed — body includes `code: "PRECONDITION_FAILED"` (e.g. pre-meter not approved for `installed`).',
   })
-  updatePipeline(
+  async updatePipeline(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateJobPipelineDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    // JwtAuthGuard + RolesGuard should make this safe; still guard for runtime safety.
-    if (!userId || !role) {
-      throw new UnauthorizedException('Missing authenticated user context');
-    }
-    return this.jobs.updateJobPipeline(id, dto, role, userId);
+    const viewer = await this.authorizeJobAction(req, 'job:pipeline:update');
+    return this.jobs.updateJobPipeline(
+      id,
+      dto,
+      viewer.role,
+      viewer.userId,
+      viewer.jobScope,
+    );
   }
 }

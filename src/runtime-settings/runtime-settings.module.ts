@@ -11,6 +11,7 @@ import { PublicCrmAppearanceController } from './public-crm-appearance.controlle
 import { PublicCrmBrandingController } from './public-crm-branding.controller';
 import { DocumentNumberingService } from '../document-numbering/document-numbering.service';
 import { SystemAuditModule } from '../system-audit/system-audit.module';
+import { PermissionsModule } from '../permissions/permissions.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SystemAuditModule } from '../system-audit/system-audit.module';
     NotificationsModule,
     FilesModule,
     SystemAuditModule,
+    PermissionsModule,
   ],
   providers: [RuntimeSettingsService, DocumentNumberingService],
   controllers: [

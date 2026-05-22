@@ -14,6 +14,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Job } from '../jobs/entities/job.entity';
 import { JobsModule } from '../jobs/jobs.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PermissionsModule } from '../permissions/permissions.module';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { User } from '../users/entities/user.entity';
 import {
@@ -39,6 +40,7 @@ import { AttendanceRecord } from './entities/attendance-record.entity';
     JobsModule,
     NotificationsModule,
     FilesModule,
+    PermissionsModule,
   ],
   controllers: [AttendanceController, AttendancePhotoController],
   providers: [

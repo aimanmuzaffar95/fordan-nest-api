@@ -13,6 +13,8 @@ import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionKey } from '../permissions/permission-catalog';
+import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
@@ -26,107 +28,85 @@ import { AddInvoiceNoteDto } from './dto/add-invoice-note.dto';
 @Controller('invoices')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InvoicesController {
-  constructor(private readonly invoices: InvoicesService) {}
+  constructor(
+    private readonly invoices: InvoicesService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  list(
+  async list(
     @Query() query: QueryInvoicesDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.invoices.list(query, { userId, role });
+    const viewer = await this.authorizeInvoiceAction(req, 'invoice:view');
+    return this.invoices.list(query, viewer);
   }
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  getOne(
+  async getOne(
     @Param('id') id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.invoices.getOne(id, { userId, role });
+    const viewer = await this.authorizeInvoiceAction(req, 'invoice:view');
+    return this.invoices.getOne(id, viewer);
   }
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  create(
+  async create(
     @Body() dto: CreateInvoiceDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.invoices.create(dto, { userId, role });
+    const viewer = await this.authorizeInvoiceAction(req, 'invoice:create');
+    return this.invoices.create(dto, viewer);
   }
 
   @Post(':id/send')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  send(
+  async send(
     @Param('id') id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.invoices.send(id, { userId, role });
+    const viewer = await this.authorizeInvoiceAction(req, 'invoice:send');
+    return this.invoices.send(id, viewer);
   }
 
   @Post(':id/payments')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  recordPayment(
+  async recordPayment(
     @Param('id') id: string,
     @Body() dto: RecordPaymentDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.invoices.recordPayment(id, dto, { userId, role });
+    const viewer = await this.authorizeInvoiceAction(
+      req,
+      'invoice:record_payment',
+    );
+    return this.invoices.recordPayment(id, dto, viewer);
   }
 
   @Post(':id/cancel')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  cancel(
+  async cancel(
     @Param('id') id: string,
     @Body() dto: CancelInvoiceDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.invoices.cancel(id, dto, { userId, role });
+    const viewer = await this.authorizeInvoiceAction(req, 'invoice:cancel');
+    return this.invoices.cancel(id, dto, viewer);
   }
 
   @Post(':id/notes')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  addNote(
+  async addNote(
     @Param('id') id: string,
     @Body() dto: AddInvoiceNoteDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.invoices.addNote(id, dto, { userId, role });
+    const viewer = await this.authorizeInvoiceAction(req, 'invoice:notes');
+    return this.invoices.addNote(id, dto, viewer);
   }
 
   @Post(':id/remind-overdue')
@@ -135,12 +115,32 @@ export class InvoicesController {
     @Param('id') id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
+    const viewer = await this.authorizeInvoiceAction(
+      req,
+      'invoice:remind_overdue',
+    );
+    await this.invoices.sendOverdueReminder(id, viewer);
+    return { ok: true };
+  }
+
+  private async authorizeInvoiceAction(
+    req: Request & { user?: { sub?: string; role?: UserRole } },
+    permission: PermissionKey,
+  ) {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
       throw new Error('Missing authenticated user context');
     }
-    await this.invoices.sendOverdueReminder(id, { userId, role });
-    return { ok: true };
+    const effective = await this.permissions.getEffectiveForUser(userId);
+    this.permissions.assertPermission(effective, permission);
+    return {
+      userId,
+      role,
+      invoiceScope:
+        effective.scopes.invoice === 'all'
+          ? ('all' as const)
+          : ('managed' as const),
+    };
   }
 }

@@ -13,6 +13,7 @@ import { InvoicesController } from './invoices.controller';
 import { InvoicesService } from './invoices.service';
 import { RuntimeSettingsModule } from '../runtime-settings/runtime-settings.module';
 import { EmailModule } from '../email/email.module';
+import { PermissionsModule } from '../permissions/permissions.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { EmailModule } from '../email/email.module';
     }),
     RuntimeSettingsModule,
     EmailModule,
+    PermissionsModule,
     TypeOrmModule.forFeature([
       Invoice,
       InvoiceActivity,

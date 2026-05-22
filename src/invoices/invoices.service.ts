@@ -29,6 +29,7 @@ import { CustomerMessagingRendererService } from '../email/customer-messaging-re
 type InvoiceViewer = {
   userId: string;
   role: UserRole;
+  invoiceScope?: 'all' | 'managed';
 };
 
 type InvoiceActivityInput = {
@@ -134,7 +135,11 @@ export class InvoicesService {
     let derivedCustomerId: string | undefined = dto.customerId;
     let derivedJobId: string | null = null;
 
-    if (viewer?.role === UserRole.MANAGER && !dto.jobId) {
+    if (
+      viewer?.role === UserRole.MANAGER &&
+      viewer.invoiceScope !== 'all' &&
+      !dto.jobId
+    ) {
       throw new BadRequestException(
         'Managers can only create invoices for jobs assigned to them',
       );
@@ -147,6 +152,7 @@ export class InvoicesService {
       }
       if (
         viewer?.role === UserRole.MANAGER &&
+        viewer.invoiceScope !== 'all' &&
         job.managerId !== viewer.userId
       ) {
         throw new NotFoundException('Job not found');
@@ -418,7 +424,7 @@ export class InvoicesService {
       relations: { customer: true, job: true },
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
-    if (viewer?.role === UserRole.MANAGER) {
+    if (viewer?.role === UserRole.MANAGER && viewer.invoiceScope !== 'all') {
       this.assertManagerJobAccess(invoice.job, viewer.userId);
     }
     if (invoice.status === InvoiceStatus.CANCELLED) {
@@ -523,7 +529,7 @@ export class InvoicesService {
     qb: SelectQueryBuilder<Invoice>,
     viewer?: InvoiceViewer,
   ) {
-    if (viewer?.role !== UserRole.MANAGER) {
+    if (viewer?.role !== UserRole.MANAGER || viewer.invoiceScope === 'all') {
       return qb;
     }
 

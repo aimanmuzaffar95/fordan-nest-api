@@ -28,6 +28,7 @@ import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import {
   CRM_BRANDING_FAVICON_MIME_TYPES,
@@ -59,6 +60,7 @@ export class RuntimeSettingsController {
   constructor(
     private readonly settings: RuntimeSettingsService,
     private readonly files: FilesService,
+    private readonly permissions: PermissionsService,
   ) {}
 
   @Get()
@@ -68,7 +70,15 @@ export class RuntimeSettingsController {
     description:
       'Returns the global configuration used by the Settings screen and downstream alert/scheduling logic. Readable by any authenticated user.',
   })
-  getSettings() {
+  async getSettings(
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    if (!userId) {
+      throw new Error('Missing authenticated user context');
+    }
+    const effective = await this.permissions.getEffectiveForUser(userId);
+    this.permissions.assertPermission(effective, 'settings:view');
     return this.settings.getSettings();
   }
 

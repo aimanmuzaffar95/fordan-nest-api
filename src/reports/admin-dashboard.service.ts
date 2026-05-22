@@ -68,6 +68,7 @@ type ManagerActivityItem = ManagerActivityResponse['items'][number];
 type DashboardViewer = {
   userId: string;
   role: UserRole;
+  reportScope?: 'all' | 'own';
 };
 
 type ReportsKpisResponse = {
@@ -503,19 +504,7 @@ export class AdminDashboardReportsService {
     const now = new Date();
     const weekStart = this.startOfWeek(now);
     const weekEndExclusive = this.addDays(weekStart, 7);
-    const jobsWhere =
-      viewer?.role === UserRole.MANAGER
-        ? { managerId: viewer.userId }
-        : undefined;
-
-    const jobs = await this.jobsRepo.find({
-      where: jobsWhere,
-      select: {
-        id: true,
-        pipelineStage: true,
-        installDate: true,
-      },
-    });
+    const jobs = await this.getScopedJobsForReports(viewer);
     const jobIds = jobs.map((job) => job.id);
     const [invoices, scopedMeterApplications] = await Promise.all([
       jobIds.length > 0
@@ -619,21 +608,7 @@ export class AdminDashboardReportsService {
     const windowEndDate = this.addDays(now, windowDays);
     const windowEndInclusive = this.formatDateOnly(windowEndDate);
 
-    const jobsWhere =
-      viewer?.role === UserRole.MANAGER
-        ? { managerId: viewer.userId }
-        : undefined;
-
-    const jobs = await this.jobsRepo.find({
-      where: jobsWhere,
-      select: {
-        id: true,
-        installDate: true,
-        projectPrice: true,
-        depositAmount: true,
-        depositPaid: true,
-      },
-    });
+    const jobs = await this.getScopedJobsForReports(viewer);
 
     const jobsInWindow = jobs.filter((job) => {
       return Boolean(
@@ -695,14 +670,19 @@ export class AdminDashboardReportsService {
   ): Promise<ManagerActivityResponse> {
     const safeLimit = Number.isFinite(limit) ? Math.max(1, limit) : 15;
     const take = safeLimit * 3;
+    const scopedToViewer = this.isReportScopedToViewer(viewer);
     const assignmentsWhere =
-      viewer?.role === UserRole.MANAGER
+      scopedToViewer && viewer?.role === UserRole.MANAGER
         ? {
             job: {
               managerId: viewer.userId,
             },
           }
-        : undefined;
+        : scopedToViewer && viewer?.role === UserRole.INSTALLER
+          ? {
+              staffUserId: viewer.userId,
+            }
+          : undefined;
 
     const [auditEntries, recentAssignments] = await Promise.all([
       (() => {
@@ -715,10 +695,17 @@ export class AdminDashboardReportsService {
             managerRole: UserRole.MANAGER,
           });
 
-        if (viewer?.role === UserRole.MANAGER) {
+        if (scopedToViewer && viewer?.role === UserRole.MANAGER) {
           qb.andWhere('job.managerId = :viewerId', {
             viewerId: viewer.userId,
           });
+        } else if (scopedToViewer && viewer?.role === UserRole.INSTALLER) {
+          qb.innerJoin(
+            Assignment,
+            'viewer_assignment',
+            'viewer_assignment.jobId = job.id AND viewer_assignment.staffUserId = :viewerId',
+            { viewerId: viewer.userId },
+          );
         }
 
         return qb.orderBy('audit.createdAt', 'DESC').take(take).getMany();
@@ -1032,25 +1019,47 @@ export class AdminDashboardReportsService {
   }
 
   private async getScopedJobsForReports(viewer?: DashboardViewer) {
-    const jobsWhere =
-      viewer?.role === UserRole.MANAGER
-        ? { managerId: viewer.userId }
-        : undefined;
+    const qb = this.jobsRepo
+      .createQueryBuilder('job')
+      .select([
+        'job.id',
+        'job.customerId',
+        'job.managerId',
+        'job.pipelineStage',
+        'job.installDate',
+        'job.depositDate',
+        'job.depositAmount',
+        'job.depositPaid',
+        'job.createdAt',
+        'job.projectPrice',
+        'job.systemSizeKw',
+      ]);
 
-    return this.jobsRepo.find({
-      where: jobsWhere,
-      select: {
-        id: true,
-        customerId: true,
-        managerId: true,
-        pipelineStage: true,
-        installDate: true,
-        depositDate: true,
-        createdAt: true,
-        projectPrice: true,
-        systemSizeKw: true,
-      },
-    });
+    if (
+      this.isReportScopedToViewer(viewer) &&
+      viewer?.role === UserRole.MANAGER
+    ) {
+      qb.andWhere('job.managerId = :viewerId', { viewerId: viewer.userId });
+    } else if (
+      this.isReportScopedToViewer(viewer) &&
+      viewer?.role === UserRole.INSTALLER
+    ) {
+      qb.innerJoin(
+        Assignment,
+        'viewer_assignment',
+        'viewer_assignment.jobId = job.id AND viewer_assignment.staffUserId = :viewerId',
+        { viewerId: viewer.userId },
+      );
+    }
+
+    return qb.getMany();
+  }
+
+  private isReportScopedToViewer(viewer?: DashboardViewer): boolean {
+    if (!viewer || viewer.role === UserRole.ADMIN) {
+      return false;
+    }
+    return viewer.reportScope !== 'all';
   }
 
   private resolveRangeWindow(params: {

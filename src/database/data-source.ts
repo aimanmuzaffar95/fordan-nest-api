@@ -30,6 +30,9 @@ import { SettingsAuditLog } from '../runtime-settings/settings-audit-log.entity'
 import { ComplianceFormTemplate } from '../compliance/entities/compliance-form-template.entity';
 import { JobComplianceSubmission } from '../compliance/entities/job-compliance-submission.entity';
 import { EmailTracking } from '../email/email-tracking.entity';
+import { PermissionRoleGrant } from '../permissions/entities/permission-role-grant.entity';
+import { PermissionRoleProfile } from '../permissions/entities/permission-role-profile.entity';
+import { PermissionRoleScope } from '../permissions/entities/permission-role-scope.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -130,6 +133,9 @@ export const AppDataSource = new DataSource({
     EmailTracking,
     ComplianceFormTemplate,
     JobComplianceSubmission,
+    PermissionRoleProfile,
+    PermissionRoleGrant,
+    PermissionRoleScope,
   ],
   migrations: isMigrationCli
     ? ['src/migrations/*.ts']

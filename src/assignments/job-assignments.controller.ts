@@ -24,6 +24,9 @@ import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { JobListViewer } from '../jobs/jobs.service';
+import { PermissionKey } from '../permissions/permission-catalog';
+import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import { AssignmentsService } from './assignments.service';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
@@ -39,7 +42,10 @@ import { CreateAssignmentDto } from './dto/create-assignment.dto';
 @Controller('jobs')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class JobAssignmentsController {
-  constructor(private readonly assignments: AssignmentsService) {}
+  constructor(
+    private readonly assignments: AssignmentsService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   @Get(':jobId/assignments')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
@@ -49,16 +55,12 @@ export class JobAssignmentsController {
       '**Installer:** same job visibility as **`GET /jobs/:id`** (**404** if not assigned to you).',
   })
   @ApiNotFoundResponse({ description: 'Job not found or not visible.' })
-  list(
+  async list(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.assignments.listForJob(jobId, { userId, role });
+    const viewer = await this.authorizeAssignmentAction(req, 'assignment:view');
+    return this.assignments.listForJob(jobId, viewer);
   }
 
   @Post(':jobId/assignments')
@@ -77,17 +79,16 @@ export class JobAssignmentsController {
     description: '**403** — `installer` cannot create assignments.',
   })
   @ApiNotFoundResponse({ description: 'Job or staff user not found.' })
-  create(
+  async create(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Body() dto: CreateAssignmentDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.assignments.create(jobId, dto, { userId, role });
+    const viewer = await this.authorizeAssignmentAction(
+      req,
+      'assignment:manage',
+    );
+    return this.assignments.create(jobId, dto, viewer);
   }
 
   @Delete(':jobId/assignments/:assignmentId')
@@ -105,16 +106,37 @@ export class JobAssignmentsController {
   @ApiForbiddenResponse({
     description: '**403** — `installer` cannot delete assignments.',
   })
-  remove(
+  async remove(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Param('assignmentId', ParseUUIDPipe) assignmentId: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
+    const viewer = await this.authorizeAssignmentAction(
+      req,
+      'assignment:manage',
+    );
+    return this.assignments.remove(jobId, assignmentId, viewer);
+  }
+
+  private async authorizeAssignmentAction(
+    req: Request & { user?: { sub?: string; role?: UserRole } },
+    permission: PermissionKey,
+  ): Promise<JobListViewer> {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
       throw new Error('Missing authenticated user context');
     }
-    return this.assignments.remove(jobId, assignmentId, { userId, role });
+    const effective = await this.permissions.getEffectiveForUser(userId);
+    this.permissions.assertPermission(effective, permission);
+    return {
+      userId,
+      role,
+      jobScope: effective.scopes.job === 'all' ? 'all' : 'own',
+      canViewJobFinancials: this.permissions.hasPermission(
+        effective,
+        'job:financials:view',
+      ),
+    };
   }
 }

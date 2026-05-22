@@ -32,6 +32,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateJobDto } from '../jobs/dto/create-job.dto';
+import { PermissionsService } from '../permissions/permissions.service';
+import type { PermissionKey } from '../permissions/permission-catalog';
 
 @ApiTags('Customers')
 @ApiBearerAuth('JWT')
@@ -44,7 +46,37 @@ export class CustomersController {
   constructor(
     private readonly customersService: CustomersService,
     private readonly jobs: JobsService,
+    private readonly permissions: PermissionsService,
   ) {}
+
+  private async authorizeCustomerAction(
+    req: Request & { user?: { sub?: string; role?: UserRole } },
+    permission: PermissionKey,
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new Error('Missing authenticated user context');
+    }
+
+    const effective = await this.permissions.getEffectiveForUser(userId);
+    this.permissions.assertPermission(effective, permission);
+    const customerScope: 'all' | 'own' =
+      effective.scopes.customer === 'all' ? 'all' : 'own';
+    const jobScope: 'all' | 'own' =
+      effective.scopes.job === 'all' ? 'all' : 'own';
+
+    return {
+      userId,
+      role,
+      customerScope,
+      jobScope,
+      canViewJobFinancials: this.permissions.hasPermission(
+        effective,
+        'job:financials:view',
+      ),
+    };
+  }
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
@@ -56,7 +88,11 @@ export class CustomersController {
   @ApiCreatedResponse({
     description: 'Customer created (Nest default **201 Created**).',
   })
-  create(@Body() dto: CreateCustomerDto) {
+  async create(
+    @Body() dto: CreateCustomerDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    await this.authorizeCustomerAction(req, 'customer:create');
     return this.customersService.create(dto);
   }
 
@@ -70,18 +106,14 @@ export class CustomersController {
     description:
       '**403** — `installer` and other roles cannot browse the full customer list.',
   })
-  findAll(
+  async findAll(
     @Query() query: FindCustomersQueryDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
+    const viewer = await this.authorizeCustomerAction(req, 'customer:view');
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    return this.customersService.findAll(page, limit, { userId, role });
+    return this.customersService.findAll(page, limit, viewer);
   }
 
   @Get('search')
@@ -94,18 +126,15 @@ export class CustomersController {
     description:
       '**403** — `installer` cannot search the global customer directory.',
   })
-  search(
+  async search(
     @Query() query: SearchCustomersQueryDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
+    const viewer = await this.authorizeCustomerAction(req, 'customer:view');
     return this.customersService.search(query.q, query.page, query.limit, {
-      userId,
-      role,
+      userId: viewer.userId,
+      role: viewer.role,
+      customerScope: viewer.customerScope,
     });
   }
 
@@ -116,8 +145,15 @@ export class CustomersController {
     description:
       '**Roles:** `admin`, `manager` only. Returns events sorted newest-first.',
   })
-  getTimeline(@Param('id', ParseUUIDPipe) id: string) {
-    return this.customersService.getTimeline(id);
+  async getTimeline(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeCustomerAction(
+      req,
+      'customer:timeline:view',
+    );
+    return this.customersService.getTimeline(id, viewer);
   }
 
   @Get('geocode')
@@ -146,16 +182,12 @@ export class CustomersController {
     description:
       '**403** — `installer` cannot fetch arbitrary customer records by id.',
   })
-  findOne(
+  async findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.customersService.findOne(id, { userId, role });
+    const viewer = await this.authorizeCustomerAction(req, 'customer:view');
+    return this.customersService.findOne(id, viewer);
   }
 
   @Patch(':id')
@@ -167,17 +199,13 @@ export class CustomersController {
   @ApiForbiddenResponse({
     description: '**403** — `installer` cannot update customer records.',
   })
-  update(
+  async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCustomerDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.customersService.update(id, dto, { userId, role });
+    const viewer = await this.authorizeCustomerAction(req, 'customer:update');
+    return this.customersService.update(id, dto, viewer);
   }
 
   @Post(':customerId/jobs')
@@ -194,16 +222,18 @@ export class CustomersController {
   @ApiForbiddenResponse({
     description: '**403** — `installer` cannot create jobs via this endpoint.',
   })
-  createJob(
+  async createJob(
     @Param('customerId', ParseUUIDPipe) customerId: string,
     @Body() dto: CreateJobDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-    return this.jobs.createJob(customerId, dto, role, userId);
+    const viewer = await this.authorizeCustomerAction(
+      req,
+      'customer:job:create',
+    );
+    const effective = await this.permissions.getEffectiveForUser(viewer.userId);
+    this.permissions.assertPermission(effective, 'job:create');
+    await this.customersService.findOne(customerId, viewer);
+    return this.jobs.createJob(customerId, dto, viewer.role, viewer.userId);
   }
 }

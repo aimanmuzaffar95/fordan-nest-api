@@ -9,6 +9,7 @@ import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import { GetScheduleQueryDto } from './dto/get-schedule-query.dto';
 import { ScheduleService } from './schedule.service';
@@ -21,7 +22,10 @@ import { ScheduleService } from './schedule.service';
 @Controller('schedule')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ScheduleController {
-  constructor(private readonly schedule: ScheduleService) {}
+  constructor(
+    private readonly schedule: ScheduleService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
@@ -30,7 +34,7 @@ export class ScheduleController {
     description:
       '**Query:** `from`, `to` (inclusive `YYYY-MM-DD`, max **366** days). **Admin:** all rows. **Manager:** when `calendarScopeEnforced=true`, rows for jobs where `job.managerId` matches the viewer. **Installer:** only rows where you are the assigned `staffUserId`.',
   })
-  get(
+  async get(
     @Query() query: GetScheduleQueryDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
@@ -39,6 +43,18 @@ export class ScheduleController {
     if (!userId || !role) {
       throw new Error('Missing authenticated user context');
     }
-    return this.schedule.get(query, { userId, role });
+    const effective = await this.permissions.getEffectiveForUser(userId);
+    this.permissions.assertPermission(effective, 'schedule:view');
+    const scheduleScope =
+      effective.scopes.schedule === 'all' ||
+      effective.scopes.schedule === 'managed' ||
+      effective.scopes.schedule === 'self'
+        ? effective.scopes.schedule
+        : undefined;
+    return this.schedule.get(query, {
+      userId,
+      role,
+      scheduleScope,
+    });
   }
 }

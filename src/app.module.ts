@@ -57,6 +57,10 @@ import { EmailTracking } from './email/email-tracking.entity';
 import { OrganizationProfile } from './organization-profile/organization-profile.entity';
 import { SystemAuditLog } from './system-audit/entities/system-audit-log.entity';
 import { OrganizationProfileModule } from './organization-profile/organization-profile.module';
+import { PermissionRoleGrant } from './permissions/entities/permission-role-grant.entity';
+import { PermissionRoleProfile } from './permissions/entities/permission-role-profile.entity';
+import { PermissionRoleScope } from './permissions/entities/permission-role-scope.entity';
+import { PermissionsModule } from './permissions/permissions.module';
 import { loadEnvFile } from './common/load-env.util';
 import { getSettingsEncryptionKey } from './common/crypto.util';
 
@@ -175,6 +179,9 @@ getSettingsEncryptionKey();
         JobComplianceSubmission,
         OrganizationProfile,
         SystemAuditLog,
+        PermissionRoleProfile,
+        PermissionRoleGrant,
+        PermissionRoleScope,
       ],
       migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,
@@ -208,6 +215,7 @@ getSettingsEncryptionKey();
     AlertsModule,
     NotificationsModule,
     ComplianceModule,
+    PermissionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

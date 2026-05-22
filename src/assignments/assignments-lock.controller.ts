@@ -21,6 +21,9 @@ import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { JobListViewer } from '../jobs/jobs.service';
+import { PermissionKey } from '../permissions/permission-catalog';
+import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import { AssignmentsService } from './assignments.service';
 import { LockAssignmentDto } from './dto/lock-assignment.dto';
@@ -33,7 +36,10 @@ import { LockAssignmentDto } from './dto/lock-assignment.dto';
 @Controller('assignments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AssignmentsLockController {
-  constructor(private readonly assignments: AssignmentsService) {}
+  constructor(
+    private readonly assignments: AssignmentsService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   @Post(':id/lock')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
@@ -52,16 +58,34 @@ export class AssignmentsLockController {
   @ApiForbiddenResponse({
     description: '**403** — `installer` cannot change assignment lock.',
   })
-  setLock(
+  async setLock(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: LockAssignmentDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
+    const viewer = await this.authorizeAssignmentAction(req, 'assignment:lock');
+    return this.assignments.setLock(id, dto, viewer.userId, viewer);
+  }
+
+  private async authorizeAssignmentAction(
+    req: Request & { user?: { sub?: string; role?: UserRole } },
+    permission: PermissionKey,
+  ): Promise<JobListViewer> {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
       throw new Error('Missing authenticated user context');
     }
-    return this.assignments.setLock(id, dto, userId, { userId, role });
+    const effective = await this.permissions.getEffectiveForUser(userId);
+    this.permissions.assertPermission(effective, permission);
+    return {
+      userId,
+      role,
+      jobScope: effective.scopes.job === 'all' ? 'all' : 'own',
+      canViewJobFinancials: this.permissions.hasPermission(
+        effective,
+        'job:financials:view',
+      ),
+    };
   }
 }

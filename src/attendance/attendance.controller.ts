@@ -34,6 +34,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { uploadFileFilter } from '../files/upload-file-filter';
 import { UploadedBinaryFile } from '../files/uploaded-binary-file.type';
+import { JobListViewer } from '../jobs/jobs.service';
+import { PermissionKey } from '../permissions/permission-catalog';
+import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import { AttendanceService } from './attendance.service';
 import { AttendanceLocationDto } from './dto/attendance-location.dto';
@@ -60,7 +63,10 @@ const ATTENDANCE_PHOTO_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 @Controller('jobs/:jobId/attendance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AttendanceController {
-  constructor(private readonly attendanceService: AttendanceService) {}
+  constructor(
+    private readonly attendanceService: AttendanceService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   @Post('clock-in')
   @Roles(UserRole.INSTALLER)
@@ -76,19 +82,16 @@ export class AttendanceController {
   @ApiConflictResponse({
     description: 'Installer already has an open attendance record elsewhere.',
   })
-  clockIn(
+  async clockIn(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Body() dto: AttendanceLocationDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-
-    return this.attendanceService.clockIn(jobId, dto, { userId, role });
+    const viewer = await this.authorizeAttendanceAction(
+      req,
+      'attendance:self:clock',
+    );
+    return this.attendanceService.clockIn(jobId, dto, viewer);
   }
 
   @Post('clock-out')
@@ -103,19 +106,16 @@ export class AttendanceController {
     description:
       'No open attendance record exists for this installer on the job.',
   })
-  clockOut(
+  async clockOut(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Body() dto: AttendanceLocationDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-
-    return this.attendanceService.clockOut(jobId, dto, { userId, role });
+    const viewer = await this.authorizeAttendanceAction(
+      req,
+      'attendance:self:clock',
+    );
+    return this.attendanceService.clockOut(jobId, dto, viewer);
   }
 
   @Get()
@@ -127,18 +127,12 @@ export class AttendanceController {
   })
   @ApiOkResponse({ description: 'Attendance records for the job.' })
   @ApiNotFoundResponse({ description: 'Job not found or not visible.' })
-  listForJob(
+  async listForJob(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    const userId = req.user?.sub;
-    const role = req.user?.role;
-
-    if (!userId || !role) {
-      throw new Error('Missing authenticated user context');
-    }
-
-    return this.attendanceService.listForJob(jobId, { userId, role });
+    const viewer = await this.authorizeAttendanceAction(req, 'attendance:view');
+    return this.attendanceService.listForJob(jobId, viewer);
   }
 
   @Get('me')
@@ -152,10 +146,21 @@ export class AttendanceController {
   @ApiForbiddenResponse({
     description: 'Authenticated installer is not assigned to this job.',
   })
-  getMyStatus(
+  async getMyStatus(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Req() req: AuthenticatedRequest,
   ) {
+    const viewer = await this.authorizeAttendanceAction(
+      req,
+      'attendance:self:view',
+    );
+    return this.attendanceService.getMyStatus(jobId, viewer);
+  }
+
+  private async authorizeAttendanceAction(
+    req: AuthenticatedRequest,
+    permission: PermissionKey,
+  ): Promise<JobListViewer> {
     const userId = req.user?.sub;
     const role = req.user?.role;
 
@@ -163,7 +168,17 @@ export class AttendanceController {
       throw new Error('Missing authenticated user context');
     }
 
-    return this.attendanceService.getMyStatus(jobId, { userId, role });
+    const effective = await this.permissions.getEffectiveForUser(userId);
+    this.permissions.assertPermission(effective, permission);
+    return {
+      userId,
+      role,
+      jobScope: effective.scopes.job === 'all' ? 'all' : 'own',
+      canViewJobFinancials: this.permissions.hasPermission(
+        effective,
+        'job:financials:view',
+      ),
+    };
   }
 }
 
@@ -175,7 +190,10 @@ export class AttendanceController {
 @Controller('attendance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AttendancePhotoController {
-  constructor(private readonly attendanceService: AttendanceService) {}
+  constructor(
+    private readonly attendanceService: AttendanceService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   @Post(':attendanceId/photo')
   @Roles(UserRole.INSTALLER)
@@ -221,11 +239,22 @@ export class AttendancePhotoController {
       'Authenticated installer does not own the target attendance record.',
   })
   @ApiNotFoundResponse({ description: 'Attendance record not found.' })
-  uploadPhoto(
+  async uploadPhoto(
     @Param('attendanceId', ParseUUIDPipe) attendanceId: string,
     @UploadedFile() file: UploadedBinaryFile | undefined,
     @Req() req: AuthenticatedRequest,
   ) {
+    const viewer = await this.authorizeAttendanceAction(
+      req,
+      'attendance:photo:upload',
+    );
+    return this.attendanceService.uploadPhoto(attendanceId, file, viewer);
+  }
+
+  private async authorizeAttendanceAction(
+    req: AuthenticatedRequest,
+    permission: PermissionKey,
+  ): Promise<JobListViewer> {
     const userId = req.user?.sub;
     const role = req.user?.role;
 
@@ -233,10 +262,17 @@ export class AttendancePhotoController {
       throw new UnauthorizedException('Missing authenticated user context');
     }
 
-    return this.attendanceService.uploadPhoto(attendanceId, file, {
+    const effective = await this.permissions.getEffectiveForUser(userId);
+    this.permissions.assertPermission(effective, permission);
+    return {
       userId,
       role,
-    });
+      jobScope: effective.scopes.job === 'all' ? 'all' : 'own',
+      canViewJobFinancials: this.permissions.hasPermission(
+        effective,
+        'job:financials:view',
+      ),
+    };
   }
 
   @Get(':attendanceId/photo')
@@ -264,11 +300,21 @@ export class AttendancePhotoController {
       throw new UnauthorizedException('Missing authenticated user context');
     }
 
+    const permission =
+      role === UserRole.INSTALLER ? 'attendance:self:view' : 'attendance:view';
+    const effective = await this.permissions.getEffectiveForUser(userId);
+    this.permissions.assertPermission(effective, permission);
+
     const download = await this.attendanceService.getPhotoDownload(
       attendanceId,
       {
         userId,
         role,
+        jobScope: effective.scopes.job === 'all' ? 'all' : 'own',
+        canViewJobFinancials: this.permissions.hasPermission(
+          effective,
+          'job:financials:view',
+        ),
       },
     );
 

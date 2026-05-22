@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -48,6 +49,7 @@ export class UpdateJobProposalConfigItemDto {
 }
 
 export class UpdateJobProposalConfigDto {
+  @ApiProperty({ type: () => [UpdateJobProposalConfigItemDto] })
   @IsArray()
   @ArrayMaxSize(100)
   @ArrayUnique(

@@ -11,6 +11,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { User } from '../users/entities/user.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PermissionsModule } from '../permissions/permissions.module';
 import { EmployeeRole } from './entities/employee-role.entity';
 import { StaffRole } from './entities/staff-role.entity';
 import { StaffController } from './staff.controller';
@@ -23,6 +24,7 @@ import { StaffService } from './staff.service';
       secret: process.env.JWT_SECRET ?? 'development-secret',
     }),
     NotificationsModule,
+    PermissionsModule,
   ],
   controllers: [StaffController],
   providers: [

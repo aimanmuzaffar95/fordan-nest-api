@@ -24,7 +24,7 @@ export type JobDetailJobDto = {
   batterySizeKwh: string | null;
   projectPrice: string | null;
   contractSigned: boolean;
-  depositAmount: string;
+  depositAmount: string | null;
   depositPaid: boolean;
   depositDate: string | null;
   installDate: string | null;
@@ -109,7 +109,7 @@ export type JobDetailResponseDto = {
   manager: JobDetailPersonDto | null;
   assignedStaffUser: JobDetailPersonDto | null;
   installerAssignments: JobDetailAssignmentDto[];
-  financials: JobDetailFinancialsDto;
+  financials: JobDetailFinancialsDto | null;
   notes: JobDetailTextEntryDto[];
   internalComments: JobDetailTextEntryDto[];
   timeline: JobDetailTimelineItemDto[];

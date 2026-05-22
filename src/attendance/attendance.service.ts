@@ -23,10 +23,7 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { AttendanceLocationDto } from './dto/attendance-location.dto';
 import { AttendanceRecord } from './entities/attendance-record.entity';
 
-type AuthViewer = {
-  userId: string;
-  role: UserRole;
-};
+type AuthViewer = JobListViewer;
 
 type AttendanceRecordResponse = {
   id: string;

@@ -6,7 +6,11 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { GetScheduleQueryDto } from './dto/get-schedule-query.dto';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
 
-export type ScheduleViewer = { userId: string; role: UserRole };
+export type ScheduleViewer = {
+  userId: string;
+  role: UserRole;
+  scheduleScope?: 'all' | 'managed' | 'self';
+};
 
 export type ScheduleItemDto = {
   assignmentId: string;
@@ -76,13 +80,15 @@ export class ScheduleService {
       .where('a.scheduledDate >= :from', { from })
       .andWhere('a.scheduledDate <= :to', { to });
 
-    if (viewer.role === UserRole.INSTALLER && calendarScopeEnforced) {
+    if (viewer.scheduleScope === 'self') {
       qb.andWhere('a.staffUserId = :viewerId', { viewerId: viewer.userId });
-    }
-
-    if (viewer.role === UserRole.MANAGER && calendarScopeEnforced) {
+    } else if (viewer.scheduleScope === 'managed') {
       // Managers should see assignments for jobs they manage, not rows where they
       // happen to be the installer assignee.
+      qb.andWhere('job.managerId = :viewerId', { viewerId: viewer.userId });
+    } else if (viewer.role === UserRole.INSTALLER && calendarScopeEnforced) {
+      qb.andWhere('a.staffUserId = :viewerId', { viewerId: viewer.userId });
+    } else if (viewer.role === UserRole.MANAGER && calendarScopeEnforced) {
       qb.andWhere('job.managerId = :viewerId', { viewerId: viewer.userId });
     }
 

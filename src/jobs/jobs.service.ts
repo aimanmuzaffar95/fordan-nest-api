@@ -57,7 +57,12 @@ import { DocumentNumberingService } from '../document-numbering/document-numberi
 import { EmailService } from '../email/email.service';
 import { CustomerMessagingRendererService } from '../email/customer-messaging-renderer.service';
 
-export type JobListViewer = { userId: string; role: UserRole };
+export type JobListViewer = {
+  userId: string;
+  role: UserRole;
+  jobScope?: 'all' | 'own';
+  canViewJobFinancials?: boolean;
+};
 
 type ProposalSummarySyncInput = {
   equipmentType: JobProposalEquipmentType;
@@ -136,7 +141,7 @@ export class JobsService {
       );
     }
 
-    if (viewer?.role === UserRole.MANAGER) {
+    if (viewer?.role === UserRole.MANAGER && viewer.jobScope !== 'all') {
       qb.andWhere('job.managerId = :managerUserId', {
         managerUserId: viewer.userId,
       });
@@ -189,13 +194,18 @@ export class JobsService {
     }
 
     return {
-      items: items.map((item) => ({
-        ...item,
-        ...this.buildDerivedInvoiceFields(
-          item,
-          invoicesByJobId.get(item.id) ?? [],
+      items: items.map((item) =>
+        this.applyJobFinancialVisibility(
+          {
+            ...item,
+            ...this.buildDerivedInvoiceFields(
+              item,
+              invoicesByJobId.get(item.id) ?? [],
+            ),
+          },
+          viewer,
         ),
-      })),
+      ),
       total,
       page,
       pageSize,
@@ -222,7 +232,7 @@ export class JobsService {
       await this.assertInstallerJobAccess(job, viewer.userId);
     }
 
-    if (viewer?.role === UserRole.MANAGER) {
+    if (viewer?.role === UserRole.MANAGER && viewer.jobScope !== 'all') {
       this.assertManagerJobAccess(job, viewer.userId);
     }
 
@@ -231,7 +241,10 @@ export class JobsService {
 
   async getOne(id: string, viewer?: JobListViewer) {
     const job = await this.findOneOrFail(this.jobsRepo, id, viewer);
-    return this.buildJobDetailResponse(job);
+    return this.buildJobDetailResponse(
+      job,
+      viewer?.canViewJobFinancials ?? true,
+    );
   }
 
   async updateJob(
@@ -734,12 +747,13 @@ export class JobsService {
     id: string,
     toStage: JobPipelineStage,
     overridePreMeterLock = false,
+    jobScope: 'all' | 'own' = 'own',
   ) {
     return this.dataSource.transaction(async (manager) => {
       const jobsRepo = manager.getRepository(Job);
       const viewer =
         performedById && performedByRole
-          ? { userId: performedById, role: performedByRole }
+          ? { userId: performedById, role: performedByRole, jobScope }
           : undefined;
       const job = await this.findOneOrFail(jobsRepo, id, viewer);
 
@@ -888,6 +902,7 @@ export class JobsService {
 
   private async buildJobDetailResponse(
     job: Job,
+    canViewFinancials = true,
   ): Promise<JobDetailResponseDto> {
     const [
       auditTimeline,
@@ -1040,20 +1055,26 @@ export class JobsService {
         pipelinePosition: job.pipelinePosition,
         systemSizeKw: job.systemSizeKw,
         batterySizeKwh: job.batterySizeKwh,
-        projectPrice: job.projectPrice,
+        projectPrice: canViewFinancials ? job.projectPrice : null,
         contractSigned: job.contractSigned,
-        depositAmount: job.depositAmount,
-        depositPaid: job.depositPaid,
-        depositDate: job.depositDate,
+        depositAmount: canViewFinancials ? job.depositAmount : null,
+        depositPaid: canViewFinancials ? job.depositPaid : false,
+        depositDate: canViewFinancials ? job.depositDate : null,
         installDate: job.installDate,
         scheduledDate: job.scheduledDate,
         scheduledSlot: job.scheduledSlot,
         managerId: job.managerId,
         assignedStaffUserId: job.assignedStaffUserId,
-        invoiceStatus: derivedInvoiceFields.invoiceStatus,
-        invoiceDate: derivedInvoiceFields.invoiceDate,
-        invoiceDueDate: derivedInvoiceFields.invoiceDueDate,
-        paidDate: derivedInvoiceFields.paidDate,
+        invoiceStatus: canViewFinancials
+          ? derivedInvoiceFields.invoiceStatus
+          : null,
+        invoiceDate: canViewFinancials
+          ? derivedInvoiceFields.invoiceDate
+          : null,
+        invoiceDueDate: canViewFinancials
+          ? derivedInvoiceFields.invoiceDueDate
+          : null,
+        paidDate: canViewFinancials ? derivedInvoiceFields.paidDate : null,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
       },
@@ -1078,13 +1099,15 @@ export class JobsService {
         lockReason: row.lockReason,
         installer: this.mapUserSummary(row.staffUser),
       })),
-      financials: {
-        depositPaidAmount: paidDepositAmount.toFixed(2),
-        remainingAmount:
-          remainingAmountNumber !== null
-            ? remainingAmountNumber.toFixed(2)
-            : null,
-      },
+      financials: canViewFinancials
+        ? {
+            depositPaidAmount: paidDepositAmount.toFixed(2),
+            remainingAmount:
+              remainingAmountNumber !== null
+                ? remainingAmountNumber.toFixed(2)
+                : null,
+          }
+        : null,
       notes: notes.map((entry) => this.mapTextEntry(entry)),
       internalComments: internalComments.map((entry) =>
         this.mapTextEntry(entry),
@@ -1654,6 +1677,27 @@ export class JobsService {
     throw new NotFoundException('Job not found');
   }
 
+  private applyJobFinancialVisibility<T extends Record<string, unknown>>(
+    item: T,
+    viewer?: JobListViewer,
+  ): T {
+    if (viewer?.canViewJobFinancials ?? true) {
+      return item;
+    }
+
+    return {
+      ...item,
+      projectPrice: null,
+      depositAmount: null,
+      depositPaid: false,
+      depositDate: null,
+      invoiceStatus: null,
+      invoiceDate: null,
+      invoiceDueDate: null,
+      paidDate: null,
+    };
+  }
+
   private buildDerivedInvoiceFields(job: Job, invoices: Invoice[]) {
     const projectPrice = Number(job.projectPrice ?? 0);
     const hasProjectPrice = Number.isFinite(projectPrice) && projectPrice > 0;
@@ -1729,10 +1773,11 @@ export class JobsService {
     dto: UpdateJobPipelineDto,
     userRole: UserRole,
     userId: string,
+    jobScope: 'all' | 'own' = 'own',
   ): Promise<Job> {
     const job = await this.jobsRepo.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Job not found');
-    if (userRole === UserRole.MANAGER) {
+    if (userRole === UserRole.MANAGER && jobScope !== 'all') {
       this.assertManagerJobAccess(job, userId);
     }
 

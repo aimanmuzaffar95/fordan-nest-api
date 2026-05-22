@@ -47,6 +47,7 @@ type PaginatedCustomers = {
 type CustomerViewer = {
   userId: string;
   role: UserRole;
+  customerScope?: 'all' | 'own';
 };
 
 type GeocodeCoordinatesDto = {
@@ -323,10 +324,15 @@ export class CustomersService {
     }
   }
 
-  async getTimeline(customerId: string): Promise<TimelineEventDto[]> {
-    const customer = await this.customersRepository.findOne({
-      where: { id: customerId },
-    });
+  async getTimeline(
+    customerId: string,
+    viewer?: CustomerViewer,
+  ): Promise<TimelineEventDto[]> {
+    const qb = this.customersRepository
+      .createQueryBuilder('customer')
+      .where('customer.id = :customerId', { customerId });
+    this.applyViewerScope(qb, viewer);
+    const customer = await qb.getOne();
     if (!customer) throw new NotFoundException('Customer not found');
 
     const events: TimelineEventDto[] = [];
@@ -461,7 +467,7 @@ export class CustomersService {
     qb: SelectQueryBuilder<Customer>,
     viewer?: CustomerViewer,
   ) {
-    if (viewer?.role !== UserRole.MANAGER) {
+    if (viewer?.role !== UserRole.MANAGER || viewer.customerScope === 'all') {
       return qb;
     }
 
