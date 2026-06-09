@@ -482,6 +482,7 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
   ],
   [UserRole.INSTALLER]: [
     'job:view',
+    'job:pipeline:update',
     'job:file:view',
     'job:file:upload',
     'job:note:create',

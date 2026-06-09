@@ -459,11 +459,11 @@ export class JobsController {
   }
 
   @Patch(':id/pipeline')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
   @ApiOperation({
     summary: 'Update job pipeline stage / ordering',
     description:
-      '**412 Precondition Failed** (`code: PRECONDITION_FAILED`) when a **non-admin** moves to `installed` without an approved **pre_meter** application. **Admin** may override.',
+      '**Installer:** may only move assigned jobs to `installed` (requires approved pre-meter). **412 Precondition Failed** (`code: PRECONDITION_FAILED`) when a **non-admin** moves to `installed` without an approved **pre_meter** application. **Admin** may override.',
   })
   @ApiPreconditionFailedResponse({
     description:

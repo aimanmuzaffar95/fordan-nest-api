@@ -298,7 +298,29 @@ export class PermissionsService implements OnModuleInit {
     if (Object.keys(updates).length > 0) {
       await this.profiles.update(profile.id, updates);
     }
+    await this.syncMissingDefaultGrants(profile, role);
     return profile;
+  }
+
+  private async syncMissingDefaultGrants(
+    profile: PermissionRoleProfile,
+    role: UserRole,
+  ): Promise<void> {
+    const expected = new Set(DEFAULT_PERMISSIONS_BY_ROLE[role]);
+    const enabled = new Set(this.enabledPermissions(profile));
+    const missing = [...expected].filter((key) => !enabled.has(key));
+    if (missing.length === 0) {
+      return;
+    }
+    await this.grants.save(
+      missing.map((permissionKey) =>
+        this.grants.create({
+          profileId: profile.id,
+          permissionKey,
+          enabled: true,
+        }),
+      ),
+    );
   }
 
   private async ensureStaffRoleProfile(

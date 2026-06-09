@@ -26,4 +26,13 @@ export class AlertsQueryDto {
   @IsOptional()
   @IsString()
   type?: string;
+
+  @ApiPropertyOptional({
+    enum: ['mine', 'all'],
+    description:
+      '**Installer only:** `mine` (default) limits to assigned jobs; `all` is ignored. **Manager/admin:** ignored — managers see managed-job alerts; admins see all.',
+  })
+  @IsOptional()
+  @IsIn(['mine', 'all'])
+  scope?: 'mine' | 'all';
 }

@@ -22,24 +22,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SystemAuditLog } from './entities/system-audit-log.entity';
 import { ListAuditLogQueryDto } from './dto/list-audit-log-query.dto';
-
-export type AuditLogItemDto = {
-  id: string;
-  createdAt: string;
-  action: string;
-  actorUserId: string | null;
-  actorName: string | null;
-  resourceType: string | null;
-  resourceId: string | null;
-  metadata: Record<string, unknown> | null;
-};
-
-export type AuditLogListResponseDto = {
-  items: AuditLogItemDto[];
-  total: number;
-  page: number;
-  pageSize: number;
-};
+import {
+  AuditLogListResponseDto,
+  SystemAuditLogService,
+} from './system-audit-log.service';
 
 @ApiTags('Audit log')
 @ApiBearerAuth('JWT')
@@ -50,6 +36,7 @@ export type AuditLogListResponseDto = {
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AuditLogController {
   constructor(
+    private readonly auditLog: SystemAuditLogService,
     @InjectRepository(SystemAuditLog)
     private readonly auditRepo: Repository<SystemAuditLog>,
   ) {}
@@ -64,37 +51,7 @@ export class AuditLogController {
   async list(
     @Query() query: ListAuditLogQueryDto,
   ): Promise<AuditLogListResponseDto> {
-    const page = query.page ?? 1;
-    const pageSize = query.pageSize ?? 25;
-    const skip = (page - 1) * pageSize;
-
-    const qb = this.auditRepo
-      .createQueryBuilder('log')
-      .leftJoinAndSelect('log.actorUser', 'actor')
-      .orderBy('log.createdAt', 'DESC')
-      .skip(skip)
-      .take(pageSize);
-
-    const [rows, total] = await qb.getManyAndCount();
-
-    const items: AuditLogItemDto[] = rows.map((log) => {
-      const actor = log.actorUser;
-      const actorName = actor
-        ? `${actor.firstName ?? ''} ${actor.lastName ?? ''}`.trim() || null
-        : null;
-      return {
-        id: log.id,
-        createdAt: log.createdAt.toISOString(),
-        action: log.action,
-        actorUserId: log.actorUserId,
-        actorName,
-        resourceType: log.resourceType,
-        resourceId: log.resourceId,
-        metadata: log.metadata ?? null,
-      };
-    });
-
-    return { items, total, page, pageSize };
+    return this.auditLog.listPaginated(query);
   }
 
   @Delete(':id')

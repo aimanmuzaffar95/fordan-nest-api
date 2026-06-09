@@ -40,11 +40,11 @@ export class AlertsController {
   constructor(private readonly alertsService: AlertsService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
   @ApiOperation({
     summary: 'List alerts',
     description:
-      '**Admin:** all alerts. **Manager:** only alerts for jobs where `jobs.managerId = you`.',
+      '**Admin:** all alerts. **Manager:** active alerts on jobs where `jobs.managerId = you` (`scope` ignored). **Installer:** assigned jobs when `scope=mine` (default).',
   })
   @ApiResponse({ status: 200, type: AlertsListResponseDto })
   findAll(

@@ -21,6 +21,10 @@ import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { AttendanceLocationDto } from './dto/attendance-location.dto';
+import {
+  GlobalClockInDto,
+  GlobalClockOutDto,
+} from './dto/global-attendance.dto';
 import { AttendanceRecord } from './entities/attendance-record.entity';
 
 type AuthViewer = JobListViewer;
@@ -64,6 +68,25 @@ type AttendancePhotoDownload = {
   contentLength?: number;
 };
 
+export type AttendanceSessionSummary = {
+  id: string;
+  userId: string;
+  jobId: string | null;
+  assignmentId: string | null;
+  clockInAt: string;
+  clockOutAt: string | null;
+  durationMinutes: number | null;
+  geofenceFlaggedIn: boolean;
+  geofenceFlaggedOut: boolean;
+  distanceFromSiteMetersIn: number | null;
+  distanceFromSiteMetersOut: number | null;
+  offSiteAcknowledgedReasonIn: string | null;
+  offSiteAcknowledgedReasonOut: string | null;
+  correctionNote: string | null;
+  correctedAt: string | null;
+  correctedByUserId: string | null;
+};
+
 @Injectable()
 export class AttendanceService {
   private readonly logger = new Logger(AttendanceService.name);
@@ -84,6 +107,62 @@ export class AttendanceService {
     private readonly filesStorageService: FilesStorageService,
     private readonly dataSource: DataSource,
   ) {}
+
+  async clockInGlobal(
+    dto: GlobalClockInDto,
+    actor: AuthViewer,
+  ): Promise<AttendanceSessionSummary> {
+    if (!dto.jobId) {
+      throw new BadRequestException('jobId is required to clock in');
+    }
+    const record = await this.clockIn(dto.jobId, dto, actor);
+    return this.toSessionSummary(record, actor.userId);
+  }
+
+  async clockOutGlobal(
+    dto: GlobalClockOutDto,
+    actor: AuthViewer,
+  ): Promise<AttendanceSessionSummary> {
+    const open = await this.attendanceRepo.findOne({
+      where: { staffId: actor.userId, clockOutAt: IsNull() },
+      order: { clockInAt: 'DESC' },
+    });
+    if (!open) {
+      throw new BadRequestException('No open attendance session');
+    }
+    const record = await this.clockOut(open.jobId, dto, actor);
+    return this.toSessionSummary(record, actor.userId);
+  }
+
+  async getMyOpenSession(
+    userId: string,
+  ): Promise<AttendanceSessionSummary | null> {
+    const open = await this.attendanceRepo.findOne({
+      where: { staffId: userId, clockOutAt: IsNull() },
+      order: { clockInAt: 'DESC' },
+    });
+    if (!open) return null;
+    return this.toSessionSummary(this.toRecordResponse(open), userId);
+  }
+
+  async listMySessions(
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<AttendanceSessionSummary[]> {
+    const fromDate = new Date(`${from}T00:00:00.000Z`);
+    const toDate = new Date(`${to}T23:59:59.999Z`);
+    const records = await this.attendanceRepo
+      .createQueryBuilder('a')
+      .where('a.staffId = :userId', { userId })
+      .andWhere('a.clockInAt >= :fromDate', { fromDate })
+      .andWhere('a.clockInAt <= :toDate', { toDate })
+      .orderBy('a.clockInAt', 'DESC')
+      .getMany();
+    return records.map((r) =>
+      this.toSessionSummary(this.toRecordResponse(r), userId),
+    );
+  }
 
   async clockIn(
     jobId: string,
@@ -426,6 +505,32 @@ export class AttendanceService {
     }
 
     return job;
+  }
+
+  private toSessionSummary(
+    record: AttendanceRecordResponse,
+    userId: string,
+  ): AttendanceSessionSummary {
+    const clockIn = new Date(record.clockInAt);
+    const clockOut = record.clockOutAt ? new Date(record.clockOutAt) : null;
+    return {
+      id: record.id,
+      userId,
+      jobId: record.jobId,
+      assignmentId: null,
+      clockInAt: record.clockInAt,
+      clockOutAt: record.clockOutAt,
+      durationMinutes: this.calculateDurationMinutes(clockIn, clockOut),
+      geofenceFlaggedIn: record.locationStatus === 'off_site',
+      geofenceFlaggedOut: record.locationStatus === 'off_site',
+      distanceFromSiteMetersIn: null,
+      distanceFromSiteMetersOut: null,
+      offSiteAcknowledgedReasonIn: null,
+      offSiteAcknowledgedReasonOut: null,
+      correctionNote: record.correctionNote,
+      correctedAt: record.correctedAt,
+      correctedByUserId: record.correctedBy,
+    };
   }
 
   private toRecordResponse(record: AttendanceRecord): AttendanceRecordResponse {

@@ -428,10 +428,14 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
       where['type'] = type;
     }
 
-    // Manager scope: filter alerts whose job.managerId = viewer.userId
+    // Manager scope: all active alerts on jobs where managerId = viewer (ignore `scope`).
     if (viewer.role === UserRole.MANAGER) {
       where['job'] = { managerId: viewer.userId };
     }
+
+    const installerMine =
+      viewer.role === UserRole.INSTALLER &&
+      (filters.scope === 'mine' || filters.scope === undefined);
 
     let alerts: Alert[];
     if (status === 'resolved') {
@@ -450,13 +454,21 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
           (!severity || a.severity === severity) &&
           (!type || a.type === type) &&
           (viewer.role !== UserRole.MANAGER ||
-            (a.job && a.job.managerId === viewer.userId)),
+            (a.job && a.job.managerId === viewer.userId)) &&
+          (!installerMine ||
+            (a.job && a.job.assignedStaffUserId === viewer.userId)),
       );
     } else {
       alerts = await this.alertRepo.find({
         where,
-        relations: viewer.role === UserRole.MANAGER ? ['job'] : undefined,
+        relations:
+          viewer.role === UserRole.MANAGER || installerMine ? ['job'] : undefined,
       });
+      if (installerMine) {
+        alerts = alerts.filter(
+          (a) => a.job && a.job.assignedStaffUserId === viewer.userId,
+        );
+      }
     }
 
     return {

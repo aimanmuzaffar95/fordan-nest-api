@@ -1291,6 +1291,20 @@ export class JobsService {
           ? 'Compliance form signed and submitted'
           : 'Compliance form submitted';
       }
+      case 'document_generated': {
+        const title =
+          this.readTimelinePayloadString(payload, 'templateTitle') ||
+          this.readTimelinePayloadString(payload, 'templateId');
+        return title ? `Document generated: ${title}` : 'Document generated';
+      }
+      case 'document_sign_requested': {
+        const title = this.readTimelinePayloadString(payload, 'templateId');
+        const mode = this.readTimelinePayloadString(payload, 'mode');
+        if (title && mode) {
+          return `Sign requested for ${title} (${mode})`;
+        }
+        return 'Document sign requested';
+      }
       default:
         return this.humanizeToken(entry.type);
     }
@@ -1780,8 +1794,19 @@ export class JobsService {
     if (userRole === UserRole.MANAGER && jobScope !== 'all') {
       this.assertManagerJobAccess(job, userId);
     }
+    if (userRole === UserRole.INSTALLER) {
+      await this.assertInstallerJobAccess(job, userId);
+    }
 
     const toStage = dto.pipelineStage;
+
+    if (userRole === UserRole.INSTALLER) {
+      if (toStage !== JobPipelineStage.INSTALLED) {
+        throw new ForbiddenException(
+          'Installers may only mark assigned jobs as installed.',
+        );
+      }
+    }
 
     const fromStage = job.pipelineStage as JobPipelineStage;
     const targetStage = toStage as JobPipelineStage;

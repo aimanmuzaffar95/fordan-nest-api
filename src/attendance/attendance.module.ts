@@ -21,6 +21,7 @@ import {
   AttendanceController,
   AttendancePhotoController,
 } from './attendance.controller';
+import { AttendanceSessionController } from './attendance-session.controller';
 import { AttendanceService } from './attendance.service';
 import { AttendanceRecord } from './entities/attendance-record.entity';
 
@@ -42,7 +43,11 @@ import { AttendanceRecord } from './entities/attendance-record.entity';
     FilesModule,
     PermissionsModule,
   ],
-  controllers: [AttendanceController, AttendancePhotoController],
+  controllers: [
+    AttendanceController,
+    AttendancePhotoController,
+    AttendanceSessionController,
+  ],
   providers: [
     AttendanceService,
     JwtAuthGuard,

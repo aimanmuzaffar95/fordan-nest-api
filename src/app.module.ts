@@ -61,6 +61,18 @@ import { PermissionRoleGrant } from './permissions/entities/permission-role-gran
 import { PermissionRoleProfile } from './permissions/entities/permission-role-profile.entity';
 import { PermissionRoleScope } from './permissions/entities/permission-role-scope.entity';
 import { PermissionsModule } from './permissions/permissions.module';
+import { AttendanceModule } from './attendance/attendance.module';
+import { AttendanceRecord } from './attendance/entities/attendance-record.entity';
+import { AvailabilityModule } from './availability/availability.module';
+import { StaffAvailability } from './availability/entities/staff-availability.entity';
+import { MobileModule } from './mobile/mobile.module';
+import { EquipmentModule } from './equipment/equipment.module';
+import { EquipmentItem } from './equipment/entities/equipment-item.entity';
+import { DevicesModule } from './devices/devices.module';
+import { DeviceRegistration } from './devices/entities/device-registration.entity';
+import { DocumentsModule } from './documents/documents.module';
+import { JobGeneratedDocument } from './documents/entities/job-generated-document.entity';
+import { JobDocumentSignRequest } from './documents/entities/job-document-sign-request.entity';
 import { loadEnvFile } from './common/load-env.util';
 import { getSettingsEncryptionKey } from './common/crypto.util';
 
@@ -182,6 +194,12 @@ getSettingsEncryptionKey();
         PermissionRoleProfile,
         PermissionRoleGrant,
         PermissionRoleScope,
+        AttendanceRecord,
+        StaffAvailability,
+        EquipmentItem,
+        DeviceRegistration,
+        JobGeneratedDocument,
+        JobDocumentSignRequest,
       ],
       migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,
@@ -216,6 +234,12 @@ getSettingsEncryptionKey();
     NotificationsModule,
     ComplianceModule,
     PermissionsModule,
+    AttendanceModule,
+    AvailabilityModule,
+    MobileModule,
+    EquipmentModule,
+    DevicesModule,
+    DocumentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
