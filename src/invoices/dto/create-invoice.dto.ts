@@ -9,6 +9,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsDecimalFractionString } from '../validators/is-decimal-fraction-string';
 import { IsPositiveDecimalString } from '../validators/is-positive-decimal-string';
 
 class CreateInvoiceItemDto {
@@ -22,7 +23,7 @@ class CreateInvoiceItemDto {
   @IsPositiveDecimalString()
   unitPrice: string;
 
-  @IsPositiveDecimalString()
+  @IsDecimalFractionString()
   @IsOptional()
   taxRate?: string;
 }

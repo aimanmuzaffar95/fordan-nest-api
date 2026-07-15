@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -40,6 +41,8 @@ type InvoiceActivityInput = {
 
 @Injectable()
 export class InvoicesService {
+  private readonly logger = new Logger(InvoicesService.name);
+
   constructor(
     @InjectRepository(Invoice)
     private readonly invoicesRepo: Repository<Invoice>,
@@ -324,7 +327,9 @@ export class InvoicesService {
         viewer?.userId,
       );
 
-      // Customer payment receipt email (best-effort; hard-fail to keep accounting honest)
+      // Customer payment receipt (best-effort). The payment row is already
+      // committed — a failed receipt email must not make the recorded payment
+      // look failed to the caller.
       try {
         const full = await this.invoicesRepo.findOne({
           where: { id: invoice.id },
@@ -347,11 +352,10 @@ export class InvoicesService {
             });
           await this.email.send({ to: customerEmail, subject, html });
         }
-      } catch {
-        throw new ServiceUnavailableException({
-          message: 'Email delivery failed. Payment receipt was not delivered.',
-          code: 'EMAIL_DELIVERY_FAILED',
-        });
+      } catch (emailErr) {
+        this.logger.warn(
+          `Payment receipt email failed for invoice ${invoice.id}: ${String(emailErr)}`,
+        );
       }
     }
 
@@ -368,23 +372,9 @@ export class InvoicesService {
       return this.getOne(id, viewer);
     }
 
-    invoice.status = InvoiceStatus.SENT;
-    invoice.sentAt = new Date();
-    await this.invoicesRepo.save(invoice);
-    await this.appendActivity(
-      invoice,
-      {
-        type: 'invoice_sent',
-        description: `Invoice ${invoice.invoiceNumber} marked as sent`,
-        payload: {
-          invoiceNumber: invoice.invoiceNumber,
-          sentAt: invoice.sentAt.toISOString(),
-        },
-      },
-      viewer?.userId,
-    );
-
-    // Customer invoice email (best-effort; hard-fail so "sent" means delivered)
+    // Deliver the customer email BEFORE persisting SENT — "sent" must mean
+    // delivered (or no recipient on file). A failed delivery leaves the
+    // invoice in its current status so the 503 matches reality.
     try {
       const full = await this.invoicesRepo.findOne({
         where: { id: invoice.id },
@@ -414,6 +404,22 @@ export class InvoicesService {
         code: 'EMAIL_DELIVERY_FAILED',
       });
     }
+
+    invoice.status = InvoiceStatus.SENT;
+    invoice.sentAt = new Date();
+    await this.invoicesRepo.save(invoice);
+    await this.appendActivity(
+      invoice,
+      {
+        type: 'invoice_sent',
+        description: `Invoice ${invoice.invoiceNumber} marked as sent`,
+        payload: {
+          invoiceNumber: invoice.invoiceNumber,
+          sentAt: invoice.sentAt.toISOString(),
+        },
+      },
+      viewer?.userId,
+    );
 
     return this.getOne(id, viewer);
   }
