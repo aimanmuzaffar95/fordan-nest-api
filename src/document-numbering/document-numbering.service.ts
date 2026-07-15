@@ -14,11 +14,20 @@ import {
 export class DocumentNumberingService {
   constructor(private readonly dataSource: DataSource) {}
 
+  /** sqljs/sqlite (in-memory tests) don't support row locks; they're also
+   *  single-connection, so the transaction alone is sufficient there. */
+  private get lockOptions() {
+    const driver = this.dataSource.options.type;
+    return driver === 'sqljs' || driver === 'sqlite'
+      ? {}
+      : { lock: { mode: 'pessimistic_write' as const } };
+  }
+
   async allocateNextOrderNumber(): Promise<string> {
     return this.dataSource.transaction(async (manager) => {
       const settings = await manager.findOne(AdminSettings, {
         where: { id: ADMIN_SETTINGS_SINGLETON_ID },
-        lock: { mode: 'pessimistic_write' },
+        ...this.lockOptions,
       });
       if (!settings) {
         throw new BadRequestException('Global settings row is missing');
@@ -44,7 +53,7 @@ export class DocumentNumberingService {
     return this.dataSource.transaction(async (manager) => {
       const settings = await manager.findOne(AdminSettings, {
         where: { id: ADMIN_SETTINGS_SINGLETON_ID },
-        lock: { mode: 'pessimistic_write' },
+        ...this.lockOptions,
       });
       if (!settings) {
         throw new BadRequestException('Global settings row is missing');

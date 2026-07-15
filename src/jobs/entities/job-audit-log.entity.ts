@@ -6,6 +6,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { resolveEnumColumnType } from '../../common/timestamp-column-type.util';
 import { User } from '../../users/entities/user.entity';
 import { JobAuditAction } from '../job-audit-action.enum';
 import { JobAuditValue } from '../types/job-audit-value.type';
@@ -31,7 +32,7 @@ export class JobAuditLog {
   performedById: string | null;
 
   @Column({
-    type: 'enum',
+    type: resolveEnumColumnType(),
     enum: JobAuditAction,
     enumName: 'job_audit_logs_action_enum',
   })

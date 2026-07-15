@@ -60,8 +60,8 @@ describe('CustomersController', () => {
     jest.clearAllMocks();
   });
 
-  it('uses default pagination values in findAll', () => {
-    void controller.findAll({}, {
+  it('uses default pagination values in findAll', async () => {
+    await controller.findAll({}, {
       user: { sub: 'user-id', role: UserRole.ADMIN },
     } as never);
 
@@ -74,8 +74,8 @@ describe('CustomersController', () => {
     });
   });
 
-  it('forwards pagination values in findAll', () => {
-    void controller.findAll({ page: 2, limit: 50 }, {
+  it('forwards pagination values in findAll', async () => {
+    await controller.findAll({ page: 2, limit: 50 }, {
       user: { sub: 'user-id', role: UserRole.MANAGER },
     } as never);
 
@@ -88,8 +88,8 @@ describe('CustomersController', () => {
     });
   });
 
-  it('forwards search query params', () => {
-    void controller.search({ q: 'aiman', page: 2, limit: 10 }, {
+  it('forwards search query params', async () => {
+    await controller.search({ q: 'aiman', page: 2, limit: 10 }, {
       user: { sub: 'user-id', role: UserRole.ADMIN },
     } as never);
 

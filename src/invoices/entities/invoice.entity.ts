@@ -7,6 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { resolveTimestampColumnType } from '../../common/timestamp-column-type.util';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Job } from '../../jobs/entities/job.entity';
 import { InvoiceActivity } from './invoice-activity.entity';
@@ -69,10 +70,10 @@ export class Invoice {
   @Column({ type: 'text', nullable: true })
   terms: string | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: resolveTimestampColumnType(), nullable: true })
   sentAt: Date | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: resolveTimestampColumnType(), nullable: true })
   cancelledAt: Date | null;
 
   @Column({ type: 'text', nullable: true })

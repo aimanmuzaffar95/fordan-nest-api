@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { resolveEnumColumnType } from '../../common/timestamp-column-type.util';
 import { Customer } from '../../customers/entities/customer.entity';
 import { JobPipelineStage } from '../job-pipeline-stage.enum';
 import { JobSystemType } from '../job-system-type.enum';
@@ -26,14 +27,14 @@ export class Job {
 
   // Frontend expects: 'solar' | 'battery' | 'both'
   @Column({
-    type: 'enum',
+    type: resolveEnumColumnType(),
     enum: JobSystemType,
     enumName: 'jobs_systemtype_enum',
   })
   systemType: JobSystemType;
 
   @Column({
-    type: 'enum',
+    type: resolveEnumColumnType(),
     enum: JobPipelineStage,
     enumName: 'jobs_jobstatus_enum',
     default: JobPipelineStage.LEAD,

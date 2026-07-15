@@ -5,10 +5,11 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { SuccessResponseInterceptor } from '../src/common/interceptors/success-response.interceptor';
 import { JwtAuthGuard } from '../src/auth/guards/jwt-auth.guard';
@@ -16,23 +17,47 @@ import { UserCredential } from '../src/auth/entities/user-credential.entity';
 import { AssignmentsModule } from '../src/assignments/assignments.module';
 import { Assignment } from '../src/assignments/entities/assignment.entity';
 import { CustomersModule } from '../src/customers/customers.module';
+import {
+  AdminSettings,
+  ADMIN_SETTINGS_SINGLETON_ID,
+} from '../src/runtime-settings/admin-settings.entity';
 import { Customer } from '../src/customers/entities/customer.entity';
+import { CustomerAuditLog } from '../src/customers/entities/customer-audit-log.entity';
+import { Invoice } from '../src/invoices/entities/invoice.entity';
+import { InvoiceActivity } from '../src/invoices/entities/invoice-activity.entity';
+import { InvoiceItem } from '../src/invoices/entities/invoice-item.entity';
+import { InvoicePayment } from '../src/invoices/entities/invoice-payment.entity';
+import { Battery } from '../src/batteries/entities/battery.entity';
+import { Inverter } from '../src/inverters/entities/inverter.entity';
+import { Note } from '../src/notes/entities/note.entity';
+import { SolarPanel } from '../src/solar-panels/entities/solar-panel.entity';
 import { Job } from '../src/jobs/entities/job.entity';
+import { JobInternalComment } from '../src/jobs/entities/job-internal-comment.entity';
+import { JobProposalSelection } from '../src/jobs/entities/job-proposal-selection.entity';
+import { JobAuditLog } from '../src/jobs/entities/job-audit-log.entity';
 import { MeterApplication } from '../src/metering/entities/meter-application.entity';
 import { MeteringModule } from '../src/metering/metering.module';
 import { ScheduleModule } from '../src/schedule/schedule.module';
+import { PermissionRoleGrant } from '../src/permissions/entities/permission-role-grant.entity';
+import { PermissionRoleProfile } from '../src/permissions/entities/permission-role-profile.entity';
+import { PermissionRoleScope } from '../src/permissions/entities/permission-role-scope.entity';
+import { EmployeeRole } from '../src/staff/entities/employee-role.entity';
 import { StaffRole } from '../src/staff/entities/staff-role.entity';
 import { TimelineEvent } from '../src/timeline/entities/timeline-event.entity';
 import { User } from '../src/users/entities/user.entity';
 import { UserRole } from '../src/users/entities/user-role.enum';
 
-/** E2E acts as manager without signing JWT. */
+/**
+ * E2E acts as admin without signing JWT. (Admin keeps the `all` customer/job
+ * scope; manager defaults are now `own`-scoped by the permissions catalog,
+ * which would hide fixtures that have no managed job.)
+ */
 const e2eManagerJwtGuard: CanActivate = {
   canActivate(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest<{
       user?: { sub: string; role: UserRole };
     }>();
-    req.user = { sub: E2E_MANAGER_USER_ID, role: UserRole.MANAGER };
+    req.user = { sub: E2E_MANAGER_USER_ID, role: UserRole.ADMIN };
     return true;
   },
 };
@@ -42,7 +67,7 @@ const e2eInstallerJwtGuard: CanActivate = {
     const req = context.switchToHttp().getRequest<{
       user?: { sub: string; role: UserRole };
     }>();
-    req.user = { sub: 'e2e-installer-id', role: UserRole.INSTALLER };
+    req.user = { sub: E2E_INSTALLER_USER_ID, role: UserRole.INSTALLER };
     return true;
   },
 };
@@ -54,6 +79,7 @@ type SuccessBody<T> = {
 
 /** Valid UUID for JWT `sub` / `users.id` (CreateAssignmentDto enforces `@IsUUID()`). */
 const E2E_MANAGER_USER_ID = 'a0000000-0000-4000-8000-000000000001';
+const E2E_INSTALLER_USER_ID = 'a0000000-0000-4000-8000-000000000002';
 
 describe('Customers (e2e)', () => {
   let app: INestApplication<App>;
@@ -72,16 +98,34 @@ describe('Customers (e2e)', () => {
           autoSave: false,
           synchronize: true,
           entities: [
+            AdminSettings,
             Customer,
+            CustomerAuditLog,
+            Invoice,
+            InvoiceActivity,
+            InvoiceItem,
+            InvoicePayment,
+            Battery,
+            Inverter,
+            Note,
+            SolarPanel,
             Job,
+            JobAuditLog,
+            JobInternalComment,
+            JobProposalSelection,
             MeterApplication,
             TimelineEvent,
             User,
             UserCredential,
             Assignment,
             StaffRole,
+            EmployeeRole,
+            PermissionRoleProfile,
+            PermissionRoleGrant,
+            PermissionRoleScope,
           ],
         }),
+        ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 100 }] }),
         CustomersModule,
         AssignmentsModule,
         ScheduleModule,
@@ -132,9 +176,15 @@ describe('Customers (e2e)', () => {
         lastName: 'Manager',
         emailAddress: 'e2e-manager@test.com',
         phoneNumber: '+15550001111',
-        role: UserRole.MANAGER,
+        role: UserRole.ADMIN,
         active: true,
       }),
+    );
+
+    // Job creation allocates order numbers from the settings singleton.
+    const settingsRepository = app.get(DataSource).getRepository(AdminSettings);
+    await settingsRepository.save(
+      settingsRepository.create({ id: ADMIN_SETTINGS_SINGLETON_ID }),
     );
   });
 
@@ -718,15 +768,33 @@ describe('Customers as installer (e2e)', () => {
           autoSave: false,
           synchronize: true,
           entities: [
+            AdminSettings,
             Customer,
+            CustomerAuditLog,
+            Invoice,
+            InvoiceActivity,
+            InvoiceItem,
+            InvoicePayment,
+            Battery,
+            Inverter,
+            Note,
+            SolarPanel,
             Job,
+            JobAuditLog,
+            JobInternalComment,
+            JobProposalSelection,
             MeterApplication,
             TimelineEvent,
             User,
             UserCredential,
             StaffRole,
+            EmployeeRole,
+            PermissionRoleProfile,
+            PermissionRoleGrant,
+            PermissionRoleScope,
           ],
         }),
+        ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 100 }] }),
         CustomersModule,
       ],
     })
@@ -751,6 +819,22 @@ describe('Customers as installer (e2e)', () => {
     );
 
     await app.init();
+
+    // Permission resolution looks the request user up in the database.
+    const installerUsersRepository = moduleFixture.get<Repository<User>>(
+      getRepositoryToken(User),
+    );
+    await installerUsersRepository.save(
+      installerUsersRepository.create({
+        id: E2E_INSTALLER_USER_ID,
+        firstName: 'E2e',
+        lastName: 'Installer',
+        emailAddress: 'e2e-installer@test.com',
+        phoneNumber: '+15550002222',
+        role: UserRole.INSTALLER,
+        active: true,
+      }),
+    );
   });
 
   beforeEach(async () => {

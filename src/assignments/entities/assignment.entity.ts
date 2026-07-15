@@ -8,22 +8,12 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { resolveTimestampColumnType } from '../../common/timestamp-column-type.util';
 import { Job } from '../../jobs/entities/job.entity';
 import { User } from '../../users/entities/user.entity';
 
 // TypeORM compatibility:
-// - sqljs doesn't support `timestamp` (used in earlier failures).
-// - Postgres doesn't support `datetime` in TypeORM's validator.
-// Use a dialect-aware mapping at runtime.
-const lockedAtColumnType = (() => {
-  const raw =
-    process.env.DB_DIALECT ??
-    process.env.DATABASE_DIALECT ??
-    process.env.TYPEORM_CONNECTION ??
-    'postgres';
-  const v = raw.trim().toLowerCase();
-  return v.includes('postgres') ? 'timestamp' : 'datetime';
-})();
+const lockedAtColumnType = resolveTimestampColumnType();
 
 @Entity('assignments')
 @Index(

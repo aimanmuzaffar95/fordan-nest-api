@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { UserCredential } from '../../auth/entities/user-credential.entity';
+import { resolveTimestampColumnType } from '../../common/timestamp-column-type.util';
 import { EmployeeRole } from '../../staff/entities/employee-role.entity';
 import { StaffRole } from '../../staff/entities/staff-role.entity';
 import { UserRole } from './user-role.enum';
@@ -53,7 +54,7 @@ export class User {
   @Column({ type: 'uuid', nullable: true })
   employeeRoleId: string | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: resolveTimestampColumnType(), nullable: true })
   deletedAt: Date | null;
   @Column({ type: 'boolean', default: true })
   active: boolean;

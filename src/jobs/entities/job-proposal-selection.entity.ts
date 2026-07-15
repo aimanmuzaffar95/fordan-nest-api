@@ -7,6 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { resolveEnumColumnType } from '../../common/timestamp-column-type.util';
 import { JobProposalEquipmentType } from '../job-proposal-equipment-type.enum';
 import { Job } from './job.entity';
 
@@ -23,7 +24,7 @@ export class JobProposalSelection {
   jobId: string;
 
   @Column({
-    type: 'enum',
+    type: resolveEnumColumnType(),
     enum: JobProposalEquipmentType,
     enumName: 'job_proposal_selections_equipmenttype_enum',
   })
