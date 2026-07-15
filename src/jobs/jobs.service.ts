@@ -5,7 +5,6 @@ import {
   Logger,
   NotFoundException,
   PreconditionFailedException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -31,7 +30,10 @@ import {
 } from './dto/update-job-proposal-config.dto';
 import { JobProposalEquipmentType } from './job-proposal-equipment-type.enum';
 import { JobPipelineStage } from './job-pipeline-stage.enum';
-import { FORWARD_GATE_RULES, isBackwardsMove } from './pipeline-gate.rules';
+import {
+  collectForwardGateError,
+  isBackwardsMove,
+} from './pipeline-gate.rules';
 import { JobSystemType } from './job-system-type.enum';
 import { JobAuditLog } from './entities/job-audit-log.entity';
 import { JobInternalComment } from './entities/job-internal-comment.entity';
@@ -759,6 +761,13 @@ export class JobsService {
 
       if (job.jobStatus === toStage) {
         return job;
+      }
+
+      // Same cumulative forward gates as PATCH :id/pipeline — this endpoint
+      // must not be a bypass route.
+      const gateError = collectForwardGateError(job.jobStatus, toStage, job);
+      if (gateError) {
+        throw new BadRequestException(gateError);
       }
 
       if (
@@ -1810,14 +1819,12 @@ export class JobsService {
       }
     }
 
-    // Check forward gate rules (only for forward moves).
+    // Check forward gate rules (only for forward moves). Every gate the move
+    // crosses applies — a jump over a gated stage must not bypass it.
     if (!isBackwardsMove(fromStage, targetStage) && fromStage !== targetStage) {
-      const gateRule = FORWARD_GATE_RULES[targetStage];
-      if (gateRule) {
-        const gateError = gateRule(job);
-        if (gateError) {
-          throw new BadRequestException(gateError);
-        }
+      const gateError = collectForwardGateError(fromStage, targetStage, job);
+      if (gateError) {
+        throw new BadRequestException(gateError);
       }
     }
 
@@ -2203,6 +2210,9 @@ export class JobsService {
               updated.scheduledDate ? ` for ${updated.scheduledDate}` : ''
             }. We will contact you if we need any more details.`
           : 'Your installation has been completed. Thank you for choosing us.';
+      // The stage move is already committed at this point — a failed courtesy
+      // notification must not turn the response into an error (the UI would
+      // report failure for a move that persisted).
       try {
         const { subject, html } =
           await this.customerMessaging.renderJobStatusCustomerEmail({
@@ -2212,12 +2222,10 @@ export class JobsService {
             jobStatusBody: statusBody,
           });
         await this.email.send({ to: customerEmail, subject, html });
-      } catch {
-        throw new ServiceUnavailableException({
-          message:
-            'Email delivery failed. Customer status notification was not delivered.',
-          code: 'EMAIL_DELIVERY_FAILED',
-        });
+      } catch (emailErr) {
+        this.logger.warn(
+          `Customer status notification failed for job ${jobId} (stage ${toStage}): ${String(emailErr)}`,
+        );
       }
     }
 

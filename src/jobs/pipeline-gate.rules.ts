@@ -54,3 +54,26 @@ export function isBackwardsMove(
   const toIndex = STAGE_ORDER.indexOf(toStage);
   return toIndex < fromIndex;
 }
+
+/**
+ * Evaluate every forward gate a move crosses — stages with index in
+ * `(fromIndex, toIndex]` — not just the target's. A multi-column jump must
+ * satisfy the same gates as moving through each stage one by one.
+ * Returns the first failing gate's error message, or null when allowed.
+ */
+export function collectForwardGateError(
+  fromStage: JobPipelineStage,
+  toStage: JobPipelineStage,
+  job: Job,
+): string | null {
+  const fromIndex = STAGE_ORDER.indexOf(fromStage);
+  const toIndex = STAGE_ORDER.indexOf(toStage);
+  if (fromIndex < 0 || toIndex <= fromIndex) return null;
+
+  for (let i = fromIndex + 1; i <= toIndex; i += 1) {
+    const rule = FORWARD_GATE_RULES[STAGE_ORDER[i]];
+    const error = rule ? rule(job) : null;
+    if (error) return error;
+  }
+  return null;
+}
