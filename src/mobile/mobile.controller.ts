@@ -42,14 +42,43 @@ export class MobileController {
     const jwtRole = req.user?.role ?? UserRole.INSTALLER;
     if (!userId) throw new Error('Missing authenticated user context');
 
-    const role =
+    const role = this.resolveDashboardRole(roleQuery, jwtRole);
+
+    // #region agent log
+    fetch('http://127.0.0.1:7752/ingest/ca057992-4764-4f84-bd14-1a66cbaafdf9', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': '0a7f43',
+      },
+      body: JSON.stringify({
+        sessionId: '0a7f43',
+        runId: 'post-fix',
+        hypothesisId: 'H2',
+        location: 'mobile.controller.ts:getDashboard',
+        message: 'dashboard role resolved',
+        data: { roleQuery: roleQuery ?? null, jwtRole, effectiveRole: role },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    return this.dashboardService.getDashboard(role, userId);
+  }
+
+  /** Ignore `role` query when it does not match the JWT role (prevents privilege spoofing). */
+  private resolveDashboardRole(
+    roleQuery: string | undefined,
+    jwtRole: UserRole,
+  ): UserRole {
+    if (
       roleQuery === UserRole.ADMIN ||
       roleQuery === UserRole.MANAGER ||
       roleQuery === UserRole.INSTALLER
-        ? roleQuery
-        : jwtRole;
-
-    return this.dashboardService.getDashboard(role, userId);
+    ) {
+      return roleQuery === jwtRole ? roleQuery : jwtRole;
+    }
+    return jwtRole;
   }
 
   @Get('audit-log')

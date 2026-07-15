@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { JobsService } from '../jobs/jobs.service';
+import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
@@ -19,6 +20,14 @@ describe('CustomersController', () => {
   const jobsService = {
     createJob: jest.fn(),
   };
+  const permissionsService = {
+    getEffectiveForUser: jest.fn().mockResolvedValue({
+      permissions: ['customer:view'],
+      scopes: { customer: 'all', job: 'all' },
+    }),
+    assertPermission: jest.fn(),
+    hasPermission: jest.fn().mockReturnValue(false),
+  };
   const jwtAuthGuard = { canActivate: jest.fn().mockReturnValue(true) };
   const rolesGuard = { canActivate: jest.fn().mockReturnValue(true) };
 
@@ -33,6 +42,10 @@ describe('CustomersController', () => {
         {
           provide: JobsService,
           useValue: jobsService,
+        },
+        {
+          provide: PermissionsService,
+          useValue: permissionsService,
         },
       ],
     })
@@ -55,6 +68,9 @@ describe('CustomersController', () => {
     expect(customersService.findAll).toHaveBeenCalledWith(1, 20, {
       userId: 'user-id',
       role: UserRole.ADMIN,
+      customerScope: 'all',
+      jobScope: 'all',
+      canViewJobFinancials: false,
     });
   });
 
@@ -66,6 +82,9 @@ describe('CustomersController', () => {
     expect(customersService.findAll).toHaveBeenCalledWith(2, 50, {
       userId: 'user-id',
       role: UserRole.MANAGER,
+      customerScope: 'all',
+      jobScope: 'all',
+      canViewJobFinancials: false,
     });
   });
 
@@ -77,6 +96,7 @@ describe('CustomersController', () => {
     expect(customersService.search).toHaveBeenCalledWith('aiman', 2, 10, {
       userId: 'user-id',
       role: UserRole.ADMIN,
+      customerScope: 'all',
     });
   });
 
