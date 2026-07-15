@@ -3,11 +3,15 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { IsNull } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CustomersService } from '../customers/customers.service';
 import { JobsService } from '../jobs/jobs.service';
 import { EmailService } from '../email/email.service';
 import { SubmitPublicLeadDto } from './dto/submit-public-lead.dto';
 import { CreateJobDto } from '../jobs/dto/create-job.dto';
+import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { envBool } from '../common/env.util';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
@@ -19,7 +23,40 @@ export class PublicLeadsService {
     private readonly jobs: JobsService,
     private readonly email: EmailService,
     private readonly runtimeSettings: RuntimeSettingsService,
+    @InjectRepository(User)
+    private readonly users: Repository<User>,
   ) {}
+
+  /**
+   * Public leads are recorded against a CRM user. `PUBLIC_LEAD_ACTOR_USER_ID`
+   * overrides; otherwise fall back to the oldest active admin so the form
+   * works without extra configuration.
+   */
+  private async resolveActorUserId(): Promise<string> {
+    const configured = process.env.PUBLIC_LEAD_ACTOR_USER_ID?.trim();
+    if (configured) {
+      const user = await this.users.findOne({
+        where: { id: configured, deletedAt: IsNull() },
+      });
+      if (!user) {
+        throw new ServiceUnavailableException(
+          'PUBLIC_LEAD_ACTOR_USER_ID does not match an active CRM user.',
+        );
+      }
+      return user.id;
+    }
+
+    const admin = await this.users.findOne({
+      where: { role: UserRole.ADMIN, active: true, deletedAt: IsNull() },
+      order: { createdAt: 'ASC' },
+    });
+    if (!admin) {
+      throw new ServiceUnavailableException(
+        'Public lead form is not configured. Create an admin user or set PUBLIC_LEAD_ACTOR_USER_ID to a valid CRM user UUID.',
+      );
+    }
+    return admin.id;
+  }
 
   async submit(
     dto: SubmitPublicLeadDto,
@@ -34,12 +71,7 @@ export class PublicLeadsService {
       }
     }
 
-    const actorId = process.env.PUBLIC_LEAD_ACTOR_USER_ID?.trim();
-    if (!actorId) {
-      throw new ServiceUnavailableException(
-        'Public lead form is not configured. Set PUBLIC_LEAD_ACTOR_USER_ID to a valid CRM user UUID (e.g. an admin).',
-      );
-    }
+    const actorId = await this.resolveActorUserId();
 
     const addressParts = [dto.suburb, dto.postcode].filter(Boolean);
     const address =
