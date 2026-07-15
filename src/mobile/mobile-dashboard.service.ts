@@ -36,7 +36,10 @@ export class MobileDashboardService {
         return { role, kpis: await this.managerKpis(userId) };
       case UserRole.INSTALLER:
       default:
-        return { role: UserRole.INSTALLER, kpis: await this.installerKpis(userId) };
+        return {
+          role: UserRole.INSTALLER,
+          kpis: await this.installerKpis(userId),
+        };
     }
   }
 
@@ -105,7 +108,10 @@ export class MobileDashboardService {
         JobPipelineStage.POST_METER_SUBMITTED,
         JobPipelineStage.COMPLETED,
       ]),
-      this.countJobsInStages([JobPipelineStage.INVOICED, JobPipelineStage.PAID]),
+      this.countJobsInStages([
+        JobPipelineStage.INVOICED,
+        JobPipelineStage.PAID,
+      ]),
     ]);
 
     return [
@@ -121,17 +127,15 @@ export class MobileDashboardService {
     const now = new Date();
     const anchor = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
     const start = anchor.toISOString().slice(0, 10);
-    const end = new Date(
-      anchor.getFullYear(),
-      anchor.getMonth() + 1,
-      0,
-    )
+    const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)
       .toISOString()
       .slice(0, 10);
     return { start, end };
   }
 
-  private async sumPaidRevenueCentsForMonth(monthOffset: number): Promise<number> {
+  private async sumPaidRevenueCentsForMonth(
+    monthOffset: number,
+  ): Promise<number> {
     const { start, end } = this.monthWindow(monthOffset);
     const rows = await this.invoicesRepo
       .createQueryBuilder('invoice')

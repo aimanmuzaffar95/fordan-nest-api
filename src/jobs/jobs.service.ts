@@ -1799,17 +1799,16 @@ export class JobsService {
     }
 
     const toStage = dto.pipelineStage;
+    const fromStage = job.pipelineStage as JobPipelineStage;
+    const targetStage = toStage as JobPipelineStage;
 
     if (userRole === UserRole.INSTALLER) {
-      if (toStage !== JobPipelineStage.INSTALLED) {
+      if (targetStage !== JobPipelineStage.INSTALLED) {
         throw new ForbiddenException(
           'Installers may only mark assigned jobs as installed.',
         );
       }
     }
-
-    const fromStage = job.pipelineStage as JobPipelineStage;
-    const targetStage = toStage as JobPipelineStage;
 
     // Check forward gate rules (only for forward moves).
     if (!isBackwardsMove(fromStage, targetStage) && fromStage !== targetStage) {

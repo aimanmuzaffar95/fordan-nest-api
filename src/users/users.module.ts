@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { resolveJwtSecret } from '../auth/jwt-secret.util';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
@@ -17,7 +18,7 @@ import { UsersService } from './users.service';
   imports: [
     TypeOrmModule.forFeature([User, UserCredential]),
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'development-secret',
+      secret: resolveJwtSecret(),
     }),
   ],
   controllers: [UsersController],

@@ -21,6 +21,20 @@ const seedUsers = (): SeedUser[] => {
   const managerPassword = process.env.SEED_MANAGER_PASSWORD ?? 'manager';
   const installerPassword = process.env.SEED_INSTALLER_PASSWORD ?? 'installer';
 
+  const isProduction =
+    (process.env.NODE_ENV ?? 'development').trim().toLowerCase() ===
+    'production';
+  if (
+    isProduction &&
+    (!process.env.SEED_ADMIN_PASSWORD ||
+      !process.env.SEED_MANAGER_PASSWORD ||
+      !process.env.SEED_INSTALLER_PASSWORD)
+  ) {
+    throw new Error(
+      'Refusing to seed default passwords in production. Set SEED_ADMIN_PASSWORD, SEED_MANAGER_PASSWORD and SEED_INSTALLER_PASSWORD explicitly.',
+    );
+  }
+
   return [
     {
       username: process.env.SEED_ADMIN_USERNAME ?? 'admin',

@@ -10,9 +10,14 @@ export function resolveJwtSecret(): string {
       : raw === undefined || raw === null
         ? ''
         : String(raw).trim();
+  const nodeEnv = (process.env.NODE_ENV ?? 'development').toLowerCase();
+  if (nodeEnv === 'production' && trimmed === 'development-secret') {
+    throw new Error(
+      'JWT_SECRET is set to the development fallback value. Generate a strong secret (e.g. `openssl rand -hex 32`) before running in production.',
+    );
+  }
   if (trimmed.length > 0) return trimmed;
 
-  const nodeEnv = (process.env.NODE_ENV ?? 'development').toLowerCase();
   if (nodeEnv === 'production') {
     throw new Error(
       'JWT_SECRET is missing or empty. Set a non-empty string (e.g. in apps/api/.env.staging for Docker staging).',

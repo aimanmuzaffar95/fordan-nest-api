@@ -92,7 +92,9 @@ export class AvailabilityService {
     to?: string;
   }): Promise<{ items: AvailabilityItemResponse[] }> {
     if (!filters.userId) {
-      throw new NotFoundException('userId filter required for team availability');
+      throw new NotFoundException(
+        'userId filter required for team availability',
+      );
     }
     return this.listMine(filters.userId, filters.from, filters.to);
   }

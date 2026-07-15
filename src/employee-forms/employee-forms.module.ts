@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { resolveJwtSecret } from '../auth/jwt-secret.util';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -13,7 +14,7 @@ import { EmployeeForm } from './entities/employee-form.entity';
   imports: [
     TypeOrmModule.forFeature([EmployeeForm, User]),
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'development-secret',
+      secret: resolveJwtSecret(),
     }),
     NotificationsModule,
   ],

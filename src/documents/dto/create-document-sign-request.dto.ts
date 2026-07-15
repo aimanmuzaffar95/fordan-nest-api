@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsOptional, ValidateIf } from 'class-validator';
+import { IsEmail, IsIn, ValidateIf } from 'class-validator';
 import type { JobDocumentSignRequestMode } from '../entities/job-document-sign-request.entity';
 
 export class CreateDocumentSignRequestDto {

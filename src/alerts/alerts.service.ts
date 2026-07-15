@@ -462,7 +462,9 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
       alerts = await this.alertRepo.find({
         where,
         relations:
-          viewer.role === UserRole.MANAGER || installerMine ? ['job'] : undefined,
+          viewer.role === UserRole.MANAGER || installerMine
+            ? ['job']
+            : undefined,
       });
       if (installerMine) {
         alerts = alerts.filter(

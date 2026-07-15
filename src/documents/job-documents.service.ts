@@ -125,7 +125,9 @@ export class JobDocumentsService {
     const job = await this.getJobForMutation(jobId, viewer);
 
     if (!JOB_DOCUMENT_TEMPLATE_CATALOG[dto.templateId]) {
-      throw new BadRequestException(`Unknown document template: ${dto.templateId}`);
+      throw new BadRequestException(
+        `Unknown document template: ${dto.templateId}`,
+      );
     }
 
     const customerName = job.customer
@@ -241,7 +243,9 @@ export class JobDocumentsService {
             templateId: document.templateId,
             mode: dto.mode,
             recipientEmail:
-              dto.mode === 'email' ? (dto.recipientEmail?.trim() ?? null) : null,
+              dto.mode === 'email'
+                ? (dto.recipientEmail?.trim() ?? null)
+                : null,
           },
           createdByUserId: viewer.userId,
         }),

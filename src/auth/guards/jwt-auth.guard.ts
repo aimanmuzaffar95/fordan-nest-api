@@ -12,6 +12,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { DataSource } from 'typeorm';
 import { ALLOW_PASSWORD_RESET_REQUIRED_KEY } from '../decorators/allow-password-reset-required.decorator';
+import { resolveJwtSecret } from '../jwt-secret.util';
 import { UserCredential } from '../entities/user-credential.entity';
 import { UserRole } from '../../users/entities/user-role.enum';
 
@@ -40,9 +41,7 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const token = authHeader.slice('Bearer '.length);
-    const secret = (
-      process.env.JWT_SECRET?.trim() || 'development-secret'
-    ).toString();
+    const secret = resolveJwtSecret();
     const jwt = this.jwtService ?? new JwtService({ secret });
 
     try {

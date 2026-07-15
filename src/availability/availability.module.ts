@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
+import { resolveJwtSecret } from '../auth/jwt-secret.util';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AvailabilityController } from './availability.controller';
@@ -11,7 +12,7 @@ import { StaffAvailability } from './entities/staff-availability.entity';
   imports: [
     TypeOrmModule.forFeature([StaffAvailability]),
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'development-secret',
+      secret: resolveJwtSecret(),
     }),
   ],
   controllers: [AvailabilityController],

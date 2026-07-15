@@ -107,7 +107,8 @@ export class AttendanceSessionController {
     return {
       userId,
       role,
-      jobScope: effective.scopes.job === 'all' ? ('all' as const) : ('own' as const),
+      jobScope:
+        effective.scopes.job === 'all' ? ('all' as const) : ('own' as const),
       canViewJobFinancials: this.permissions.hasPermission(
         effective,
         'job:financials:view',

@@ -48,7 +48,9 @@ export class AvailabilityController {
 
   @Put('me')
   @Roles(UserRole.INSTALLER)
-  @ApiOperation({ summary: 'Replace my future availability from effectiveFrom' })
+  @ApiOperation({
+    summary: 'Replace my future availability from effectiveFrom',
+  })
   putMine(@Body() dto: PutAvailabilityMeDto, @Req() req: AuthRequest) {
     const userId = req.user?.sub;
     if (!userId) throw new Error('Missing authenticated user context');

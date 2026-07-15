@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { resolveJwtSecret } from '../auth/jwt-secret.util';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Customer } from '../customers/entities/customer.entity';
 import { Job } from '../jobs/entities/job.entity';
@@ -18,7 +19,7 @@ import { PermissionsModule } from '../permissions/permissions.module';
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'development-secret',
+      secret: resolveJwtSecret(),
     }),
     RuntimeSettingsModule,
     EmailModule,

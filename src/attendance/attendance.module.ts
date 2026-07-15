@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { resolveJwtSecret } from '../auth/jwt-secret.util';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Assignment } from '../assignments/entities/assignment.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -36,7 +37,7 @@ import { AttendanceRecord } from './entities/attendance-record.entity';
       User,
     ]),
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'development-secret',
+      secret: resolveJwtSecret(),
     }),
     JobsModule,
     NotificationsModule,

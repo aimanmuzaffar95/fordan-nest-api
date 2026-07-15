@@ -116,7 +116,11 @@ const DB_PASSWORD =
 const DB_NAME =
   process.env.DATABASE_NAME ?? process.env.DB_DATABASE ?? 'nestdb';
 const DB_SOCKET_PATH = process.env.DATABASE_SOCKET_PATH?.trim() || undefined;
-const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, true);
+const IS_PRODUCTION =
+  (process.env.NODE_ENV ?? 'development').trim().toLowerCase() === 'production';
+// Auto schema-sync is a data-loss hazard against a live database; production
+// must opt in explicitly and should rely on migrations instead.
+const SYNCHRONIZE = envBool(process.env.DATABASE_SYNCHRONIZE, !IS_PRODUCTION);
 const MIGRATIONS_RUN = envBool(
   process.env.DATABASE_MIGRATIONS_RUN,
   !SYNCHRONIZE,

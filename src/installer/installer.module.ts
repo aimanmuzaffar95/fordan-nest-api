@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { resolveJwtSecret } from '../auth/jwt-secret.util';
 import { AuthModule } from '../auth/auth.module';
 import { InstallerController } from './installer.controller';
 import { InstallerPublicController } from './installer-public.controller';
@@ -11,7 +12,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
   imports: [
     AuthModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'development-secret',
+      secret: resolveJwtSecret(),
     }),
   ],
   controllers: [InstallerController, InstallerPublicController],
