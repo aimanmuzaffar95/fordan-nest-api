@@ -39,6 +39,16 @@ export class McpAccessController {
     return this.mcpAccess.list();
   }
 
+  @Get('bindable-users')
+  @AdminOnly()
+  @ApiOperation({
+    summary:
+      'List accounts a key can be bound to (includes admins for full access)',
+  })
+  bindableUsers() {
+    return this.mcpAccess.listBindableUsers();
+  }
+
   @Post()
   @AdminOnly()
   @ApiOperation({

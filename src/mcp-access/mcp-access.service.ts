@@ -97,6 +97,37 @@ export class McpAccessService {
     };
   }
 
+  /**
+   * Accounts an MCP key can be bound to — every active, non-deleted user,
+   * INCLUDING admins (bind to an admin for full read/write access). Sorted
+   * admins first, then by name.
+   */
+  async listBindableUsers(): Promise<{
+    items: Array<{ id: string; name: string; role: UserRole }>;
+  }> {
+    const users = await this.usersRepo.find({
+      where: { deletedAt: IsNull() },
+      order: { role: 'ASC', firstName: 'ASC', lastName: 'ASC' },
+    });
+    const items = users
+      .filter((u) => u.active !== false)
+      .map((u) => ({
+        id: u.id,
+        name:
+          `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() ||
+          u.emailAddress ||
+          '(unnamed)',
+        role: u.role,
+      }))
+      .sort((a, b) => {
+        // Admins first so "full access" is the obvious top choice.
+        if (a.role === UserRole.ADMIN && b.role !== UserRole.ADMIN) return -1;
+        if (b.role === UserRole.ADMIN && a.role !== UserRole.ADMIN) return 1;
+        return a.name.localeCompare(b.name);
+      });
+    return { items };
+  }
+
   async list(): Promise<{ items: McpAccessKeyView[] }> {
     const keys = await this.keysRepo.find({ order: { createdAt: 'DESC' } });
     const userIds = [...new Set(keys.map((k) => k.boundUserId))];
