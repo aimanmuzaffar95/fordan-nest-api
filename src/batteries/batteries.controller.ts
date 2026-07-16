@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -98,7 +99,7 @@ export class BatteriesController {
       '**403** — only **admin** or **manager** may update battery catalog items.',
   })
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBatteryDto,
   ): Promise<BatteryResponseDto> {
     return this.batteries.update(id, dto);

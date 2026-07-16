@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Put,
   Req,
@@ -57,7 +58,7 @@ export class EmployeeFormsController {
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Update a submitted employee form as admin' })
   updateByAdmin(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpsertEmployeeFormDto,
   ): Promise<EmployeeFormResponse> {
     return this.employeeFormsService.updateByAdmin(id, dto);

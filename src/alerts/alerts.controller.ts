@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -97,7 +98,7 @@ export class AlertsController {
   @ApiParam({ name: 'id', description: 'Alert UUID' })
   @ApiResponse({ status: 201, type: AlertResponseDto })
   resolve(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Req() req: AuthRequest,
   ): Promise<AlertResponseDto> {
     const userId = req.user?.sub;

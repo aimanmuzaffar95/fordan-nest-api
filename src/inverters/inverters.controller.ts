@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -98,7 +99,7 @@ export class InvertersController {
       '**403** — only **admin** or **manager** may update inverter catalog items.',
   })
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateInverterDto,
   ): Promise<InverterResponseDto> {
     return this.inverters.update(id, dto);

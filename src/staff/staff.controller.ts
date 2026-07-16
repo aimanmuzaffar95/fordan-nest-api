@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Req,
@@ -65,7 +66,7 @@ export class StaffController {
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
   async updateStaff(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStaffDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ): Promise<StaffListItem> {
@@ -76,7 +77,7 @@ export class StaffController {
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
   async softDeleteStaff(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ): Promise<{ id: string; deletedAt: string }> {
     await this.assertStaffPermission(req, 'staff:delete');
@@ -86,7 +87,7 @@ export class StaffController {
   @Post(':id/reset-password')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
   async resetPassword(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub: string; role: UserRole } },
     @Body() dto: ResetStaffPasswordDto,
   ): Promise<{ staffId: string; username: string; mustChangePassword: true }> {

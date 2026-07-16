@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -46,7 +47,7 @@ export class InvoicesController {
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async getOne(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
     const viewer = await this.authorizeInvoiceAction(req, 'invoice:view');
@@ -66,7 +67,7 @@ export class InvoicesController {
   @Post(':id/send')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async send(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
     const viewer = await this.authorizeInvoiceAction(req, 'invoice:send');
@@ -76,7 +77,7 @@ export class InvoicesController {
   @Post(':id/payments')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async recordPayment(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RecordPaymentDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
@@ -90,7 +91,7 @@ export class InvoicesController {
   @Post(':id/cancel')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async cancel(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CancelInvoiceDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
@@ -101,7 +102,7 @@ export class InvoicesController {
   @Post(':id/notes')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async addNote(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AddInvoiceNoteDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
@@ -112,7 +113,7 @@ export class InvoicesController {
   @Post(':id/remind-overdue')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async remindOverdue(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
     const viewer = await this.authorizeInvoiceAction(

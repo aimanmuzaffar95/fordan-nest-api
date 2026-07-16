@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UseGuards,
@@ -98,7 +99,7 @@ export class SolarPanelsController {
       '**403** — only **admin** or **manager** may update solar panel catalog items.',
   })
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSolarPanelDto,
   ): Promise<SolarPanelResponseDto> {
     return this.solarPanels.update(id, dto);
