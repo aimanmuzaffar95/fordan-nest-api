@@ -33,6 +33,7 @@ import { JobPipelineStage } from './job-pipeline-stage.enum';
 import {
   collectForwardGateError,
   isBackwardsMove,
+  STAGE_ORDER,
 } from './pipeline-gate.rules';
 import { JobSystemType } from './job-system-type.enum';
 import { JobAuditLog } from './entities/job-audit-log.entity';
@@ -2018,9 +2019,27 @@ export class JobsService {
         }
       }
 
+      // Meter bookkeeping must fire for every meter stage a forward move
+      // passes through, not only the landing stage — otherwise a jump like
+      // won → pre_meter_approved leaves the job past approval with no
+      // submitted application. Landing on a stage (either direction) keeps
+      // its existing behavior.
+      const fromStageIdx = STAGE_ORDER.indexOf(actualFromStage);
+      const toStageIdx = STAGE_ORDER.indexOf(actualToStage);
+      const reachesForward = (stage: JobPipelineStage) => {
+        const stageIdx = STAGE_ORDER.indexOf(stage);
+        return (
+          actualToStage === stage ||
+          (fromStageIdx >= 0 &&
+            toStageIdx > fromStageIdx &&
+            stageIdx > fromStageIdx &&
+            stageIdx <= toStageIdx)
+        );
+      };
+
       if (
         actualFromStage !== actualToStage &&
-        actualToStage === JobPipelineStage.PRE_METER_SUBMITTED
+        reachesForward(JobPipelineStage.PRE_METER_SUBMITTED)
       ) {
         const submittedDate =
           dto.preMeterSubmittedDate?.slice(0, 10) ??
@@ -2060,7 +2079,7 @@ export class JobsService {
 
       if (
         actualFromStage !== actualToStage &&
-        actualToStage === JobPipelineStage.PRE_METER_APPROVED
+        reachesForward(JobPipelineStage.PRE_METER_APPROVED)
       ) {
         const preMeterApplication = await meterApplicationsRepo.findOne({
           where: { jobId, type: 'pre_meter' },
@@ -2081,7 +2100,7 @@ export class JobsService {
 
       if (
         actualFromStage !== actualToStage &&
-        actualToStage === JobPipelineStage.POST_METER_SUBMITTED
+        reachesForward(JobPipelineStage.POST_METER_SUBMITTED)
       ) {
         const submittedDate =
           dto.postMeterSubmittedDate?.slice(0, 10) ??
@@ -2121,7 +2140,7 @@ export class JobsService {
 
       if (
         actualFromStage !== actualToStage &&
-        actualToStage === JobPipelineStage.COMPLETED
+        reachesForward(JobPipelineStage.COMPLETED)
       ) {
         const postMeterApplication = await meterApplicationsRepo.findOne({
           where: { jobId, type: 'post_meter' },

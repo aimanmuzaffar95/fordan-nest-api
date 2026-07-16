@@ -1108,7 +1108,11 @@ export class AdminDashboardReportsService {
       };
     }
 
-    const rangeEnd = this.formatDateOnly(now);
+    // Date-only fields (issueDate, paymentDate, installDate) hold the user's
+    // local calendar date, which can be a day ahead of server-UTC "today".
+    // Buffer the rolling window's end by one day so same-day entries are
+    // never excluded; explicit from/to filtering above is untouched.
+    const rangeEnd = this.formatDateOnly(this.addDays(now, 1));
     const rangeStartDate = this.addDays(now, -(safeRangeDays - 1));
     return {
       from: this.formatDateOnly(rangeStartDate),
