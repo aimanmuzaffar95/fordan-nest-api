@@ -11,6 +11,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { Alert } from './entities/alert.entity';
 import { Job } from '../jobs/entities/job.entity';
+import { JobPipelineStage } from '../jobs/job-pipeline-stage.enum';
+import { STAGE_ORDER } from '../jobs/pipeline-gate.rules';
 import { MeterApplication } from '../metering/entities/meter-application.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
 import { InvoiceStatus } from '../invoices/entities/invoice-status.enum';
@@ -57,6 +59,23 @@ function diffDays(a: Date, b: Date): number {
 
 function parseDate(dateStr: string): Date {
   return new Date(dateStr + 'T00:00:00Z');
+}
+
+const POST_METER_SUBMITTED_INDEX = STAGE_ORDER.indexOf(
+  JobPipelineStage.POST_METER_SUBMITTED,
+);
+
+/**
+ * "Post-meter submitted" must be judged by pipeline progress, not by the mere
+ * existence of a post_meter row — job creation seeds a `pending` placeholder
+ * row for every job, which would otherwise permanently exempt app-created
+ * jobs from R3.
+ */
+function hasReachedPostMeterSubmission(job: Job): boolean {
+  return (
+    STAGE_ORDER.indexOf(job.pipelineStage as JobPipelineStage) >=
+    POST_METER_SUBMITTED_INDEX
+  );
 }
 
 function getJobReference(job: Job): string {
@@ -172,11 +191,14 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
       approvedPreMeters.map((m) => m.jobId),
     );
 
-    // Load all post_meter applications (keyed by jobId)
-    const postMeters = await this.meterRepo.find({
-      where: { type: 'post_meter' },
+    // Load approved post_meter applications (keyed by jobId). Pending rows
+    // are ignored: creation seeds a pending placeholder for every job.
+    const approvedPostMeters = await this.meterRepo.find({
+      where: { type: 'post_meter', status: 'approved' },
     });
-    const postMeterJobIds = new Set(postMeters.map((m) => m.jobId));
+    const approvedPostMeterJobIds = new Set(
+      approvedPostMeters.map((m) => m.jobId),
+    );
 
     // Load all invoices with a jobId
     const invoices = await this.invoiceRepo.find();
@@ -208,7 +230,7 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
       const jobAlerts = this.computeRulesForJob(
         job,
         approvedPreMeterJobIds,
-        postMeterJobIds,
+        approvedPostMeterJobIds,
         invoicesByJobId.get(job.id) ?? [],
         today,
         preMeterPendingDays,
@@ -295,7 +317,7 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
   private computeRulesForJob(
     job: Job,
     approvedPreMeterJobIds: Set<string>,
-    postMeterJobIds: Set<string>,
+    approvedPostMeterJobIds: Set<string>,
     jobInvoices: Invoice[],
     today: Date,
     preMeterPendingDays: number,
@@ -347,11 +369,14 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
         });
       }
 
-      // R3: installDate has passed AND days since install > postMeterDeadlineDays AND no post_meter
+      // R3: installDate has passed AND days since install > postMeterDeadlineDays
+      // AND the pipeline hasn't reached post_meter_submitted (an approved
+      // post_meter row also counts as submitted, for direct metering flows).
       const daysSinceInstall = diffDays(today, installDate);
       if (
         daysSinceInstall > postMeterDeadlineDays &&
-        !postMeterJobIds.has(job.id)
+        !hasReachedPostMeterSubmission(job) &&
+        !approvedPostMeterJobIds.has(job.id)
       ) {
         results.push({
           type: ALERT_TYPE.POST_METER_NOT_SUBMITTED_2_DAYS_AFTER_INSTALL,

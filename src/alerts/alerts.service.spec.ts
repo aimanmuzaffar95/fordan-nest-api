@@ -300,15 +300,21 @@ describe('AlertsService', () => {
         ).toBeUndefined();
       });
 
-      it('does NOT create R3 alert when post_meter exists for the job', async () => {
-        const job = makeJob({ installDate: addDays(TODAY, -3) });
-        const postMeter = makeMeter({
+      it('does NOT create R3 alert when the pipeline reached post_meter_submitted, even with the pending placeholder row from job creation', async () => {
+        const job = makeJob({
+          installDate: addDays(TODAY, -3),
+          pipelineStage: 'post_meter_submitted',
+        });
+        // Job creation seeds a pending post_meter placeholder for every job;
+        // its existence must NOT suppress R3 (that made the rule dead) —
+        // pipeline progress is what counts.
+        const placeholder = makeMeter({
           jobId: 'job-1',
           type: 'post_meter',
           status: 'pending',
         });
         jobRepo.find.mockResolvedValue([job]);
-        meterRepo.find.mockResolvedValue([postMeter]);
+        meterRepo.find.mockResolvedValue([placeholder]);
         invoiceRepo.find.mockResolvedValue([]);
 
         await service.evaluateAndSync(TODAY);
