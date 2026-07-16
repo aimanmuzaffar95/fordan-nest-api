@@ -493,6 +493,9 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
     'compliance:template:view',
     'compliance:submission:view',
     'compliance:submission:create',
+    // GET /settings is @Roles(...INSTALLER) and both mobile apps read it
+    // from their settings screens; the response carries no secrets.
+    'settings:view',
     'attendance:self:clock',
     'attendance:self:view',
     'attendance:photo:upload',
