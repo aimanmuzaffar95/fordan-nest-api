@@ -164,28 +164,6 @@ export class AuthService implements OnModuleInit {
       credential.passwordHash,
     );
 
-    // #region agent log
-    fetch('http://127.0.0.1:7752/ingest/ca057992-4764-4f84-bd14-1a66cbaafdf9', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Debug-Session-Id': '0a7f43',
-      },
-      body: JSON.stringify({
-        sessionId: '0a7f43',
-        runId: 'post-fix',
-        hypothesisId: 'H1',
-        location: 'auth.service.ts:changePassword',
-        message: 'current password verification',
-        data: {
-          mustChangePassword: credential.mustChangePassword,
-          currentPasswordMatches,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     if (!currentPasswordMatches) {
       throw new BadRequestException('Current password is incorrect');
     }

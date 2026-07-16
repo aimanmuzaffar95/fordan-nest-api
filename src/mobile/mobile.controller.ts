@@ -44,25 +44,6 @@ export class MobileController {
 
     const role = this.resolveDashboardRole(roleQuery, jwtRole);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7752/ingest/ca057992-4764-4f84-bd14-1a66cbaafdf9', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Debug-Session-Id': '0a7f43',
-      },
-      body: JSON.stringify({
-        sessionId: '0a7f43',
-        runId: 'post-fix',
-        hypothesisId: 'H2',
-        location: 'mobile.controller.ts:getDashboard',
-        message: 'dashboard role resolved',
-        data: { roleQuery: roleQuery ?? null, jwtRole, effectiveRole: role },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     return this.dashboardService.getDashboard(role, userId);
   }
 
