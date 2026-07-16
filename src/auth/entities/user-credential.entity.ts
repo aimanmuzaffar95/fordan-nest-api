@@ -21,6 +21,11 @@ export class UserCredential {
   @Column({ type: 'boolean', default: false })
   mustChangePassword: boolean;
 
+  // Bumped whenever the password changes (self-service or admin reset), so
+  // access tokens minted before the change fail verification in the guard.
+  @Column({ type: 'int', default: 0 })
+  tokenVersion: number;
+
   @OneToOne(() => User, (user) => user.credential, {
     onDelete: 'CASCADE',
     eager: true,

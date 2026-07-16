@@ -436,6 +436,9 @@ export class StaffService {
       10,
     );
     existing.credential.mustChangePassword = true;
+    // Invalidate any tokens the staff member still holds from before the reset.
+    existing.credential.tokenVersion =
+      (existing.credential.tokenVersion ?? 0) + 1;
     await this.credentialsRepository.save(existing.credential);
 
     // Emit structured audit log

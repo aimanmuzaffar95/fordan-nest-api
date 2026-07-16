@@ -47,6 +47,7 @@ export class MeterApplicationsService {
 
   async list(
     viewer: MeterApplicationViewer,
+    filters: { jobId?: string } = {},
   ): Promise<{ items: MeterApplicationListItem[] }> {
     const qb = this.meterRepo
       .createQueryBuilder('meterApplication')
@@ -70,6 +71,10 @@ export class MeterApplicationsService {
       .addOrderBy('meterApplication.createdAt', 'DESC');
 
     this.applyViewerScope(qb, viewer);
+
+    if (filters.jobId) {
+      qb.andWhere('meterApplication.jobId = :jobId', { jobId: filters.jobId });
+    }
 
     const rows = await qb.getRawMany<MeterApplicationListRow>();
 

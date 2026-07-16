@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsEmail,
+  IsISO8601,
   IsOptional,
   IsString,
   MaxLength,
@@ -19,7 +20,10 @@ export class UpsertEmployeeFormDto {
   surname: string;
 
   @IsOptional()
-  @IsString()
+  @IsISO8601(
+    { strict: false },
+    { message: 'dateOfBirth must be a valid date (YYYY-MM-DD)' },
+  )
   @MaxLength(20)
   dateOfBirth?: string;
 

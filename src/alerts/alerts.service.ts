@@ -8,7 +8,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { Alert } from './entities/alert.entity';
 import { Job } from '../jobs/entities/job.entity';
 import { JobPipelineStage } from '../jobs/job-pipeline-stage.enum';
@@ -435,13 +435,15 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
   ): Promise<AlertsListResponseDto> {
     const { status = 'active', severity, type } = filters;
 
-    // Build where clause
+    // Every filter is pushed into a single DB query — including the
+    // resolution-status predicate and role scoping — so no branch loads the
+    // whole alerts table into memory.
     const where: Record<string, unknown> = {};
 
     if (status === 'active') {
       where['resolvedAt'] = IsNull();
     } else if (status === 'resolved') {
-      // We need non-null resolvedAt — handled below via a query builder
+      where['resolvedAt'] = Not(IsNull());
     }
     // status === 'all' → no filter on resolvedAt
 
@@ -453,50 +455,24 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
       where['type'] = type;
     }
 
-    // Manager scope: all active alerts on jobs where managerId = viewer (ignore `scope`).
-    if (viewer.role === UserRole.MANAGER) {
-      where['job'] = { managerId: viewer.userId };
-    }
-
     const installerMine =
       viewer.role === UserRole.INSTALLER &&
       (filters.scope === 'mine' || filters.scope === undefined);
 
-    let alerts: Alert[];
-    if (status === 'resolved') {
-      // TypeORM cannot do "IS NOT NULL" via simple where object; use find with a custom condition
-      alerts = await this.alertRepo.find({
-        where: { ...where, resolvedAt: IsNull() },
-        relations: ['job'],
-      });
-      // This is wrong for resolved — filter after load
-      alerts = await this.alertRepo.find({
-        relations: ['job'],
-      });
-      alerts = alerts.filter(
-        (a) =>
-          a.resolvedAt !== null &&
-          (!severity || a.severity === severity) &&
-          (!type || a.type === type) &&
-          (viewer.role !== UserRole.MANAGER ||
-            (a.job && a.job.managerId === viewer.userId)) &&
-          (!installerMine ||
-            (a.job && a.job.assignedStaffUserId === viewer.userId)),
-      );
-    } else {
-      alerts = await this.alertRepo.find({
-        where,
-        relations:
-          viewer.role === UserRole.MANAGER || installerMine
-            ? ['job']
-            : undefined,
-      });
-      if (installerMine) {
-        alerts = alerts.filter(
-          (a) => a.job && a.job.assignedStaffUserId === viewer.userId,
-        );
-      }
+    // Role scoping as a joined-relation predicate (manager: own jobs;
+    // installer `mine`: assigned jobs).
+    if (viewer.role === UserRole.MANAGER) {
+      where['job'] = { managerId: viewer.userId };
+    } else if (installerMine) {
+      where['job'] = { assignedStaffUserId: viewer.userId };
     }
+
+    const needsJobRelation = viewer.role === UserRole.MANAGER || installerMine;
+    const alerts = await this.alertRepo.find({
+      where,
+      relations: needsJobRelation ? ['job'] : undefined,
+      order: { createdAt: 'DESC' },
+    });
 
     return {
       items: alerts.map(toResponseDto),

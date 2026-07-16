@@ -20,6 +20,7 @@ type JwtPayload = {
   sub: string;
   role: UserRole;
   isAdmin?: boolean;
+  tv?: number;
 };
 
 type AuthenticatedRequest = Request & { user?: JwtPayload };
@@ -63,6 +64,12 @@ export class JwtAuthGuard implements CanActivate {
 
       if (!credential || credential.user.deletedAt) {
         throw new UnauthorizedException('Invalid token');
+      }
+
+      // Reject tokens minted before the last password change/reset. Tokens
+      // predating this claim (tv absent) are treated as version 0.
+      if ((payload.tv ?? 0) !== (credential.tokenVersion ?? 0)) {
+        throw new UnauthorizedException('Token no longer valid');
       }
 
       const allowPasswordResetRequired =

@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   Res,
   StreamableFile,
@@ -61,15 +62,19 @@ export class MeterApplicationsController {
   @ApiOperation({
     summary: 'List meter applications',
     description:
-      'Returns live meter application rows for dashboard and operational workflows. **Manager:** only meter applications whose parent job has `managerId = auth.user.id`.',
+      'Returns live meter application rows for dashboard and operational workflows. Optional `jobId` (UUID) narrows to a single job. **Manager:** only meter applications whose parent job has `managerId = auth.user.id`.',
   })
-  list(@Req() req: Request & { user?: { sub?: string; role?: UserRole } }) {
+  list(
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+    @Query('jobId', new ParseUUIDPipe({ optional: true }))
+    jobId?: string,
+  ) {
     const userId = req.user?.sub;
     const role = req.user?.role;
     if (!userId || !role) {
       throw new UnauthorizedException('Missing authenticated user context');
     }
-    return this.meters.list({ userId, role });
+    return this.meters.list({ userId, role }, { jobId });
   }
 
   @Get(':id/files')

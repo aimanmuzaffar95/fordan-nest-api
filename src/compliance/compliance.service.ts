@@ -29,6 +29,9 @@ export type NormalizedComplianceField = {
   required: boolean;
 };
 
+// PNG files begin with this 8-byte signature (\x89 P N G \r \n \x1a \n).
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
 function assertPngDataUrlSignature(raw: string): void {
   const trimmed = raw.trim();
   const m = /^data:image\/png;base64,(.+)$/i.exec(trimmed);
@@ -38,6 +41,11 @@ function assertPngDataUrlSignature(raw: string): void {
   const buf = Buffer.from(m[1], 'base64');
   if (buf.length < 400) {
     throw new BadRequestException('Signature image is too small');
+  }
+  // Verify the actual PNG magic bytes, not just the declared MIME prefix —
+  // the data URL label is caller-controlled and trivially spoofed.
+  if (!buf.subarray(0, PNG_MAGIC.length).equals(PNG_MAGIC)) {
+    throw new BadRequestException('Signature is not a valid PNG image');
   }
 }
 

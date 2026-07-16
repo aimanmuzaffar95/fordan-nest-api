@@ -17,6 +17,7 @@
     "migration:run": "TS_NODE_TRANSPILE_ONLY=1 node ./node_modules/typeorm/cli-ts-node-commonjs.js migration:run -d src/database/data-source.ts",
     "migration:revert": "TS_NODE_TRANSPILE_ONLY=1 node ./node_modules/typeorm/cli-ts-node-commonjs.js migration:revert -d src/database/data-source.ts",
     "migration:generate": "TS_NODE_TRANSPILE_ONLY=1 node ./node_modules/typeorm/cli-ts-node-commonjs.js migration:generate src/migrations/AutoMigration -d src/database/data-source.ts",
+    "check:migrations": "node scripts/check-entity-migrations.mjs",
     "seed:dev": "ts-node -r tsconfig-paths/register src/database/seed.ts",
     "seed:run": "node dist/database/seed.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --max-warnings=0",

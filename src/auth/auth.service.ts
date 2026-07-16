@@ -125,6 +125,7 @@ export class AuthService implements OnModuleInit {
       sub: credential.user.id,
       role: credential.user.role,
       isAdmin: credential.user.role === UserRole.ADMIN,
+      tv: credential.tokenVersion ?? 0,
     };
 
     if (!skipAudit) {
@@ -176,6 +177,8 @@ export class AuthService implements OnModuleInit {
 
     credential.passwordHash = await hashPassword(dto.newPassword, 10);
     credential.mustChangePassword = false;
+    // Invalidate every token issued before this change.
+    credential.tokenVersion = (credential.tokenVersion ?? 0) + 1;
     await this.credentialsRepository.save(credential);
 
     return {

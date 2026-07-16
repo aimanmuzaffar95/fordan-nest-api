@@ -41,6 +41,17 @@ export function mergeCustomerMessagingTemplates(
   };
 }
 
+const KNOWN_MESSAGING_KEYS = new Set<keyof CustomerMessagingTemplates>([
+  'emailSignatureHtml',
+  'quotationEmail',
+  'signatureRequestEmail',
+  'quotationPdf',
+  'invoiceSentEmail',
+  'paymentReceiptEmail',
+  'overdueReminderEmail',
+  'jobStatusEmail',
+]);
+
 export function deepMergeMessagingPatch(
   current: CustomerMessagingTemplates,
   patch: unknown,
@@ -48,6 +59,16 @@ export function deepMergeMessagingPatch(
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
     throw new BadRequestException(
       'customerMessagingTemplates must be an object',
+    );
+  }
+  // Reject unknown top-level keys so a typo fails loudly instead of being
+  // silently dropped by the whitelist merge below.
+  const unknownKeys = Object.keys(patch).filter(
+    (key) => !KNOWN_MESSAGING_KEYS.has(key as keyof CustomerMessagingTemplates),
+  );
+  if (unknownKeys.length > 0) {
+    throw new BadRequestException(
+      `Unknown customerMessagingTemplates key(s): ${unknownKeys.join(', ')}`,
     );
   }
   const p = patch as Partial<CustomerMessagingTemplates>;
