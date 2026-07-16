@@ -482,6 +482,15 @@ export class InvoicesService {
       return this.getOne(id, viewer);
     }
 
+    // Reports exclude CANCELLED invoices, so cancelling one with recorded
+    // payments would silently erase collected revenue from the books while
+    // the payment rows remain.
+    if (Number(invoice.amountPaid ?? 0) > 0) {
+      throw new BadRequestException(
+        'Cannot cancel an invoice with recorded payments — remove or refund the payments first.',
+      );
+    }
+
     invoice.status = InvoiceStatus.CANCELLED;
     invoice.cancelledAt = new Date();
     invoice.cancelReason = dto.reason;
