@@ -21,7 +21,11 @@ type JwtPayload = {
   role: UserRole;
   isAdmin?: boolean;
   tv?: number;
+  mcp?: boolean;
+  mcpWrites?: boolean;
 };
+
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 type AuthenticatedRequest = Request & { user?: JwtPayload };
 
@@ -78,8 +82,24 @@ export class JwtAuthGuard implements CanActivate {
           [context.getHandler(), context.getClass()],
         ) ?? false;
 
-      if (credential.mustChangePassword && !allowPasswordResetRequired) {
+      // MCP-key tokens are not interactive logins — the first-login password
+      // rotation requirement does not apply to them.
+      if (
+        !payload.mcp &&
+        credential.mustChangePassword &&
+        !allowPasswordResetRequired
+      ) {
         throw new ForbiddenException('Password change required');
+      }
+
+      // Server-side enforcement of a read-only MCP key: block any mutating
+      // request regardless of what the MCP client exposes.
+      if (
+        payload.mcp &&
+        !payload.mcpWrites &&
+        MUTATING_METHODS.has(request.method)
+      ) {
+        throw new ForbiddenException('MCP key is read-only');
       }
 
       request.user = payload;

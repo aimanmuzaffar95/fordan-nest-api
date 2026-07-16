@@ -9,6 +9,7 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UserCredential } from './entities/user-credential.entity';
 import { resolveJwtSecret } from './jwt-secret.util';
+import { McpAccessModule } from '../mcp-access/mcp-access.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { resolveJwtSecret } from './jwt-secret.util';
     UsersModule,
     StaffModule,
     SystemAuditModule,
+    McpAccessModule,
     JwtModule.register({
       secret: resolveJwtSecret(),
       signOptions: { expiresIn: '1h' },

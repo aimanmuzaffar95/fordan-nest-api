@@ -15,9 +15,15 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { AllowPasswordResetRequired } from './decorators/allow-password-reset-required.decorator';
-import { AuthLoginResult, AuthProfile, AuthService } from './auth.service';
+import {
+  AuthLoginResult,
+  AuthProfile,
+  AuthService,
+  McpAuthResult,
+} from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { McpLoginDto } from './dto/mcp-login.dto';
 import { UserRole } from '../users/entities/user-role.enum';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { shouldSkipLoginSystemAuditHeader } from './smoke-login-audit.util';
@@ -45,6 +51,15 @@ export class AuthController {
       skipLoginSystemAudit:
         shouldSkipLoginSystemAuditHeader(xFordanSmokeSecret),
     });
+  }
+
+  @Post('mcp')
+  @ApiOperation({
+    summary:
+      'Exchange an MCP access key for a short-lived JWT (used by the MCP server)',
+  })
+  loginWithMcpKey(@Body() dto: McpLoginDto): Promise<McpAuthResult> {
+    return this.authService.loginWithMcpKey(dto.key);
   }
 
   @Get('me')

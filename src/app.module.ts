@@ -34,6 +34,8 @@ import { AssignmentsModule } from './assignments/assignments.module';
 import { ScheduleModule } from './schedule/schedule.module';
 import { MeteringModule } from './metering/metering.module';
 import { RuntimeSettingsModule } from './runtime-settings/runtime-settings.module';
+import { McpAccessModule } from './mcp-access/mcp-access.module';
+import { McpAccessKey } from './mcp-access/entities/mcp-access-key.entity';
 import { PublicLeadsModule } from './public-leads/public-leads.module';
 import { EmailModule } from './email/email.module';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -204,6 +206,7 @@ getSettingsEncryptionKey();
         DeviceRegistration,
         JobGeneratedDocument,
         JobDocumentSignRequest,
+        McpAccessKey,
       ],
       migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,
@@ -219,6 +222,7 @@ getSettingsEncryptionKey();
     ScheduleModule,
     MeteringModule,
     RuntimeSettingsModule,
+    McpAccessModule,
     OrganizationProfileModule,
     EmployeeFormsModule,
     SolarPanelsModule,

@@ -10,6 +10,7 @@ import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { UserCredential } from './entities/user-credential.entity';
 import { SystemAuditLogService } from '../system-audit/system-audit-log.service';
+import { McpAccessService } from '../mcp-access/mcp-access.service';
 
 type HashPasswordFn = (
   data: string,
@@ -60,6 +61,12 @@ describe('AuthService', () => {
           provide: SystemAuditLogService,
           useValue: {
             record: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: McpAccessService,
+          useValue: {
+            authenticate: jest.fn(),
           },
         },
       ],

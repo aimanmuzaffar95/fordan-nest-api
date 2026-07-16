@@ -17,6 +17,7 @@ import { UserCredential } from './entities/user-credential.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { SystemAuditLogService } from '../system-audit/system-audit-log.service';
 import { SYSTEM_AUDIT_ACTION } from '../system-audit/system-audit-action.constants';
+import { McpAccessService } from '../mcp-access/mcp-access.service';
 
 type ComparePasswordFn = (data: string, encrypted: string) => Promise<boolean>;
 type HashPasswordFn = (
@@ -31,6 +32,12 @@ export type AuthLoginResult = {
   accessToken: string;
   role: UserRole;
   mustChangePassword: boolean;
+};
+
+export type McpAuthResult = {
+  accessToken: string;
+  role: UserRole;
+  allowWrites: boolean;
 };
 
 export type AuthProfile = {
@@ -52,6 +59,7 @@ export class AuthService implements OnModuleInit {
     private readonly staffService: StaffService,
     private readonly jwtService: JwtService,
     private readonly systemAudit: SystemAuditLogService,
+    private readonly mcpAccess: McpAccessService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -142,6 +150,35 @@ export class AuthService implements OnModuleInit {
       accessToken: await this.jwtService.signAsync(payload),
       role: credential.user.role,
       mustChangePassword: credential.mustChangePassword,
+    };
+  }
+
+  /**
+   * Exchange an MCP access key for a short-lived JWT bound to the key's staff
+   * account. The token carries `mcp: true` and `mcpWrites` so the guard can
+   * enforce read-only server-side regardless of the MCP client. The bound
+   * account's role continues to bound all RBAC downstream.
+   */
+  async loginWithMcpKey(rawKey: string): Promise<McpAuthResult> {
+    const principal = await this.mcpAccess.authenticate(rawKey);
+    const credential = await this.findCredentialByUserIdOrFail(
+      principal.user.id,
+    );
+
+    const payload = {
+      sub: principal.user.id,
+      role: principal.user.role,
+      isAdmin: principal.user.role === UserRole.ADMIN,
+      tv: credential.tokenVersion ?? 0,
+      mcp: true,
+      mcpWrites: principal.allowWrites,
+      mcpKeyId: principal.keyId,
+    };
+
+    return {
+      accessToken: await this.jwtService.signAsync(payload),
+      role: principal.user.role,
+      allowWrites: principal.allowWrites,
     };
   }
 
