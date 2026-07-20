@@ -14,6 +14,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Request } from 'express';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AllowPasswordResetRequired } from './decorators/allow-password-reset-required.decorator';
 import {
   AuthLoginResult,
@@ -28,12 +29,18 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { shouldSkipLoginSystemAuditHeader } from './smoke-login-audit.util';
 
+// Brute-force protection on credential endpoints (per IP). Override via env.
+const authThrottleTtlMs = Number(process.env.AUTH_THROTTLE_TTL_MS ?? '60000');
+const authThrottleLimit = Number(process.env.AUTH_THROTTLE_LIMIT ?? '10');
+
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { ttl: authThrottleTtlMs, limit: authThrottleLimit } })
   @ApiHeader({
     name: 'X-Fordan-Smoke-Secret',
     required: false,
@@ -54,6 +61,8 @@ export class AuthController {
   }
 
   @Post('mcp')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { ttl: authThrottleTtlMs, limit: authThrottleLimit } })
   @ApiOperation({
     summary:
       'Exchange an MCP access key for a short-lived JWT (used by the MCP server)',

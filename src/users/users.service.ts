@@ -103,16 +103,16 @@ export class UsersService {
         continue;
       }
 
-      // Default credentials are only acceptable as a bootstrap: in production
-      // the first login must immediately rotate them.
-      const isProduction =
-        (process.env.NODE_ENV ?? 'development').trim().toLowerCase() ===
-        'production';
+      // Default credentials are only acceptable as a bootstrap: everywhere
+      // except explicit local development the first login must immediately
+      // rotate them.
+      const isDevelopment =
+        (process.env.NODE_ENV ?? '').trim().toLowerCase() === 'development';
       await this.credentialsRepository.save(
         this.credentialsRepository.create({
           username: defaultUser.username,
           passwordHash: await hashPassword(defaultUser.password, 10),
-          mustChangePassword: isProduction,
+          mustChangePassword: !isDevelopment,
           user,
         }),
       );
