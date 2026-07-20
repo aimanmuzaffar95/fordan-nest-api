@@ -1,12 +1,15 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
 import { IsNull } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CustomersService } from '../customers/customers.service';
+import { CustomerResponseDto } from '../customers/dto/customer-response.dto';
 import { JobsService } from '../jobs/jobs.service';
 import { EmailService } from '../email/email.service';
 import { SubmitPublicLeadDto } from './dto/submit-public-lead.dto';
@@ -66,7 +69,10 @@ export class PublicLeadsService {
     if (requiredSecret) {
       const provided =
         secretFromHeader?.trim() || dto.submissionSecret?.trim() || '';
-      if (provided !== requiredSecret) {
+      // Constant-time comparison (same pattern as the installer setup token).
+      const a = Buffer.from(provided, 'utf8');
+      const b = Buffer.from(requiredSecret, 'utf8');
+      if (a.length !== b.length || !timingSafeEqual(a, b)) {
         throw new ForbiddenException('Invalid or missing submission secret');
       }
     }
@@ -77,14 +83,29 @@ export class PublicLeadsService {
     const address =
       addressParts.length > 0 ? addressParts.join(' ') : undefined;
 
-    const customer = await this.customers.create({
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      address,
-      phone: dto.phone,
-      email: dto.email,
-      acquisitionSource: 'website_form',
-    });
+    let customer: CustomerResponseDto;
+    try {
+      customer = await this.customers.create({
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        address,
+        phone: dto.phone,
+        email: dto.email,
+        acquisitionSource: 'website_form',
+      });
+    } catch (err) {
+      if (!(err instanceof ConflictException)) {
+        throw err;
+      }
+      // Dedupe silently: a repeat enquiry reuses the existing customer and
+      // still gets the normal success response, so the public form cannot be
+      // used to probe whether an email already exists in the CRM (API-07).
+      const existing = await this.customers.findByEmailInternal(dto.email);
+      if (!existing) {
+        throw err;
+      }
+      customer = existing;
+    }
 
     const settings = await this.runtimeSettings.getSettings();
     const systemType = dto.systemIntent;

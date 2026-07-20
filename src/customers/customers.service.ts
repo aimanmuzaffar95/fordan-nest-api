@@ -99,6 +99,19 @@ export class CustomersService {
     return CustomerResponseDto.fromEntity(saved);
   }
 
+  /**
+   * Internal lookup for trusted intake flows (e.g. public lead dedupe).
+   * Not exposed via any controller.
+   */
+  async findByEmailInternal(
+    email: string,
+  ): Promise<CustomerResponseDto | null> {
+    const existing = await this.customersRepository.findOne({
+      where: { email },
+    });
+    return existing ? CustomerResponseDto.fromEntity(existing) : null;
+  }
+
   async findAll(
     page = 1,
     limit = 20,
