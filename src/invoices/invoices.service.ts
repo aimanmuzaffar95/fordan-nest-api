@@ -7,7 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, SelectQueryBuilder } from 'typeorm';
+import { DataSource, Repository, SelectQueryBuilder } from 'typeorm';
 import { Customer } from '../customers/entities/customer.entity';
 import { Job } from '../jobs/entities/job.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
@@ -61,6 +61,7 @@ export class InvoicesService {
     private readonly docNumbers: DocumentNumberingService,
     private readonly email: EmailService,
     private readonly customerMessaging: CustomerMessagingRendererService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async list(query: QueryInvoicesDto, viewer?: InvoiceViewer) {
@@ -249,46 +250,73 @@ export class InvoicesService {
     dto: RecordPaymentDto,
     viewer?: InvoiceViewer,
   ): Promise<Invoice> {
-    // Load only what we need to update invoice totals.
-    // Avoid re-saving the whole entity graph (relations) since that can trigger
-    // TypeORM cascade/serialization edge cases.
-    const invoice = await this.findInvoiceEntityOrFail(id, viewer);
-    if (invoice.status === InvoiceStatus.CANCELLED) {
-      throw new BadRequestException(
-        'Cannot record payment on cancelled invoice',
-      );
-    }
+    // Viewer scoping + 404 first (read-only, outside the row lock).
+    await this.findInvoiceEntityOrFail(id, viewer);
 
     const amount = parseFloat(dto.amount);
-    const total = parseFloat(invoice.total);
-    const alreadyPaid = parseFloat(invoice.amountPaid);
-    const newPaid = alreadyPaid + amount;
 
-    if (newPaid - total > 0.0001) {
-      throw new BadRequestException('Payment would exceed invoice total');
-    }
+    // Atomic payment recording: lock the invoice row, recompute amountPaid
+    // from the persisted payment rows and apply the overpay guard while the
+    // lock is held so concurrent payments cannot race or silently overpay.
+    const { invoice, payment, updatedAmountPaid, updatedStatus } =
+      await this.dataSource.transaction(async (manager) => {
+        const invoicesRepo = manager.getRepository(Invoice);
+        const paymentsRepo = manager.getRepository(InvoicePayment);
 
-    const payment = this.paymentsRepo.create({
-      invoiceId: invoice.id,
-      amount: amount.toFixed(2),
-      paymentDate: dto.paymentDate,
-      method: dto.method,
-      reference: dto.reference ?? null,
-      notes: dto.notes ?? null,
-    });
+        const lockedInvoice = await invoicesRepo.findOne({
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!lockedInvoice) {
+          throw new NotFoundException('Invoice not found');
+        }
+        if (lockedInvoice.status === InvoiceStatus.CANCELLED) {
+          throw new BadRequestException(
+            'Cannot record payment on cancelled invoice',
+          );
+        }
 
-    await this.paymentsRepo.save(payment);
+        const total = parseFloat(lockedInvoice.total);
+        const paidRow = await paymentsRepo
+          .createQueryBuilder('payment')
+          .select('COALESCE(SUM(payment.amount), 0)', 'sum')
+          .where('payment.invoiceId = :invoiceId', {
+            invoiceId: lockedInvoice.id,
+          })
+          .getRawOne<{ sum: string }>();
+        const alreadyPaid = parseFloat(paidRow?.sum ?? '0');
+        const newPaid = alreadyPaid + amount;
 
-    const updatedAmountPaid = newPaid.toFixed(2);
-    const updatedStatus =
-      Math.abs(newPaid - total) < 0.0001
-        ? InvoiceStatus.PAID
-        : InvoiceStatus.PARTIALLY_PAID;
+        if (newPaid - total > 0.0001) {
+          throw new BadRequestException('Payment would exceed invoice total');
+        }
 
-    await this.invoicesRepo.update(id, {
-      amountPaid: updatedAmountPaid,
-      status: updatedStatus,
-    });
+        const savedPayment = await paymentsRepo.save(
+          paymentsRepo.create({
+            invoiceId: lockedInvoice.id,
+            amount: amount.toFixed(2),
+            paymentDate: dto.paymentDate,
+            method: dto.method,
+            reference: dto.reference ?? null,
+            notes: dto.notes ?? null,
+          }),
+        );
+
+        const amountPaid = newPaid.toFixed(2);
+        const status =
+          Math.abs(newPaid - total) < 0.0001
+            ? InvoiceStatus.PAID
+            : InvoiceStatus.PARTIALLY_PAID;
+
+        await invoicesRepo.update(id, { amountPaid, status });
+
+        return {
+          invoice: lockedInvoice,
+          payment: savedPayment,
+          updatedAmountPaid: amountPaid,
+          updatedStatus: status,
+        };
+      });
 
     const activityInvoice = {
       ...invoice,
