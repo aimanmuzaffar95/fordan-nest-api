@@ -788,6 +788,14 @@ export class JobsService {
         }
       }
 
+      // Same billing preconditions as PATCH :id/pipeline — this endpoint must
+      // not skip the invoiced/paid gates.
+      await this.assertInvoiceStageGates(
+        manager.getRepository(Invoice),
+        job.id,
+        toStage,
+      );
+
       const previousStage = job.jobStatus;
       job.jobStatus = toStage;
       await jobsRepo.save(job);
@@ -1792,6 +1800,68 @@ export class JobsService {
     }
   }
 
+  /**
+   * Billing preconditions for entering `invoiced` / `paid`. Shared by every
+   * stage-change route (PATCH :id/pipeline and POST :id/stage) so neither can
+   * bypass the invoice gates.
+   */
+  private async assertInvoiceStageGates(
+    invoicesRepo: Repository<Invoice>,
+    jobId: string,
+    toStage: JobPipelineStage,
+  ): Promise<void> {
+    if (toStage === JobPipelineStage.INVOICED) {
+      const sentInvoice = await invoicesRepo.findOne({
+        where: {
+          jobId,
+          status: In([
+            InvoiceStatus.SENT,
+            InvoiceStatus.PARTIALLY_PAID,
+            InvoiceStatus.OVERDUE,
+            InvoiceStatus.PAID,
+          ]),
+        },
+        order: { sentAt: 'DESC', createdAt: 'DESC' },
+      });
+
+      if (!sentInvoice) {
+        throw new PreconditionFailedException({
+          message:
+            'Cannot move to Invoiced — generate and send an invoice first.',
+          code: 'PRECONDITION_FAILED',
+        });
+      }
+    }
+
+    if (toStage === JobPipelineStage.PAID) {
+      const activeInvoices = await invoicesRepo.find({
+        where: {
+          jobId,
+          status: In([
+            InvoiceStatus.DRAFT,
+            InvoiceStatus.SENT,
+            InvoiceStatus.PARTIALLY_PAID,
+            InvoiceStatus.OVERDUE,
+            InvoiceStatus.PAID,
+          ]),
+        },
+      });
+
+      const hasActiveInvoices = activeInvoices.length > 0;
+      const hasUnpaidInvoices = activeInvoices.some(
+        (invoice) => invoice.status !== InvoiceStatus.PAID,
+      );
+
+      if (!hasActiveInvoices || hasUnpaidInvoices) {
+        throw new PreconditionFailedException({
+          message:
+            'Cannot move to Paid — all invoices for this job must be fully paid.',
+          code: 'PRECONDITION_FAILED',
+        });
+      }
+    }
+  }
+
   async updateJobPipeline(
     jobId: string,
     dto: UpdateJobPipelineDto,
@@ -1857,56 +1927,11 @@ export class JobsService {
       }
     }
 
-    if (toStage === 'invoiced') {
-      const sentInvoice = await this.dataSource.getRepository(Invoice).findOne({
-        where: {
-          jobId,
-          status: In([
-            InvoiceStatus.SENT,
-            InvoiceStatus.PARTIALLY_PAID,
-            InvoiceStatus.OVERDUE,
-            InvoiceStatus.PAID,
-          ]),
-        },
-        order: { sentAt: 'DESC', createdAt: 'DESC' },
-      });
-
-      if (!sentInvoice) {
-        throw new PreconditionFailedException({
-          message:
-            'Cannot move to Invoiced — generate and send an invoice first.',
-          code: 'PRECONDITION_FAILED',
-        });
-      }
-    }
-
-    if (toStage === 'paid') {
-      const activeInvoices = await this.dataSource.getRepository(Invoice).find({
-        where: {
-          jobId,
-          status: In([
-            InvoiceStatus.DRAFT,
-            InvoiceStatus.SENT,
-            InvoiceStatus.PARTIALLY_PAID,
-            InvoiceStatus.OVERDUE,
-            InvoiceStatus.PAID,
-          ]),
-        },
-      });
-
-      const hasActiveInvoices = activeInvoices.length > 0;
-      const hasUnpaidInvoices = activeInvoices.some(
-        (invoice) => invoice.status !== InvoiceStatus.PAID,
-      );
-
-      if (!hasActiveInvoices || hasUnpaidInvoices) {
-        throw new PreconditionFailedException({
-          message:
-            'Cannot move to Paid — all invoices for this job must be fully paid.',
-          code: 'PRECONDITION_FAILED',
-        });
-      }
-    }
+    await this.assertInvoiceStageGates(
+      this.dataSource.getRepository(Invoice),
+      jobId,
+      targetStage,
+    );
 
     if (
       toStage === 'pre_meter_submitted' &&
