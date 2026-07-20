@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
   IsArray,
   IsDateString,
   IsOptional,
@@ -49,6 +51,8 @@ export class CreateInvoiceDto {
   dueDate: string;
 
   @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => CreateInvoiceItemDto)
   items: CreateInvoiceItemDto[];

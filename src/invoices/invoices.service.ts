@@ -7,7 +7,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository, SelectQueryBuilder } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import { Customer } from '../customers/entities/customer.entity';
 import { Job } from '../jobs/entities/job.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
@@ -226,21 +231,28 @@ export class InvoicesService {
     invoice.amountPaid = '0.00';
     invoice.items = items;
 
-    const savedInvoice = await this.invoicesRepo.save(invoice);
-    await this.appendActivity(
-      savedInvoice,
-      {
-        type: 'invoice_created',
-        description: `Invoice ${savedInvoice.invoiceNumber} created as draft`,
-        payload: {
-          invoiceNumber: savedInvoice.invoiceNumber,
-          total: savedInvoice.total,
-          currency: savedInvoice.currency,
-          status: savedInvoice.status,
+    // Invoice + items + creation activity + timeline event commit atomically
+    // (API-06): a failure in any write rolls back the whole creation instead
+    // of leaving an invoice without its audit trail.
+    const savedInvoice = await this.dataSource.transaction(async (manager) => {
+      const saved = await manager.getRepository(Invoice).save(invoice);
+      await this.appendActivity(
+        saved,
+        {
+          type: 'invoice_created',
+          description: `Invoice ${saved.invoiceNumber} created as draft`,
+          payload: {
+            invoiceNumber: saved.invoiceNumber,
+            total: saved.total,
+            currency: saved.currency,
+            status: saved.status,
+          },
         },
-      },
-      viewer?.userId,
-    );
+        viewer?.userId,
+        manager,
+      );
+      return saved;
+    });
 
     return this.getOne(savedInvoice.id, viewer);
   }
@@ -602,8 +614,16 @@ export class InvoicesService {
     invoice: Invoice,
     activity: InvoiceActivityInput,
     createdByUserId?: string,
+    manager?: EntityManager,
   ): Promise<void> {
-    const auditRow = this.invoiceActivitiesRepo.create({
+    const activitiesRepo = manager
+      ? manager.getRepository(InvoiceActivity)
+      : this.invoiceActivitiesRepo;
+    const timelineRepo = manager
+      ? manager.getRepository(TimelineEvent)
+      : this.timelineEventsRepo;
+
+    const auditRow = activitiesRepo.create({
       invoiceId: invoice.id,
       jobId: invoice.jobId ?? null,
       type: activity.type,
@@ -611,13 +631,13 @@ export class InvoicesService {
       payload: activity.payload,
       createdByUserId: createdByUserId ?? null,
     });
-    await this.invoiceActivitiesRepo.save(auditRow);
+    await activitiesRepo.save(auditRow);
 
     if (!invoice.jobId) {
       return;
     }
 
-    const timelineEvent = this.timelineEventsRepo.create({
+    const timelineEvent = timelineRepo.create({
       jobId: invoice.jobId,
       type: activity.type,
       payload: {
@@ -627,7 +647,7 @@ export class InvoicesService {
       },
       createdByUserId: createdByUserId ?? null,
     });
-    await this.timelineEventsRepo.save(timelineEvent);
+    await timelineRepo.save(timelineEvent);
   }
 
   private async getActorDisplayName(userId?: string): Promise<string> {
