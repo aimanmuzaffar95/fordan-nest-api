@@ -559,6 +559,7 @@ export class StaffService {
     const user = await this.usersRepository.findOne({
       where: {
         emailAddress,
+        deletedAt: IsNull(),
         ...(excludeUserId ? { id: Not(excludeUserId) } : {}),
       },
     });

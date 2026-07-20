@@ -54,7 +54,7 @@ export class StaffController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async createStaff(
     @Body() dto: CreateStaffDto,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
@@ -64,7 +64,7 @@ export class StaffController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async updateStaff(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStaffDto,
@@ -75,7 +75,7 @@ export class StaffController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async softDeleteStaff(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
@@ -85,7 +85,7 @@ export class StaffController {
   }
 
   @Post(':id/reset-password')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   async resetPassword(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request & { user?: { sub: string; role: UserRole } },

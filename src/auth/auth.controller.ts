@@ -5,6 +5,7 @@ import {
   Headers,
   Post,
   Req,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -82,7 +83,7 @@ export class AuthController {
     const userId = req.user?.sub;
     if (!userId) {
       // Guard should prevent this, but keep it safe.
-      throw new Error('Missing user');
+      throw new UnauthorizedException('Missing user');
     }
 
     return this.authService.getProfile(userId);
@@ -102,7 +103,7 @@ export class AuthController {
   ): Promise<{ mustChangePassword: boolean }> {
     const userId = req.user?.sub;
     if (!userId) {
-      throw new Error('Missing user');
+      throw new UnauthorizedException('Missing user');
     }
 
     return this.authService.changePassword(userId, dto);
