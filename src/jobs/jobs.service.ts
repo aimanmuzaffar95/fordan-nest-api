@@ -11,6 +11,7 @@ import {
   Brackets,
   DataSource,
   In,
+  Not,
   QueryFailedError,
   Repository,
 } from 'typeorm';
@@ -760,7 +761,10 @@ export class JobsService {
           : undefined;
       const job = await this.findOneOrFail(jobsRepo, id, viewer);
 
-      if (job.jobStatus === toStage) {
+      if (
+        job.jobStatus === toStage &&
+        (job.pipelineStage as JobPipelineStage) === toStage
+      ) {
         return job;
       }
 
@@ -798,6 +802,16 @@ export class JobsService {
 
       const previousStage = job.jobStatus;
       job.jobStatus = toStage;
+      // Keep the kanban column in sync with the status column — the two must
+      // never diverge (updateJobPipeline reads/writes pipelineStage).
+      if ((job.pipelineStage as JobPipelineStage) !== toStage) {
+        // Append at the end of the destination column, consistent with
+        // updateJobPipeline when no explicit position is requested.
+        job.pipelineStage = toStage;
+        job.pipelinePosition = await jobsRepo.count({
+          where: { pipelineStage: toStage, id: Not(job.id) },
+        });
+      }
       await jobsRepo.save(job);
 
       await this.jobAuditLogs.logWithManager(manager, {
