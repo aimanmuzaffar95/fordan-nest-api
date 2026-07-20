@@ -100,7 +100,7 @@ const makeAlert = (overrides: Partial<Alert> = {}): Alert =>
     ...overrides,
   }) as Alert;
 
-const defaultSettings: AdminSettings = {
+const defaultSettings = {
   id: ADMIN_SETTINGS_SINGLETON_ID,
   preMeterPendingDays: 7,
   installWarningDays: 3,
@@ -112,7 +112,7 @@ const defaultSettings: AdminSettings = {
   updatedByUser: null,
   createdAt: new Date(),
   updatedAt: new Date(),
-};
+} as unknown as AdminSettings;
 
 // ─── Mock Repository Factory ───────────────────────────────────────────────────
 

@@ -369,7 +369,7 @@ describe('CustomersService', () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: jest.fn().mockResolvedValue([{ lat: '-37.8136', lon: '144.9631' }]),
-    } as Response);
+    } as unknown as Response);
 
     const result = await service.geocodeAddress('123 Solar St, Melbourne');
 
@@ -381,7 +381,7 @@ describe('CustomersService', () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: jest.fn().mockResolvedValue([]),
-    } as Response);
+    } as unknown as Response);
 
     await expect(
       service.geocodeAddress('Unknown Place'),
@@ -403,7 +403,7 @@ describe('CustomersService', () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: jest.fn().mockResolvedValue([{ lat: 'NaN', lon: 'NaN' }]),
-    } as Response);
+    } as unknown as Response);
 
     await expect(
       service.geocodeAddress('123 Solar St, Melbourne'),
