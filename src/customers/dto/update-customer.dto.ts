@@ -19,6 +19,7 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @MaxLength(100)
   firstName?: string;
 
   @Transform(({ value }: { value: unknown }) =>
@@ -27,6 +28,7 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @MaxLength(100)
   lastName?: string;
 
   @Transform(({ value }: { value: unknown }) =>
@@ -34,6 +36,7 @@ export class UpdateCustomerDto {
   )
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   address?: string;
 
   @IsOptional()
@@ -54,6 +57,7 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @MaxLength(30)
   phone?: string;
 
   @Transform(({ value }: { value: unknown }) =>
@@ -62,6 +66,7 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @MaxLength(30)
   secondaryPhone?: string;
 
   @Transform(({ value }: { value: unknown }) =>
@@ -69,6 +74,7 @@ export class UpdateCustomerDto {
   )
   @IsOptional()
   @IsEmail()
+  @MaxLength(255)
   email?: string;
 
   @Transform(({ value }: { value: unknown }) =>

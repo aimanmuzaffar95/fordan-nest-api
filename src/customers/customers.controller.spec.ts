@@ -100,9 +100,18 @@ describe('CustomersController', () => {
     });
   });
 
-  it('forwards geocode address query', () => {
-    void controller.geocodeAddress({ address: '123 Solar Street, Melbourne' });
+  it('forwards geocode address query', async () => {
+    await controller.geocodeAddress(
+      { address: '123 Solar Street, Melbourne' },
+      {
+        user: { sub: 'user-id', role: UserRole.ADMIN },
+      } as never,
+    );
 
+    expect(permissionsService.assertPermission).toHaveBeenCalledWith(
+      expect.anything(),
+      'customer:view',
+    );
     expect(customersService.geocodeAddress).toHaveBeenCalledWith(
       '123 Solar Street, Melbourne',
     );

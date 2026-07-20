@@ -168,7 +168,11 @@ export class CustomersController {
     required: true,
     description: 'Street address to geocode (max 255 chars).',
   })
-  geocodeAddress(@Query() query: GeocodeCustomerAddressQueryDto) {
+  async geocodeAddress(
+    @Query() query: GeocodeCustomerAddressQueryDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    await this.authorizeCustomerAction(req, 'customer:view');
     return this.customersService.geocodeAddress(query.address);
   }
 

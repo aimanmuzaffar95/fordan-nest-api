@@ -20,6 +20,7 @@ export class CreateCustomerDto {
   )
   @IsString()
   @MinLength(1)
+  @MaxLength(100)
   firstName: string;
 
   @ApiProperty({ example: 'Doe' })
@@ -28,6 +29,7 @@ export class CreateCustomerDto {
   )
   @IsString()
   @MinLength(1)
+  @MaxLength(100)
   lastName: string;
 
   @ApiPropertyOptional({ example: '12 Solar St' })
@@ -36,6 +38,7 @@ export class CreateCustomerDto {
   )
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   address?: string;
 
   @ApiPropertyOptional({ example: -33.8688 })
@@ -58,6 +61,7 @@ export class CreateCustomerDto {
   )
   @IsString()
   @MinLength(1)
+  @MaxLength(30)
   phone: string;
 
   @ApiPropertyOptional({ example: '+61400000001' })
@@ -67,6 +71,7 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @MaxLength(30)
   secondaryPhone?: string;
 
   @ApiProperty({ example: 'jane@example.com' })
@@ -74,6 +79,7 @@ export class CreateCustomerDto {
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
   @IsEmail()
+  @MaxLength(255)
   email: string;
 
   @ApiProperty({
