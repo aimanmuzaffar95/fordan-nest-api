@@ -527,6 +527,44 @@ export class JobSignatureService {
       });
     }
     const png = parsePngBase64(dto.signaturePngBase64);
+    // Race-safe claim (API-05): atomically move pending/viewed -> signed before
+    // doing any side-effect work (PDF merge, file writes, timeline). Only the
+    // request that wins this conditional UPDATE proceeds; a concurrent
+    // double-submit sees zero affected rows and gets the already-signed error.
+    const previousStatus = row.status;
+    const claim = await this.signatureRepo
+      .createQueryBuilder()
+      .update(JobSignatureRequest)
+      .set({ status: 'signed' })
+      .where('id = :id', { id: row.id })
+      .andWhere('status IN (:...claimable)', {
+        claimable: ['pending', 'viewed'],
+      })
+      .execute();
+    if (!claim.affected) {
+      throw new BadRequestException({
+        message: 'This document has already been signed.',
+        code: 'ALREADY_SIGNED',
+      });
+    }
+    try {
+      return await this.finishClaimedPublicSign(row, dto, req, png);
+    } catch (err) {
+      // Release the claim (best effort) so the customer can retry after a
+      // transient failure; only rolls back the status flip made above.
+      await this.signatureRepo
+        .update({ id: row.id, status: 'signed' }, { status: previousStatus })
+        .catch(() => undefined);
+      throw err;
+    }
+  }
+
+  private async finishClaimedPublicSign(
+    row: JobSignatureRequest,
+    dto: CompletePublicSignatureDto,
+    req: Request,
+    png: Buffer,
+  ): Promise<{ ok: true; referenceCode: string }> {
     const { pdfBuffer, attachmentFilename, orderNumber, customerName } =
       await this.jobQuotation.buildValidatedQuotationPdf(row.jobId, undefined);
     const forwarded = req.headers['x-forwarded-for'];
