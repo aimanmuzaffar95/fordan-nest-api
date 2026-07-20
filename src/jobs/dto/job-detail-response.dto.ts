@@ -36,6 +36,9 @@ export type JobDetailJobDto = {
   invoiceDate: string | null;
   invoiceDueDate: string | null;
   paidDate: string | null;
+  lostAt: Date | null;
+  lostReason: string | null;
+  lostByUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };

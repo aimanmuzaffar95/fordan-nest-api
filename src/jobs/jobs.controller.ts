@@ -44,6 +44,8 @@ import { DEFAULT_MAX_UPLOAD_SIZE_BYTES } from '../files/upload.constants';
 import { UserRole } from '../users/entities/user-role.enum';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
 import { CreateJobTextEntryDto } from './dto/create-job-text-entry.dto';
+import { MarkJobLostDto } from './dto/mark-job-lost.dto';
+import { ReopenJobDto } from './dto/reopen-job.dto';
 import { TransitionJobStageDto } from './dto/transition-job-stage.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { UpdateJobPipelineDto } from './dto/update-job-pipeline.dto';
@@ -149,6 +151,40 @@ export class JobsController {
       dto.overridePreMeterLock ?? false,
       viewer.jobScope,
     );
+  }
+
+  @Post(':id/mark-lost')
+  @HttpCode(HttpStatus.OK)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Mark a job (deal) as lost',
+    description:
+      'Sets `lostAt`/`lostReason`/`lostByUserId` and records a **`deal_marked_lost`** timeline event. The pipeline stage is untouched — a lost job keeps its column but is frozen for stage changes until reopened. **409** (`code: "JOB_ALREADY_LOST"`) if the job is already lost. **Manager:** **404** if the job is outside your scope.',
+  })
+  async markLost(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MarkJobLostDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeJobAction(req, 'job:pipeline:update');
+    return this.jobs.markLost(id, dto.reason, viewer);
+  }
+
+  @Post(':id/reopen')
+  @HttpCode(HttpStatus.OK)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Reopen a lost job (deal)',
+    description:
+      'Clears the lost fields and records a **`deal_reopened`** timeline event (optional `reason`). **400** (`code: "JOB_NOT_LOST"`) if the job is not lost. **Manager:** **404** if the job is outside your scope.',
+  })
+  async reopen(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReopenJobDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeJobAction(req, 'job:pipeline:update');
+    return this.jobs.reopen(id, dto?.reason ?? null, viewer);
   }
 
   /** Must stay above `@Get(':id')` so `quotation.pdf` is not parsed as a UUID. */

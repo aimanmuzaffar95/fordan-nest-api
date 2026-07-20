@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -768,6 +769,9 @@ export class JobsService {
         return job;
       }
 
+      // Lost jobs are frozen: reopen first, then move stages.
+      this.assertJobNotLost(job);
+
       // Same cumulative forward gates as PATCH :id/pipeline — this endpoint
       // must not be a bypass route.
       const gateError = collectForwardGateError(job.jobStatus, toStage, job);
@@ -830,6 +834,98 @@ export class JobsService {
 
       return this.findOneOrFail(jobsRepo, id, viewer);
     });
+  }
+
+  /**
+   * Lost jobs are frozen for stage movement — both stage-change routes
+   * (POST :id/stage and PATCH :id/pipeline) call this so neither can move a
+   * lost job without reopening it first.
+   */
+  private assertJobNotLost(job: Job): void {
+    if (job.lostAt) {
+      throw new ConflictException({
+        message:
+          'This job is marked as lost. Reopen it before changing its stage.',
+        code: 'JOB_LOST',
+      });
+    }
+  }
+
+  async markLost(
+    id: string,
+    reason: string,
+    viewer: JobListViewer,
+  ): Promise<JobDetailResponseDto> {
+    await this.dataSource.transaction(async (manager) => {
+      const jobsRepo = manager.getRepository(Job);
+      const timelineRepository = manager.getRepository(TimelineEvent);
+      const job = await this.findOneOrFail(jobsRepo, id, viewer);
+
+      if (job.lostAt) {
+        throw new ConflictException({
+          message: 'This job is already marked as lost.',
+          code: 'JOB_ALREADY_LOST',
+        });
+      }
+
+      job.lostAt = new Date();
+      job.lostReason = reason.trim();
+      job.lostByUserId = viewer.userId;
+      await jobsRepo.save(job);
+
+      await timelineRepository.save(
+        timelineRepository.create({
+          jobId: job.id,
+          type: 'deal_marked_lost',
+          payload: {
+            reason: job.lostReason,
+            stageAtLoss: job.pipelineStage,
+          },
+          createdByUserId: viewer.userId,
+        }),
+      );
+    });
+
+    return this.getOne(id, viewer);
+  }
+
+  async reopen(
+    id: string,
+    reason: string | null,
+    viewer: JobListViewer,
+  ): Promise<JobDetailResponseDto> {
+    await this.dataSource.transaction(async (manager) => {
+      const jobsRepo = manager.getRepository(Job);
+      const timelineRepository = manager.getRepository(TimelineEvent);
+      const job = await this.findOneOrFail(jobsRepo, id, viewer);
+
+      if (!job.lostAt) {
+        throw new BadRequestException({
+          message: 'This job is not marked as lost.',
+          code: 'JOB_NOT_LOST',
+        });
+      }
+
+      const previousLostReason = job.lostReason;
+      job.lostAt = null;
+      job.lostReason = null;
+      job.lostByUserId = null;
+      await jobsRepo.save(job);
+
+      await timelineRepository.save(
+        timelineRepository.create({
+          jobId: job.id,
+          type: 'deal_reopened',
+          payload: {
+            ...(reason ? { reason: reason.trim() } : {}),
+            previousLostReason,
+          },
+          createdByUserId: viewer.userId,
+        }),
+      );
+    });
+
+    return this.getOne(id, viewer);
   }
 
   private normalizeSystemSize(
@@ -1107,6 +1203,9 @@ export class JobsService {
           ? derivedInvoiceFields.invoiceDueDate
           : null,
         paidDate: canViewFinancials ? derivedInvoiceFields.paidDate : null,
+        lostAt: job.lostAt,
+        lostReason: job.lostReason,
+        lostByUserId: job.lostByUserId,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
       },
@@ -1328,6 +1427,14 @@ export class JobsService {
           this.readTimelinePayloadString(payload, 'templateTitle') ||
           this.readTimelinePayloadString(payload, 'templateId');
         return title ? `Document generated: ${title}` : 'Document generated';
+      }
+      case 'deal_marked_lost': {
+        const reason = this.readTimelinePayloadString(payload, 'reason');
+        return reason ? `Deal marked lost: ${reason}` : 'Deal marked lost';
+      }
+      case 'deal_reopened': {
+        const reason = this.readTimelinePayloadString(payload, 'reason');
+        return reason ? `Deal reopened: ${reason}` : 'Deal reopened';
       }
       case 'document_sign_requested': {
         const title = this.readTimelinePayloadString(payload, 'templateId');
@@ -1895,6 +2002,12 @@ export class JobsService {
     const toStage = dto.pipelineStage;
     const fromStage = job.pipelineStage as JobPipelineStage;
     const targetStage = toStage as JobPipelineStage;
+
+    // Lost jobs are frozen for stage changes (same-column reorders stay
+    // allowed): reopen first, then move stages.
+    if (fromStage !== targetStage) {
+      this.assertJobNotLost(job);
+    }
 
     if (userRole === UserRole.INSTALLER) {
       if (targetStage !== JobPipelineStage.INSTALLED) {

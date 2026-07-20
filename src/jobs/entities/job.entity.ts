@@ -6,7 +6,10 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { resolveEnumColumnType } from '../../common/timestamp-column-type.util';
+import {
+  resolveEnumColumnType,
+  resolveTimestampColumnType,
+} from '../../common/timestamp-column-type.util';
 import { Customer } from '../../customers/entities/customer.entity';
 import { JobPipelineStage } from '../job-pipeline-stage.enum';
 import { JobSystemType } from '../job-system-type.enum';
@@ -105,6 +108,18 @@ export class Job {
 
   @Column({ type: 'date', nullable: true })
   paidDate: string | null;
+
+  // Lost-deal state (QA finding WEB-05). `lostAt != null` marks the job as
+  // lost without introducing a new pipeline stage — stage enums and the
+  // kanban columns stay intact.
+  @Column({ type: resolveTimestampColumnType(), nullable: true })
+  lostAt: Date | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  lostReason: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  lostByUserId: string | null;
 
   @CreateDateColumn()
   createdAt: Date;
