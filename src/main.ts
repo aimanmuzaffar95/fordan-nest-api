@@ -1,5 +1,7 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { SuccessResponseInterceptor } from './common/interceptors/success-response.interceptor';
@@ -8,6 +10,15 @@ import { setupOpenApi } from './openapi-setup';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('Bootstrap');
+
+  // Security headers. This is a JSON API (no server-rendered HTML), so the
+  // default helmet CSP is unnecessary; keep the rest (HSTS, no-sniff, frameguard, etc.).
+  app.use(helmet({ contentSecurityPolicy: false }));
+
+  // Explicit request-body cap. The largest legitimate JSON payload is a base64
+  // signature PNG (public-signature); 5mb covers it with headroom.
+  app.use(json({ limit: '5mb' }));
+  app.use(urlencoded({ extended: true, limit: '5mb' }));
 
   app.enableCors({
     origin: [
@@ -19,7 +30,6 @@ async function bootstrap() {
       'http://127.0.0.1:5173',
       'https://crm.fordan.com.au',
       'https://api.fordan.com.au',
-      'https://dbprovider.us-west-1.clawcloudrun.com',
     ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
