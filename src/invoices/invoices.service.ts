@@ -206,9 +206,14 @@ export class InvoicesService {
       const unitPrice = parseFloat(itemDto.unitPrice);
       const taxRate = itemDto.taxRate ? parseFloat(itemDto.taxRate) : 0;
 
-      const lineSubtotal = quantity * unitPrice;
-      const lineTax = lineSubtotal * taxRate;
-      const lineTotal = lineSubtotal + lineTax;
+      // Round each line to 2 decimals BEFORE accumulating so the header
+      // totals equal the sum of the rounded per-line amounts shown to the
+      // customer (round-then-sum), avoiding a cent drift from summing raw
+      // floats and rounding once at the end (BE-INV-02).
+      const roundMoney = (value: number) => Math.round(value * 100) / 100;
+      const lineSubtotal = roundMoney(quantity * unitPrice);
+      const lineTax = roundMoney(lineSubtotal * taxRate);
+      const lineTotal = roundMoney(lineSubtotal + lineTax);
 
       subtotal += lineSubtotal;
       taxTotal += lineTax;

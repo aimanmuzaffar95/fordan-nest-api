@@ -2,11 +2,14 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 
 @Entity('equipment_items')
+@Index('idx_equipment_items_category', ['category'])
+@Index('idx_equipment_items_sku', ['sku'])
 export class EquipmentItem {
   @PrimaryGeneratedColumn('uuid')
   id: string;

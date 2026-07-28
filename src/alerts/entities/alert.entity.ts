@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -11,6 +12,8 @@ import { Job } from '../../jobs/entities/job.entity';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('alerts')
+@Index('idx_alerts_job_id', ['jobId'])
+@Index('idx_alerts_resolved_at', ['resolvedAt'])
 export class Alert {
   @PrimaryGeneratedColumn('uuid')
   id: string;

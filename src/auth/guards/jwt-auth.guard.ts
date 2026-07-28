@@ -66,7 +66,11 @@ export class JwtAuthGuard implements CanActivate {
           },
         });
 
-      if (!credential || credential.user.deletedAt) {
+      if (
+        !credential ||
+        credential.user.deletedAt ||
+        credential.user.active === false
+      ) {
         throw new UnauthorizedException('Invalid token');
       }
 

@@ -8,6 +8,7 @@ import {
   ADMIN_SETTINGS_SINGLETON_ID,
 } from '../../runtime-settings/admin-settings.entity';
 import { envBool } from '../../common/env.util';
+import { decodeSettingsValue } from '../../common/crypto.util';
 import type { IEmailProvider } from './email-provider.interface';
 import type { EmailOptions } from '../types/email-options.type';
 
@@ -68,7 +69,10 @@ export class SmtpProvider implements IEmailProvider {
     }
 
     const user = row?.smtpUser?.trim() || process.env.SMTP_USER?.trim() || '';
-    const pass = row?.smtpPass?.trim() || process.env.SMTP_PASS?.trim() || '';
+    const storedPass = row?.smtpPass?.trim()
+      ? decodeSettingsValue(row.smtpPass.trim())
+      : '';
+    const pass = storedPass || process.env.SMTP_PASS?.trim() || '';
 
     const fromAddr =
       row?.mailFrom?.trim() ||

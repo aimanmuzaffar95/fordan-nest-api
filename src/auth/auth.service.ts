@@ -116,6 +116,19 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (credential.user.active === false) {
+      if (!skipAudit) {
+        await this.systemAudit.record({
+          action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
+          actorUserId: credential.user.id,
+          resourceType: 'auth',
+          resourceId: credential.user.id,
+          metadata: { reason: 'account_deactivated' },
+        });
+      }
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
     if (credential.lockedUntil && credential.lockedUntil.getTime() > Date.now()) {
       if (!skipAudit) {
         await this.systemAudit.record({

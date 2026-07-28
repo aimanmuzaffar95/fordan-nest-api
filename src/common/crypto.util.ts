@@ -68,3 +68,40 @@ export function decryptSettingsValue(encoded: string): string {
 
   return plaintext.toString('utf8');
 }
+
+/**
+ * Returns true when `value` has the shape produced by encryptSettingsValue
+ * ("<ivHex>:<authTagHex>:<ciphertextHex>"). Used to distinguish encrypted
+ * ciphertext from legacy plaintext without attempting a decrypt.
+ */
+export function looksLikeEncryptedSettingsValue(value: string): boolean {
+  const parts = value.split(':');
+  if (parts.length !== 3) {
+    return false;
+  }
+  const [ivHex, authTagHex, ciphertextHex] = parts;
+  return (
+    ivHex.length === IV_BYTE_LENGTH * 2 &&
+    authTagHex.length === AUTH_TAG_BYTE_LENGTH * 2 &&
+    ciphertextHex.length > 0 &&
+    /^[0-9a-fA-F]+$/.test(ivHex) &&
+    /^[0-9a-fA-F]+$/.test(authTagHex) &&
+    /^[0-9a-fA-F]+$/.test(ciphertextHex)
+  );
+}
+
+/**
+ * Decrypts a settings value, gracefully falling back to treating the input as
+ * legacy plaintext when it is not valid ciphertext (unencrypted rows written
+ * before at-rest encryption was introduced). Never logs the value or key.
+ */
+export function decodeSettingsValue(stored: string): string {
+  if (!looksLikeEncryptedSettingsValue(stored)) {
+    return stored;
+  }
+  try {
+    return decryptSettingsValue(stored);
+  } catch {
+    return stored;
+  }
+}

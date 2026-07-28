@@ -6,6 +6,10 @@ import {
   ADMIN_SETTINGS_SINGLETON_ID,
 } from './admin-settings.entity';
 import { UpdateAdminSettingsDto } from './dto/update-admin-settings.dto';
+import {
+  decodeSettingsValue,
+  encryptSettingsValue,
+} from '../common/crypto.util';
 import { SettingsAuditLog } from './settings-audit-log.entity';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
@@ -137,7 +141,7 @@ export class RuntimeSettingsService {
       ) {
         settings.smtpPass = null;
       } else if (typeof smtpPassRaw === 'string') {
-        settings.smtpPass = smtpPassRaw;
+        settings.smtpPass = encryptSettingsValue(smtpPassRaw);
       } else {
         throw new BadRequestException('smtpPass must be a string or null');
       }
@@ -399,7 +403,9 @@ export class RuntimeSettingsService {
           ? settings.smtpSecure
           : null,
       smtpUser: settings.smtpUser?.trim() ? settings.smtpUser.trim() : null,
-      smtpPass: settings.smtpPass?.trim() ? settings.smtpPass.trim() : null,
+      smtpPass: settings.smtpPass?.trim()
+        ? decodeSettingsValue(settings.smtpPass.trim())
+        : null,
       mailFrom: settings.mailFrom?.trim() ? settings.mailFrom.trim() : null,
       mailFromName: settings.mailFromName?.trim()
         ? settings.mailFromName.trim()
