@@ -6,13 +6,17 @@ import {
   ParseEnumPipe,
   Res,
   StreamableFile,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { CrmBrandingUploadSlot } from '../files/crm-branding.constants';
 import { FilesService } from '../files/files.service';
 
 @ApiTags('Public')
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { ttl: 60_000, limit: 60 } })
 @Controller('public/crm-branding')
 export class PublicCrmBrandingController {
   constructor(private readonly files: FilesService) {}

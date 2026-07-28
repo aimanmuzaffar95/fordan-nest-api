@@ -50,6 +50,11 @@ export type AuthProfile = {
   mustChangePassword: boolean;
 };
 
+/** Consecutive failed logins before an account is temporarily locked. */
+const MAX_FAILED_LOGIN_ATTEMPTS = Number(process.env.AUTH_MAX_FAILED_ATTEMPTS ?? 5);
+/** How long the lock lasts, in minutes. */
+const LOGIN_LOCKOUT_MINUTES = Number(process.env.AUTH_LOCKOUT_MINUTES ?? 15);
+
 @Injectable()
 export class AuthService implements OnModuleInit {
   constructor(
@@ -111,22 +116,53 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const passwordMatches = await comparePassword(
-      loginDto.password,
-      credential.passwordHash,
-    );
-
-    if (!passwordMatches) {
+    if (credential.lockedUntil && credential.lockedUntil.getTime() > Date.now()) {
       if (!skipAudit) {
         await this.systemAudit.record({
           action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
           actorUserId: credential.user.id,
           resourceType: 'auth',
           resourceId: credential.user.id,
-          metadata: { reason: 'invalid_password' },
+          metadata: { reason: 'account_locked' },
+        });
+      }
+      throw new UnauthorizedException(
+        'Account temporarily locked due to repeated failed logins. Try again shortly.',
+      );
+    }
+
+    const passwordMatches = await comparePassword(
+      loginDto.password,
+      credential.passwordHash,
+    );
+
+    if (!passwordMatches) {
+      const attempts = (credential.failedLoginAttempts ?? 0) + 1;
+      const shouldLock = attempts >= MAX_FAILED_LOGIN_ATTEMPTS;
+      await this.credentialsRepository.update(credential.id, {
+        failedLoginAttempts: shouldLock ? 0 : attempts,
+        lockedUntil: shouldLock
+          ? new Date(Date.now() + LOGIN_LOCKOUT_MINUTES * 60_000)
+          : credential.lockedUntil ?? null,
+      });
+      if (!skipAudit) {
+        await this.systemAudit.record({
+          action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
+          actorUserId: credential.user.id,
+          resourceType: 'auth',
+          resourceId: credential.user.id,
+          metadata: { reason: shouldLock ? 'invalid_password_locked' : 'invalid_password', attempts },
         });
       }
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Successful login clears any accumulated failures / lock.
+    if ((credential.failedLoginAttempts ?? 0) > 0 || credential.lockedUntil) {
+      await this.credentialsRepository.update(credential.id, {
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      });
     }
 
     const payload = {

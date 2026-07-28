@@ -1,8 +1,11 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { RuntimeSettingsService } from './runtime-settings.service';
 
 @ApiTags('Public')
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { ttl: 60_000, limit: 60 } })
 @Controller('public/crm-appearance')
 export class PublicCrmAppearanceController {
   constructor(private readonly settings: RuntimeSettingsService) {}

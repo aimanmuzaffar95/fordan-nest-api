@@ -26,6 +26,14 @@ export class UserCredential {
   @Column({ type: 'int', default: 0 })
   tokenVersion: number;
 
+  // Consecutive failed login attempts; reset to 0 on any successful login.
+  @Column({ type: 'int', default: 0 })
+  failedLoginAttempts: number;
+
+  // When set to a future time, logins are rejected until it passes (lockout).
+  @Column({ type: 'timestamp', nullable: true })
+  lockedUntil: Date | null;
+
   @OneToOne(() => User, (user) => user.credential, {
     onDelete: 'CASCADE',
     eager: true,
