@@ -80,16 +80,29 @@ export class ScheduleService {
       .where('a.scheduledDate >= :from', { from })
       .andWhere('a.scheduledDate <= :to', { to });
 
-    if (viewer.scheduleScope === 'self') {
+    // Default-deny by role. The calendar-scope toggle can only *relax* access for
+    // higher-trust roles (manager); it must never widen an installer's view. If a
+    // viewer's scope cannot be resolved we fall through to the role default, which
+    // for installers (and any unknown role) is their own rows only — never the
+    // whole company calendar.
+    if (viewer.scheduleScope === 'all') {
+      // Explicit company-wide grant: no scope predicate.
+    } else if (viewer.scheduleScope === 'self') {
       qb.andWhere('a.staffUserId = :viewerId', { viewerId: viewer.userId });
     } else if (viewer.scheduleScope === 'managed') {
       // Managers should see assignments for jobs they manage, not rows where they
       // happen to be the installer assignee.
       qb.andWhere('job.managerId = :viewerId', { viewerId: viewer.userId });
-    } else if (viewer.role === UserRole.INSTALLER && calendarScopeEnforced) {
+    } else if (viewer.role === UserRole.ADMIN) {
+      // Admins see the whole company calendar.
+    } else if (viewer.role === UserRole.MANAGER) {
+      // Toggle off relaxes a manager to the full calendar; on scopes to managed jobs.
+      if (calendarScopeEnforced) {
+        qb.andWhere('job.managerId = :viewerId', { viewerId: viewer.userId });
+      }
+    } else {
+      // Installers and any viewer with an unresolved scope: fail closed to own rows.
       qb.andWhere('a.staffUserId = :viewerId', { viewerId: viewer.userId });
-    } else if (viewer.role === UserRole.MANAGER && calendarScopeEnforced) {
-      qb.andWhere('job.managerId = :viewerId', { viewerId: viewer.userId });
     }
 
     const rows = await qb

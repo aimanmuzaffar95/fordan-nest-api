@@ -1,10 +1,13 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, MoreThanOrEqual, Repository } from 'typeorm';
+import { Between, DataSource, MoreThanOrEqual, Repository } from 'typeorm';
+import { Assignment } from '../assignments/entities/assignment.entity';
+import { UserRole } from '../users/entities/user-role.enum';
 import { PutAvailabilityMeDto } from './dto/put-availability-me.dto';
 import { StaffAvailability } from './entities/staff-availability.entity';
 
@@ -23,6 +26,9 @@ export class AvailabilityService {
   constructor(
     @InjectRepository(StaffAvailability)
     private readonly repo: Repository<StaffAvailability>,
+    @InjectRepository(Assignment)
+    private readonly assignmentRepo: Repository<Assignment>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async listMine(
@@ -64,38 +70,64 @@ export class AvailabilityService {
       }
     }
 
-    await this.repo.delete({
-      userId,
-      startsAt: MoreThanOrEqual(effectiveFrom),
+    // Replace-from-effectiveFrom must be atomic: a delete that is not followed by
+    // a successful insert would wipe the user's future availability (data loss).
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const txRepo = manager.getRepository(StaffAvailability);
+      await txRepo.delete({
+        userId,
+        startsAt: MoreThanOrEqual(effectiveFrom),
+      });
+      return txRepo.save(
+        parsed.map((item) =>
+          txRepo.create({
+            userId,
+            startsAt: item.startsAt,
+            endsAt: item.endsAt,
+            notes: item.notes,
+            recurrenceRule: item.recurrenceRule,
+            source: 'mobile',
+          }),
+        ),
+      );
     });
-
-    const saved = await this.repo.save(
-      parsed.map((item) =>
-        this.repo.create({
-          userId,
-          startsAt: item.startsAt,
-          endsAt: item.endsAt,
-          notes: item.notes,
-          recurrenceRule: item.recurrenceRule,
-          source: 'mobile',
-        }),
-      ),
-    );
 
     return { items: saved.map((r) => this.toResponse(r)) };
   }
 
-  async listTeam(filters: {
-    userId?: string;
-    teamId?: string;
-    from?: string;
-    to?: string;
-  }): Promise<{ items: AvailabilityItemResponse[] }> {
+  async listTeam(
+    requester: { userId: string; role: UserRole },
+    filters: {
+      userId?: string;
+      teamId?: string;
+      from?: string;
+      to?: string;
+    },
+  ): Promise<{ items: AvailabilityItemResponse[] }> {
     if (!filters.userId) {
       throw new NotFoundException(
         'userId filter required for team availability',
       );
     }
+
+    // Access scoping: admins may read any user's availability. A manager may only
+    // read the availability of an installer who is on a job they manage — this is
+    // the effective "team" scope in the current schema (teams were removed, so the
+    // teamId param is retained for API compatibility but no longer backs a table).
+    if (requester.role !== UserRole.ADMIN) {
+      const managesTarget = await this.assignmentRepo
+        .createQueryBuilder('a')
+        .innerJoin('a.job', 'job')
+        .where('job.managerId = :managerId', { managerId: requester.userId })
+        .andWhere('a.staffUserId = :targetId', { targetId: filters.userId })
+        .getCount();
+      if (managesTarget === 0) {
+        throw new ForbiddenException(
+          'You may only view availability for installers on jobs you manage',
+        );
+      }
+    }
+
     return this.listMine(filters.userId, filters.from, filters.to);
   }
 

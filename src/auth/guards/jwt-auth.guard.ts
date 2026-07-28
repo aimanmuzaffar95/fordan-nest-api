@@ -106,6 +106,16 @@ export class JwtAuthGuard implements CanActivate {
         throw new ForbiddenException('MCP key is read-only');
       }
 
+      // Trust the DB role over the (possibly stale) JWT `role` claim so that a
+      // role promotion/demotion is enforced immediately, not only after the 1h
+      // token TTL. tokenVersion is bumped on password change but NOT on role
+      // change, so the claim alone can lag reality. MCP-key tokens carry their
+      // own scoped role semantics — leave those untouched.
+      if (!payload.mcp && credential.user.role) {
+        payload.role = credential.user.role;
+        payload.isAdmin = credential.user.role === UserRole.ADMIN;
+      }
+
       request.user = payload;
       return true;
     } catch (error) {

@@ -6,6 +6,7 @@ import { Invoice } from '../invoices/entities/invoice.entity';
 import { InvoiceStatus } from '../invoices/entities/invoice-status.enum';
 import { Job } from '../jobs/entities/job.entity';
 import { JobPipelineStage } from '../jobs/job-pipeline-stage.enum';
+import { MeterApplication } from '../metering/entities/meter-application.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 
 type DashboardPayload = Record<string, unknown>;
@@ -23,6 +24,8 @@ export class MobileDashboardService {
     @InjectRepository(Alert) private readonly alertsRepo: Repository<Alert>,
     @InjectRepository(Invoice)
     private readonly invoicesRepo: Repository<Invoice>,
+    @InjectRepository(MeterApplication)
+    private readonly meterAppsRepo: Repository<MeterApplication>,
   ) {}
 
   async getDashboard(
@@ -133,6 +136,28 @@ export class MobileDashboardService {
     return { start, end };
   }
 
+  // Current ISO week (Monday 00:00 → Sunday), as inclusive YYYY-MM-DD bounds to
+  // match how the `date`-typed job columns (installDate/scheduledDate) compare.
+  private weekWindow(): { start: string; end: string } {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun..6=Sat
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const monday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + mondayOffset,
+    );
+    const sunday = new Date(
+      monday.getFullYear(),
+      monday.getMonth(),
+      monday.getDate() + 6,
+    );
+    return {
+      start: monday.toISOString().slice(0, 10),
+      end: sunday.toISOString().slice(0, 10),
+    };
+  }
+
   private async sumPaidRevenueCentsForMonth(
     monthOffset: number,
   ): Promise<number> {
@@ -221,11 +246,54 @@ export class MobileDashboardService {
       })
       .where('alert.resolvedAt IS NULL')
       .getCount();
+
+    const { start, end } = this.weekWindow();
+
+    const [installsWeek, kwBookedRow, pendingPreMeter, pendingPostMeter] =
+      await Promise.all([
+        // Jobs installed this week (installDate within the current ISO week).
+        this.jobsRepo
+          .createQueryBuilder('job')
+          .where('job.managerId = :managerId', { managerId: userId })
+          .andWhere('job.installDate IS NOT NULL')
+          .andWhere('job.installDate >= :start', { start })
+          .andWhere('job.installDate <= :end', { end })
+          .getCount(),
+        // kW booked = sum of systemSizeKw for jobs scheduled this week.
+        this.jobsRepo
+          .createQueryBuilder('job')
+          .select('COALESCE(SUM(job.systemSizeKw), 0)', 'kw')
+          .where('job.managerId = :managerId', { managerId: userId })
+          .andWhere('job.scheduledDate IS NOT NULL')
+          .andWhere('job.scheduledDate >= :start', { start })
+          .andWhere('job.scheduledDate <= :end', { end })
+          .getRawOne<{ kw: string }>(),
+        // Pending pre/post-meter applications on this manager's jobs.
+        this.meterAppsRepo
+          .createQueryBuilder('app')
+          .innerJoin('app.job', 'job', 'job.managerId = :managerId', {
+            managerId: userId,
+          })
+          .where('app.type = :type', { type: 'pre_meter' })
+          .andWhere('app.status = :status', { status: 'pending' })
+          .getCount(),
+        this.meterAppsRepo
+          .createQueryBuilder('app')
+          .innerJoin('app.job', 'job', 'job.managerId = :managerId', {
+            managerId: userId,
+          })
+          .where('app.type = :type', { type: 'post_meter' })
+          .andWhere('app.status = :status', { status: 'pending' })
+          .getCount(),
+      ]);
+
+    const kwBooked = Number(kwBookedRow?.kw ?? 0);
+
     return {
-      installsWeek: 0,
-      kwBooked: 0,
-      pendingPreMeter: 0,
-      pendingPostMeter: 0,
+      installsWeek,
+      kwBooked,
+      pendingPreMeter,
+      pendingPostMeter,
       alerts,
       managedJobs,
     };

@@ -6,11 +6,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AvailabilityController } from './availability.controller';
 import { AvailabilityService } from './availability.service';
+import { Assignment } from '../assignments/entities/assignment.entity';
 import { StaffAvailability } from './entities/staff-availability.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([StaffAvailability]),
+    TypeOrmModule.forFeature([StaffAvailability, Assignment]),
     JwtModule.register({
       secret: resolveJwtSecret(),
     }),

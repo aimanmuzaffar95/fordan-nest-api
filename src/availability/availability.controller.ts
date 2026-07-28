@@ -65,7 +65,13 @@ export class AvailabilityController {
     @Query('teamId') teamId: string | undefined,
     @Query('from') from: string | undefined,
     @Query('to') to: string | undefined,
+    @Req() req: AuthRequest,
   ) {
-    return this.availabilityService.listTeam({ userId, teamId, from, to });
+    const requesterId = req.user?.sub;
+    if (!requesterId) throw new Error('Missing authenticated user context');
+    return this.availabilityService.listTeam(
+      { userId: requesterId, role: req.user?.role ?? UserRole.MANAGER },
+      { userId, teamId, from, to },
+    );
   }
 }

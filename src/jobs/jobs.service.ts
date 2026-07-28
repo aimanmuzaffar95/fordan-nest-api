@@ -6,13 +6,13 @@ import {
   Logger,
   NotFoundException,
   PreconditionFailedException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Brackets,
   DataSource,
   In,
-  Not,
   QueryFailedError,
   Repository,
 } from 'typeorm';
@@ -746,6 +746,18 @@ export class JobsService {
     });
   }
 
+  /**
+   * POST :id/stage — thin adapter over the single shared stage-transition
+   * method, {@link updateJobPipeline}. Both stage-change routes now run the
+   * SAME gate logic (forward prerequisites, backward-move reason, the
+   * record-based `installed` pre-meter gate, invoice gates) and the SAME side
+   * effects, and write `jobStatus` + `pipelineStage` together — so they can no
+   * longer diverge (BE-JOBS-02/03).
+   *
+   * `overridePreMeterLock` is retained for API/DTO compatibility but is now a
+   * no-op: admins already bypass the `installed` pre-meter gate in the shared
+   * method, and non-admins were never permitted to override it.
+   */
   async transitionStage(
     performedById: string | null,
     performedByRole: UserRole | null,
@@ -753,87 +765,31 @@ export class JobsService {
     toStage: JobPipelineStage,
     overridePreMeterLock = false,
     jobScope: 'all' | 'own' = 'own',
-  ) {
-    return this.dataSource.transaction(async (manager) => {
-      const jobsRepo = manager.getRepository(Job);
-      const viewer =
-        performedById && performedByRole
-          ? { userId: performedById, role: performedByRole, jobScope }
-          : undefined;
-      const job = await this.findOneOrFail(jobsRepo, id, viewer);
+    options: {
+      backstageReason?: string;
+      preMeterSubmittedDate?: string;
+      postMeterSubmittedDate?: string;
+    } = {},
+  ): Promise<Job> {
+    if (!performedById || !performedByRole) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+    void overridePreMeterLock;
 
-      if (
-        job.jobStatus === toStage &&
-        (job.pipelineStage as JobPipelineStage) === toStage
-      ) {
-        return job;
-      }
+    const dto: UpdateJobPipelineDto = {
+      pipelineStage: toStage,
+      backstageReason: options.backstageReason,
+      preMeterSubmittedDate: options.preMeterSubmittedDate,
+      postMeterSubmittedDate: options.postMeterSubmittedDate,
+    } as UpdateJobPipelineDto;
 
-      // Lost jobs are frozen: reopen first, then move stages.
-      this.assertJobNotLost(job);
-
-      // Same cumulative forward gates as PATCH :id/pipeline — this endpoint
-      // must not be a bypass route.
-      const gateError = collectForwardGateError(job.jobStatus, toStage, job);
-      if (gateError) {
-        throw new BadRequestException(gateError);
-      }
-
-      if (
-        toStage === JobPipelineStage.INSTALLED &&
-        !this.hasPreMeterApprovalForInstall(job.jobStatus)
-      ) {
-        if (!overridePreMeterLock) {
-          throw new PreconditionFailedException(
-            'Pre-meter is not approved. An admin must manually override the pre-meter lock before moving this job to Installed.',
-          );
-        }
-
-        if (performedByRole !== UserRole.ADMIN) {
-          throw new ForbiddenException(
-            'Only admins can override the pre-meter lock.',
-          );
-        }
-      }
-
-      // Same billing preconditions as PATCH :id/pipeline — this endpoint must
-      // not skip the invoiced/paid gates.
-      await this.assertInvoiceStageGates(
-        manager.getRepository(Invoice),
-        job.id,
-        toStage,
-      );
-
-      const previousStage = job.jobStatus;
-      job.jobStatus = toStage;
-      // Keep the kanban column in sync with the status column — the two must
-      // never diverge (updateJobPipeline reads/writes pipelineStage).
-      if ((job.pipelineStage as JobPipelineStage) !== toStage) {
-        // Append at the end of the destination column, consistent with
-        // updateJobPipeline when no explicit position is requested.
-        job.pipelineStage = toStage;
-        job.pipelinePosition = await jobsRepo.count({
-          where: { pipelineStage: toStage, id: Not(job.id) },
-        });
-      }
-      await jobsRepo.save(job);
-
-      await this.jobAuditLogs.logWithManager(manager, {
-        jobId: job.id,
-        performedById,
-        action: JobAuditAction.JOB_STATUS_CHANGED,
-        field: 'jobStatus',
-        oldValue: previousStage,
-        newValue: toStage,
-        metadata: {
-          source: 'pipeline_drag_drop',
-          overridePreMeterLock:
-            toStage === JobPipelineStage.INSTALLED && overridePreMeterLock,
-        },
-      });
-
-      return this.findOneOrFail(jobsRepo, id, viewer);
-    });
+    return this.updateJobPipeline(
+      id,
+      dto,
+      performedByRole,
+      performedById,
+      jobScope,
+    );
   }
 
   /**
@@ -1005,27 +961,6 @@ export class JobsService {
       batterySizeKwh: hasBattery ? totalBatteryCapacityKwh : undefined,
       projectPrice,
     };
-  }
-
-  private hasPreMeterApprovalForInstall(stage: JobPipelineStage): boolean {
-    const stageOrder: JobPipelineStage[] = [
-      JobPipelineStage.LEAD,
-      JobPipelineStage.QUOTED,
-      JobPipelineStage.WON,
-      JobPipelineStage.PRE_METER_SUBMITTED,
-      JobPipelineStage.PRE_METER_APPROVED,
-      JobPipelineStage.SCHEDULED,
-      JobPipelineStage.INSTALLED,
-      JobPipelineStage.POST_METER_SUBMITTED,
-      JobPipelineStage.COMPLETED,
-      JobPipelineStage.INVOICED,
-      JobPipelineStage.PAID,
-    ];
-
-    return (
-      stageOrder.indexOf(stage) >=
-      stageOrder.indexOf(JobPipelineStage.PRE_METER_APPROVED)
-    );
   }
 
   private async buildJobDetailResponse(
@@ -2229,26 +2164,13 @@ export class JobsService {
         }
       }
 
-      if (
-        actualFromStage !== actualToStage &&
-        reachesForward(JobPipelineStage.PRE_METER_APPROVED)
-      ) {
-        const preMeterApplication = await meterApplicationsRepo.findOne({
-          where: { jobId, type: 'pre_meter' },
-          order: { createdAt: 'DESC' },
-        });
-
-        if (preMeterApplication && preMeterApplication.status !== 'approved') {
-          const today = new Date().toISOString().slice(0, 10);
-          preMeterApplication.status = 'approved';
-          preMeterApplication.approvalDate = today;
-          preMeterApplication.approvedByUserId = userId;
-          preMeterApplication.rejectedAt = null;
-          preMeterApplication.rejectedByUserId = null;
-          preMeterApplication.rejectionReason = null;
-          await meterApplicationsRepo.save(preMeterApplication);
-        }
-      }
+      // BE-JOBS-01: moving into/through `pre_meter_approved` must NOT approve
+      // the pre-meter application. Approval is an explicit, permissioned action
+      // on the meter application (PATCH /meter-applications/:id) — a stage drag
+      // may only leave it *submitted*. The `installed` gate above enforces the
+      // real approval, so a non-admin cannot advance past the pre-meter lock by
+      // dragging. (Previously this block silently stamped the mover as
+      // approver, defeating the review/lock workflow.)
 
       if (
         actualFromStage !== actualToStage &&
@@ -2290,29 +2212,9 @@ export class JobsService {
         }
       }
 
-      if (
-        actualFromStage !== actualToStage &&
-        reachesForward(JobPipelineStage.COMPLETED)
-      ) {
-        const postMeterApplication = await meterApplicationsRepo.findOne({
-          where: { jobId, type: 'post_meter' },
-          order: { createdAt: 'DESC' },
-        });
-
-        if (
-          postMeterApplication &&
-          postMeterApplication.status !== 'approved'
-        ) {
-          const today = new Date().toISOString().slice(0, 10);
-          postMeterApplication.status = 'approved';
-          postMeterApplication.approvalDate = today;
-          postMeterApplication.approvedByUserId = userId;
-          postMeterApplication.rejectedAt = null;
-          postMeterApplication.rejectedByUserId = null;
-          postMeterApplication.rejectionReason = null;
-          await meterApplicationsRepo.save(postMeterApplication);
-        }
-      }
+      // BE-JOBS-01: same rule for the post-meter application — advancing into/
+      // through `completed` must NOT auto-approve it. Post-meter approval stays
+      // an explicit action on the meter application.
 
       await timelineRepository.save(
         timelineRepository.create({

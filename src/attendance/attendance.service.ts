@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Readable } from 'node:stream';
-import { DataSource, IsNull, Repository } from 'typeorm';
+import { DataSource, IsNull, QueryFailedError, Repository } from 'typeorm';
 import { Assignment } from '../assignments/entities/assignment.entity';
 import { File as FileEntity } from '../files/entities/file.entity';
 import { FilesStorageService } from '../files/files-storage.service';
@@ -184,20 +184,20 @@ export class AttendanceService {
     });
 
     if (openRecord) {
-      const jobLabel = await this.buildJobLabel(
-        openRecord.jobId,
-        openRecord.job,
-      );
-      throw new ConflictException({
-        message: `You're already clocked in to ${jobLabel}. Please clock out first.`,
-        code: 'CONFLICT',
-      });
+      throw await this.buildAlreadyClockedInError(openRecord);
     }
 
-    const created = await this.dataSource.transaction(async (manager) => {
+    let created: AttendanceRecord;
+    try {
+      created = await this.dataSource.transaction(async (manager) => {
       const attendanceRepository = manager.getRepository(AttendanceRecord);
       const timelineRepository = manager.getRepository(TimelineEvent);
       const now = new Date();
+      // BE-ATTEND-02: lat/lng/accuracy/locationStatus are client-reported and
+      // cannot be server-verified. They are already bounds-checked in the DTO
+      // (lat -90..90, lng -180..180) and are persisted verbatim as advisory
+      // data; the geofence outcome is derived server-side, not trusted from the
+      // client.
       const record = attendanceRepository.create({
         jobId,
         staffId: actor.userId,
@@ -231,11 +231,49 @@ export class AttendanceService {
       );
 
       return saved;
-    });
+      });
+    } catch (error) {
+      // BE-ATTEND-03: a concurrent clock-in that wins the race commits first;
+      // this transaction then violates the partial-unique index
+      // `uq_attendance_open_session_per_staff` (one un-clocked-out session per
+      // staff). Map that 23505 to the same 409 "already clocked in" semantics
+      // as the pre-check above, closing the check-then-insert race window.
+      const driverError = (
+        error as QueryFailedError & { driverError?: { code?: string } }
+      ).driverError;
+      if (error instanceof QueryFailedError && driverError?.code === '23505') {
+        const conflicting = await this.attendanceRepo.findOne({
+          where: { staffId: actor.userId, clockOutAt: IsNull() },
+          relations: { job: true },
+          order: { clockInAt: 'DESC' },
+        });
+        if (conflicting) {
+          throw await this.buildAlreadyClockedInError(conflicting);
+        }
+        throw new ConflictException({
+          message: `You're already clocked in. Please clock out first.`,
+          code: 'CONFLICT',
+        });
+      }
+      throw error;
+    }
 
     await this.sendAttendanceEventNotifications(created, 'clock_in');
 
     return this.toRecordResponse(created);
+  }
+
+  private async buildAlreadyClockedInError(
+    openRecord: AttendanceRecord,
+  ): Promise<ConflictException> {
+    const jobLabel = await this.buildJobLabel(
+      openRecord.jobId,
+      openRecord.job,
+    );
+    return new ConflictException({
+      message: `You're already clocked in to ${jobLabel}. Please clock out first.`,
+      code: 'CONFLICT',
+    });
   }
 
   async clockOut(

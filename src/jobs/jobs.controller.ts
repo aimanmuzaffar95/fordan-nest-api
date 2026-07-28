@@ -150,6 +150,11 @@ export class JobsController {
       dto.toStage,
       dto.overridePreMeterLock ?? false,
       viewer.jobScope,
+      {
+        backstageReason: dto.backstageReason,
+        preMeterSubmittedDate: dto.preMeterSubmittedDate,
+        postMeterSubmittedDate: dto.postMeterSubmittedDate,
+      },
     );
   }
 
