@@ -14,14 +14,13 @@ import { ATTENDANCE_LOCATION_STATUSES } from '../attendance-location-status.enum
 @Entity('attendance_records')
 @Index('idx_attendance_job_id', ['jobId'])
 @Index('idx_attendance_staff_id', ['staffId'])
-// BE-ATTEND-03: at most one open (un-clocked-out) session per staff. Enforced
-// as a partial unique index so concurrent clock-ins cannot both insert an open
-// record; the service maps the resulting 23505 to a 409. Mirrored by migration
-// 20260728-AddAttendanceOpenSessionUniqueIndex for non-synchronize environments.
-@Index('uq_attendance_open_session_per_staff', ['staffId'], {
-  unique: true,
-  where: '"clockOutAt" IS NULL',
-})
+// BE-ATTEND-03: at most one open (un-clocked-out) session per staff, enforced
+// by the PARTIAL unique index in migration
+// 20260728-AddAttendanceOpenSessionUniqueIndex (Postgres). Deliberately NOT
+// declared as an @Index here: MySQL/MariaDB has no partial indexes, so
+// synchronize would flatten it into a full unique index on staffId — which
+// fails on real data and would be semantically wrong. On MySQL the service's
+// pre-check remains the only guard.
 export class AttendanceRecord {
   @PrimaryGeneratedColumn('uuid')
   id: string;
