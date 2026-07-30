@@ -1,53 +1,81 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{brandHeaderName}}</title>
-  </head>
-  <body style="margin: 0; padding: 12px; background: {{pageBgHex}}; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;">
-    <div style="max-width: 560px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid {{borderHex}};">
-      <div style="padding: 16px 20px; border-bottom: 1px solid {{borderHex}};">
-        {{#if brandLogoUrl}}
-          <div style="display:flex; align-items:center; gap:12px;">
-            <img src="{{brandLogoUrl}}" alt="{{brandHeaderName}} logo" style="height:34px; width:auto; display:block;" />
-            <div style="font-size: 22px; font-weight: 800; color: {{primaryHex}};">{{brandHeaderName}}</div>
-          </div>
-        {{else}}
-          <div style="font-size: 22px; font-weight: 800; color: {{primaryHex}};">{{brandHeaderName}}</div>
-        {{/if}}
-      </div>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <title>{{brandHeaderName}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:{{pageBgHex}};font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:{{bodyTextHex}};-webkit-text-size-adjust:100%;">
+  <!-- Preheader: shows in inbox preview, hidden in the email body -->
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{{compiledHeroIntro}}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
 
-      <div style="padding: 20px; background: {{heroBgHex}};">
-        <p style="margin: 0 0 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: {{heroAccentHex}};">
-          {{compiledKicker}}
-        </p>
-        <h1 style="margin: 0 0 10px; font-size: 20px; font-weight: 800; color: #fff;">{{compiledHeroTitle}}</h1>
-        <p style="margin: 0; font-size: 15px; line-height: 1.5; color: {{heroLeadHex}};">{{compiledHeroIntro}}</p>
-      </div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:{{pageBgHex}};">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid {{borderHex}};">
 
-      <div style="padding: 20px; color: {{bodyTextHex}};">
-        <div style="padding: 14px; border-radius: 10px; background: {{cardBgHex}}; border: 1px solid {{borderHex}}; color: {{bodyMutedHex}}; line-height: 1.6;">
-          {{{compiledBodyHtml}}}
-        </div>
+          <!-- Header -->
+          <tr>
+            <td style="padding:18px 28px;border-bottom:1px solid {{borderHex}};">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  {{#if brandLogoUrl}}
+                  <td style="vertical-align:middle;padding-right:12px;">
+                    <img src="{{brandLogoUrl}}" alt="{{brandHeaderName}}" height="30" style="height:30px;max-width:160px;display:block;border:0;">
+                  </td>
+                  {{/if}}
+                  <td style="vertical-align:middle;font-size:20px;line-height:1.2;font-weight:800;color:{{primaryHex}};letter-spacing:-0.02em;">{{brandHeaderName}}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-        {{#if ctaUrl}}
-          {{#if ctaLabel}}
-            <div style="margin-top: 14px;">
-              <a href="{{ctaUrl}}" style="display: inline-block; padding: 12px 18px; border-radius: 10px; background: {{primaryHex}}; color: #fff; font-weight: 700; text-decoration: none;">
-                {{ctaLabel}}
-              </a>
-            </div>
-          {{/if}}
-        {{/if}}
-      </div>
+          <!-- Hero -->
+          <tr>
+            <td style="padding:28px 28px;background-color:{{heroBgHex}};">
+              <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:{{heroAccentHex}};">{{compiledKicker}}</p>
+              <h1 style="margin:0 0 10px;font-size:22px;line-height:1.3;font-weight:800;color:#ffffff;">{{compiledHeroTitle}}</h1>
+              <p style="margin:0;font-size:15px;line-height:1.6;color:{{heroLeadHex}};">{{compiledHeroIntro}}</p>
+            </td>
+          </tr>
 
-      <div style="padding: 16px 20px; background: {{cardBgHex}}; font-size: 12px; color: #6b7280; border-top: 1px solid {{borderHex}};">
-        <div style="font-weight: 800; margin-bottom: 8px; color: {{heroBgHex}};">{{footerBrandName}}</div>
-        <p style="margin: 0 0 6px;">{{compiledFooterLine1}}</p>
-        <p style="margin: 0;">{{compiledFooterLine2}}</p>
-      </div>
-    </div>
-  </body>
+          <!-- Body -->
+          <tr>
+            <td style="padding:24px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:{{cardBgHex}};border:1px solid {{borderHex}};border-radius:10px;">
+                <tr>
+                  <td style="padding:16px 18px;font-size:14px;line-height:1.65;color:{{bodyMutedHex}};">{{{compiledBodyHtml}}}</td>
+                </tr>
+              </table>
+
+              {{#if ctaUrl}}
+                {{#if ctaLabel}}
+                <!-- CTA button (table-based for Outlook) -->
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 0;">
+                  <tr>
+                    <td style="border-radius:10px;background-color:{{primaryHex}};">
+                      <a href="{{ctaUrl}}" target="_blank" style="display:inline-block;padding:12px 22px;border-radius:10px;font-size:15px;font-weight:700;line-height:1.2;color:#ffffff;text-decoration:none;">{{ctaLabel}}</a>
+                    </td>
+                  </tr>
+                </table>
+                {{/if}}
+              {{/if}}
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:18px 28px;background-color:{{cardBgHex}};border-top:1px solid {{borderHex}};">
+              <p style="margin:0 0 8px;font-size:13px;line-height:1.2;font-weight:800;color:{{heroBgHex}};">{{footerBrandName}}</p>
+              <p style="margin:0 0 4px;font-size:12px;line-height:1.6;color:{{bodyMutedHex}};">{{compiledFooterLine1}}</p>
+              <p style="margin:0;font-size:12px;line-height:1.6;color:{{bodyMutedHex}};">{{compiledFooterLine2}}</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
 </html>
-

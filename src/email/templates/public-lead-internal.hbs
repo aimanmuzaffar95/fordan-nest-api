@@ -1,33 +1,66 @@
 <!DOCTYPE html>
-<html>
-<body style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 24px;">
-  <h2 style="color: #1a56db;">New Web Lead</h2>
-  <table style="width: 100%; border-collapse: collapse;">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="x-apple-disable-message-reformatting">
+  <title>New web lead</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f2f4f6;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#191c1e;-webkit-text-size-adjust:100%;">
+  <!-- Preheader: shows in inbox preview, hidden in the email body -->
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">New web lead: {{firstName}} {{lastName}} — {{systemIntent}}.&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f2f4f6;">
     <tr>
-      <td style="padding: 8px 0; font-weight: bold; width: 140px;">Name</td>
-      <td style="padding: 8px 0;">{{firstName}} {{lastName}}</td>
-    </tr>
-    <tr style="background: #f9fafb;">
-      <td style="padding: 8px 0; font-weight: bold;">Email</td>
-      <td style="padding: 8px 0;">{{email}}</td>
-    </tr>
-    <tr>
-      <td style="padding: 8px 0; font-weight: bold;">Phone</td>
-      <td style="padding: 8px 0;">{{phone}}</td>
-    </tr>
-    <tr style="background: #f9fafb;">
-      <td style="padding: 8px 0; font-weight: bold;">Suburb</td>
-      <td style="padding: 8px 0;">{{suburb}}{{#if postcode}} {{postcode}}{{/if}}</td>
-    </tr>
-    <tr>
-      <td style="padding: 8px 0; font-weight: bold;">Interest</td>
-      <td style="padding: 8px 0;">{{systemIntent}}</td>
+      <td align="center" style="padding:24px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #eceef0;">
+
+          <!-- Header -->
+          <tr>
+            <td style="padding:20px 32px;border-bottom:1px solid #eceef0;">
+              <p style="margin:0 0 2px;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#855300;">Fordan Solar CRM</p>
+              <p style="margin:0;font-size:20px;line-height:1.2;font-weight:800;color:#191c1e;">New web lead</p>
+            </td>
+          </tr>
+
+          <!-- Lead details -->
+          <tr>
+            <td style="padding:24px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size:14px;line-height:1.5;color:#191c1e;border-collapse:collapse;">
+                <tr>
+                  <td width="140" style="padding:8px 12px 8px 0;border-bottom:1px solid #eceef0;color:#534434;white-space:nowrap;">Name</td>
+                  <td style="padding:8px 0;border-bottom:1px solid #eceef0;font-weight:700;">{{firstName}} {{lastName}}</td>
+                </tr>
+                <tr>
+                  <td width="140" style="padding:8px 12px 8px 0;border-bottom:1px solid #eceef0;color:#534434;white-space:nowrap;">Email</td>
+                  <td style="padding:8px 0;border-bottom:1px solid #eceef0;"><a href="mailto:{{email}}" style="color:#855300;">{{email}}</a></td>
+                </tr>
+                <tr>
+                  <td width="140" style="padding:8px 12px 8px 0;border-bottom:1px solid #eceef0;color:#534434;white-space:nowrap;">Phone</td>
+                  <td style="padding:8px 0;border-bottom:1px solid #eceef0;">{{phone}}</td>
+                </tr>
+                <tr>
+                  <td width="140" style="padding:8px 12px 8px 0;border-bottom:1px solid #eceef0;color:#534434;white-space:nowrap;">Suburb</td>
+                  <td style="padding:8px 0;border-bottom:1px solid #eceef0;">{{suburb}}{{#if postcode}} {{postcode}}{{/if}}</td>
+                </tr>
+                <tr>
+                  <td width="140" style="padding:8px 12px 8px 0;color:#534434;white-space:nowrap;">Interest</td>
+                  <td style="padding:8px 0;font-weight:700;">{{systemIntent}}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:16px 32px;background-color:#f7f9fb;border-top:1px solid #eceef0;">
+              <p style="margin:0;font-size:12px;line-height:1.7;color:#534434;">Customer ID: {{customerId}}<br>Job ID: {{jobId}}</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
     </tr>
   </table>
-  <hr style="margin: 24px 0; border: none; border-top: 1px solid #e5e7eb;" />
-  <p style="font-size: 12px; color: #9ca3af;">
-    Customer ID: {{customerId}}<br />
-    Job ID: {{jobId}}
-  </p>
 </body>
 </html>

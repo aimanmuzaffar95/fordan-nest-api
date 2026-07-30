@@ -42,7 +42,9 @@ export class EmployeeForm {
   @Column({ type: 'varchar', length: 255 })
   email: string;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  // text columns below (not varchar): employee_forms' combined inline varchar
+  // width exceeded MariaDB's 8126-byte row cap, failing every table rebuild.
+  @Column({ type: 'text', nullable: true })
   homeAddress: string | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
@@ -54,7 +56,7 @@ export class EmployeeForm {
   @Column({ type: 'varchar', length: 20, nullable: true })
   postcode: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   accountName: string | null;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
@@ -66,10 +68,10 @@ export class EmployeeForm {
   @Column({ type: 'boolean', default: false })
   hasSuperannuation: boolean;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   superFundName: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   superMemberNumber: string | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
@@ -84,7 +86,7 @@ export class EmployeeForm {
   @Column({ type: 'varchar', length: 30, nullable: true })
   emergencyContactPhoneHome: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   emergencyContactAddress: string | null;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })

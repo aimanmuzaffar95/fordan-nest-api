@@ -62,7 +62,9 @@ export class CustomerMessagingRendererService {
       );
       return html;
     }
-    const block = `<div class="crm-email-signature" style="margin-top:24px;">${compiled}</div>`;
+    // Constrain to the same 600px column as the templates so the signature
+    // lines up with the email card instead of spanning the full page bg.
+    const block = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:0 12px 24px;"><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;"><tr><td class="crm-email-signature" style="font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;text-align:left;">${compiled}</td></tr></table></td></tr></table>`;
     const lower = html.toLowerCase();
     const idx = lower.lastIndexOf('</body>');
     if (idx !== -1) {

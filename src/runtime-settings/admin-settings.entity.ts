@@ -48,7 +48,9 @@ export class AdminSettings {
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
   quickLeadDefaultProjectPrice: string;
 
-  @Column({ type: 'varchar', length: 512, nullable: true })
+  // text (not varchar): admin_settings' combined inline varchar width sat at
+  // MariaDB's 8126-byte row cap, making every table rebuild fail in prod.
+  @Column({ type: 'text', nullable: true })
   esignPublicBaseUrl: string | null;
 
   @Column({ type: 'int', default: 14 })
@@ -66,7 +68,7 @@ export class AdminSettings {
   @Column({ type: 'varchar', length: 255, nullable: true })
   smtpUser: string | null;
 
-  @Column({ type: 'varchar', length: 512, nullable: true })
+  @Column({ type: 'text', nullable: true })
   smtpPass: string | null;
 
   @Column({ type: 'boolean', nullable: true })

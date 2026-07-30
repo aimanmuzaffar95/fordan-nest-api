@@ -22,10 +22,12 @@ export class OrganizationProfile {
   @Column({ type: 'varchar', length: 255, nullable: true })
   tradingName: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  // text columns below (not varchar): organization_profile's combined inline
+  // varchar width exceeded MariaDB's 8126-byte row cap, failing every rebuild.
+  @Column({ type: 'text', nullable: true })
   registeredAddressLine1: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   registeredAddressLine2: string | null;
 
   @Column({ type: 'varchar', length: 120, nullable: true })
@@ -43,10 +45,10 @@ export class OrganizationProfile {
   @Column({ type: 'boolean', default: true })
   billingSameAsRegistered: boolean;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   billingAddressLine1: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   billingAddressLine2: string | null;
 
   @Column({ type: 'varchar', length: 120, nullable: true })
@@ -76,7 +78,7 @@ export class OrganizationProfile {
   @Column({ type: 'varchar', length: 160, nullable: true })
   documentsContactName: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   documentsContactEmail: string | null;
 
   @Column({ type: 'varchar', length: 40, nullable: true })

@@ -115,7 +115,9 @@ export class Job {
   @Column({ type: resolveTimestampColumnType(), nullable: true })
   lostAt: Date | null;
 
-  @Column({ type: 'varchar', length: 500, nullable: true })
+  // text (not varchar): jobs sits near MariaDB's 8126-byte inline row cap; a
+  // varchar(500) addition tips the rebuild over (free text anyway).
+  @Column({ type: 'text', nullable: true })
   lostReason: string | null;
 
   @Column({ type: 'uuid', nullable: true })
