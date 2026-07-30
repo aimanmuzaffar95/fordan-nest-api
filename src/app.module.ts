@@ -75,6 +75,8 @@ import { DeviceRegistration } from './devices/entities/device-registration.entit
 import { DocumentsModule } from './documents/documents.module';
 import { JobGeneratedDocument } from './documents/entities/job-generated-document.entity';
 import { JobDocumentSignRequest } from './documents/entities/job-document-sign-request.entity';
+import { MailModule } from './mail/mail.module';
+import { LinkedMailbox } from './mail/linked-mailbox.entity';
 import { loadEnvFile } from './common/load-env.util';
 import { getSettingsEncryptionKey } from './common/crypto.util';
 
@@ -207,6 +209,7 @@ getSettingsEncryptionKey();
         JobGeneratedDocument,
         JobDocumentSignRequest,
         McpAccessKey,
+        LinkedMailbox,
       ],
       migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,
@@ -248,6 +251,7 @@ getSettingsEncryptionKey();
     EquipmentModule,
     DevicesModule,
     DocumentsModule,
+    MailModule,
   ],
   controllers: [AppController],
   providers: [AppService],

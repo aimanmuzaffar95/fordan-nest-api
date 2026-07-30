@@ -31,6 +31,8 @@ import { RecordPaymentDto } from './dto/record-payment.dto';
 import { DocumentNumberingService } from '../document-numbering/document-numbering.service';
 import { EmailService } from '../email/email.service';
 import { CustomerMessagingRendererService } from '../email/customer-messaging-renderer.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
 
 type InvoiceViewer = {
   userId: string;
@@ -66,8 +68,45 @@ export class InvoicesService {
     private readonly docNumbers: DocumentNumberingService,
     private readonly email: EmailService,
     private readonly customerMessaging: CustomerMessagingRendererService,
+    private readonly notifications: NotificationsService,
     private readonly dataSource: DataSource,
   ) {}
+
+  /** Notify admins + the job's manager that an invoice is fully paid. Never throws. */
+  private async notifyInvoicePaid(
+    invoice: Invoice,
+    amountPaid: string,
+    actorUserId?: string,
+  ): Promise<void> {
+    try {
+      const job = invoice.jobId
+        ? await this.jobsRepo.findOne({ where: { id: invoice.jobId } })
+        : null;
+      const payload = {
+        type: NOTIFICATION_TYPE.INVOICE_PAID,
+        title: 'Invoice paid',
+        body: `Invoice ${invoice.invoiceNumber} fully paid ($${amountPaid})`,
+        metadata: {
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          jobId: invoice.jobId,
+          orderNumber: job?.orderNumber ?? null,
+        },
+        dedupeKey: `invoice-paid:${invoice.id}:admins`,
+      };
+      await this.notifications.sendToRole(UserRole.ADMIN, payload, {
+        excludeUserIds: actorUserId ? [actorUserId] : [],
+      });
+      if (job?.managerId && job.managerId !== actorUserId) {
+        await this.notifications.sendToUser(job.managerId, {
+          ...payload,
+          dedupeKey: `invoice-paid:${invoice.id}:manager`,
+        });
+      }
+    } catch (err) {
+      this.logger.warn(`invoice-paid notification failed: ${String(err)}`);
+    }
+  }
 
   async list(query: QueryInvoicesDto, viewer?: InvoiceViewer) {
     const qb = this.invoicesRepo
@@ -372,6 +411,7 @@ export class InvoicesService {
         },
         viewer?.userId,
       );
+      await this.notifyInvoicePaid(invoice, updatedAmountPaid, viewer?.userId);
 
       // Customer payment receipt (best-effort). The payment row is already
       // committed — a failed receipt email must not make the recorded payment

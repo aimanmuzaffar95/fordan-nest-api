@@ -272,6 +272,30 @@ export class AlertsService implements OnModuleInit, OnModuleDestroy {
     }
 
     for (const alert of newlyCreatedAlerts) {
+      // Overdue invoices notify regardless of severity — admins asked for a
+      // dedicated invoice alert stream on mobile, not just high-sev alerts.
+      if (alert.type === ALERT_TYPE.INVOICE_NOT_PAID_AFTER_X_DAYS) {
+        const overdueJob = jobs.find((job) => job.id === alert.jobId);
+        const payload = {
+          type: NOTIFICATION_TYPE.INVOICE_OVERDUE,
+          title: 'Invoice overdue',
+          body: alert.message,
+          metadata: {
+            alertId: alert.id,
+            jobId: alert.jobId,
+            orderNumber: overdueJob?.orderNumber ?? null,
+          },
+          dedupeKey: `invoice-overdue:${alert.id}:admins`,
+        };
+        await this.notificationsService.sendToRole(UserRole.ADMIN, payload);
+        if (overdueJob?.managerId) {
+          await this.notificationsService.sendToUser(overdueJob.managerId, {
+            ...payload,
+            dedupeKey: `invoice-overdue:${alert.id}:manager`,
+          });
+        }
+      }
+
       if (alert.severity !== 'high') {
         continue;
       }
