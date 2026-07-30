@@ -193,6 +193,7 @@ export class InvoicesService {
     invoice.issueDate = dto.issueDate;
     invoice.dueDate = dto.dueDate;
     invoice.status = InvoiceStatus.DRAFT;
+    invoice.invoiceType = dto.type ?? 'custom';
     invoice.notes = dto.notes ?? null;
     invoice.terms = dto.terms ?? null;
     invoice.invoiceNumber = await this.docNumbers.allocateNextInvoiceNumber();

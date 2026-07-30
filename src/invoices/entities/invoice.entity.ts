@@ -45,6 +45,10 @@ export class Invoice {
   @Column({ type: 'date' })
   dueDate: string;
 
+  // Categorization chosen at creation (deposit / final / custom).
+  @Column({ type: 'varchar', length: 20, default: 'custom' })
+  invoiceType: string;
+
   @Column({
     type: 'varchar',
     length: 20,

@@ -3,6 +3,7 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsDateString,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -49,6 +50,10 @@ export class CreateInvoiceDto {
 
   @IsDateString()
   dueDate: string;
+
+  @IsIn(['deposit', 'final', 'custom'])
+  @IsOptional()
+  type?: string;
 
   @IsArray()
   @ArrayNotEmpty()
