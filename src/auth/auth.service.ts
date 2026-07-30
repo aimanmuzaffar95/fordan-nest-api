@@ -140,7 +140,7 @@ export class AuthService implements OnModuleInit {
         });
       }
       throw new UnauthorizedException(
-        'Account temporarily locked due to repeated failed logins. Try again shortly.',
+        `Account locked after too many failed attempts. Try again in about ${LOGIN_LOCKOUT_MINUTES} minutes.`,
       );
     }
 
@@ -167,7 +167,20 @@ export class AuthService implements OnModuleInit {
           metadata: { reason: shouldLock ? 'invalid_password_locked' : 'invalid_password', attempts },
         });
       }
-      throw new UnauthorizedException('Invalid credentials');
+      // On the attempt that trips the lock, tell the user immediately (with the
+      // remaining count when they're getting close) rather than a bare "Invalid
+      // credentials" that hides the fact they just locked themselves out.
+      if (shouldLock) {
+        throw new UnauthorizedException(
+          `Account locked after ${MAX_FAILED_LOGIN_ATTEMPTS} failed attempts. Try again in about ${LOGIN_LOCKOUT_MINUTES} minutes.`,
+        );
+      }
+      const remaining = MAX_FAILED_LOGIN_ATTEMPTS - attempts;
+      throw new UnauthorizedException(
+        remaining <= 2
+          ? `Invalid credentials. ${remaining} attempt${remaining === 1 ? '' : 's'} left before the account is locked.`
+          : 'Invalid credentials',
+      );
     }
 
     // Successful login clears any accumulated failures / lock.
