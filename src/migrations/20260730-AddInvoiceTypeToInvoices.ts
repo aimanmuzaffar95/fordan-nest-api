@@ -4,7 +4,7 @@ import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
  * Adds `invoiceType` to `invoices` (deposit / final / custom) so the type
  * chosen on the generate page persists instead of falling back to 'custom'.
  */
-export class AddInvoiceTypeToInvoices20260730_1700000000900 implements MigrationInterface {
+export class AddInvoiceTypeToInvoices20260730_1700000001100 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasColumn('invoices', 'invoiceType'))) {
       await queryRunner.addColumn(
