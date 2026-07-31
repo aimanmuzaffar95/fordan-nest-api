@@ -182,4 +182,8 @@ export class UpdateAdminSettingsDto {
   @IsOptional()
   @IsObject()
   documentNumberingSettings?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  complianceChecklistConfig?: Record<string, unknown>;
 }

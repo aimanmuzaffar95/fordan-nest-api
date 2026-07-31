@@ -59,6 +59,12 @@ import {
   validateDocumentNumberingSettings,
 } from '../document-numbering/document-numbering.validate';
 import type { DocumentNumberingSettings } from '../document-numbering/document-numbering.types';
+import {
+  mergeComplianceChecklistConfig,
+  mergeComplianceChecklistPatch,
+  validateComplianceChecklistConfig,
+} from '../compliance-checklist/compliance-checklist.config';
+import type { ComplianceChecklistConfig } from '../compliance-checklist/compliance-checklist.config';
 
 export type AdminSettingsPayload = {
   overridePreMeter: boolean;
@@ -85,6 +91,7 @@ export type AdminSettingsPayload = {
   companyProfileSettings: CompanyProfileSettings;
   billingSettings: BillingSettings;
   documentNumberingSettings: DocumentNumberingSettings;
+  complianceChecklistConfig: ComplianceChecklistConfig;
 };
 
 @Injectable()
@@ -127,6 +134,8 @@ export class RuntimeSettingsService {
     delete patch['billingSettings'];
     const numberingRaw = patch['documentNumberingSettings'];
     delete patch['documentNumberingSettings'];
+    const checklistRaw = patch['complianceChecklistConfig'];
+    delete patch['complianceChecklistConfig'];
     const cleaned = Object.fromEntries(
       Object.entries(patch).filter(([, v]) => v !== undefined),
     );
@@ -187,6 +196,14 @@ export class RuntimeSettingsService {
       const normalized = normalizeDocumentNumberingSettings(next);
       validateDocumentNumberingSettings(normalized);
       settings.documentNumberingSettings = normalized;
+    }
+    if (checklistRaw !== undefined) {
+      const current = mergeComplianceChecklistConfig(
+        settings.complianceChecklistConfig,
+      );
+      const next = mergeComplianceChecklistPatch(current, checklistRaw);
+      validateComplianceChecklistConfig(next);
+      settings.complianceChecklistConfig = next;
     }
 
     const changedFields = Object.keys(updates as Record<string, unknown>)
@@ -379,6 +396,9 @@ export class RuntimeSettingsService {
       billingSettings: mergeBillingSettings(settings.billingSettings),
       documentNumberingSettings: mergeDocumentNumberingSettings(
         settings.documentNumberingSettings,
+      ),
+      complianceChecklistConfig: mergeComplianceChecklistConfig(
+        settings.complianceChecklistConfig,
       ),
     };
   }

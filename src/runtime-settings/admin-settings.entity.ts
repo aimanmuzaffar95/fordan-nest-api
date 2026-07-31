@@ -13,6 +13,7 @@ import type { CrmAppearanceSettings } from '../crm-appearance/crm-appearance.typ
 import type { CompanyProfileSettings } from '../company-profile/company-profile.types';
 import type { BillingSettings } from '../billing/billing-settings.types';
 import type { DocumentNumberingSettings } from '../document-numbering/document-numbering.types';
+import type { ComplianceChecklistConfig } from '../compliance-checklist/compliance-checklist.config';
 
 export const ADMIN_SETTINGS_SINGLETON_ID = 'global';
 
@@ -94,6 +95,9 @@ export class AdminSettings {
 
   @Column({ type: 'json', nullable: true })
   documentNumberingSettings: DocumentNumberingSettings | null;
+
+  @Column({ type: 'json', nullable: true })
+  complianceChecklistConfig: ComplianceChecklistConfig | null;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })
