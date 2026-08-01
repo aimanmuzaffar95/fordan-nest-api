@@ -18,6 +18,8 @@ const IMAP_TIMEOUT_MS = 10_000;
 const SYNC_WINDOW = 200;
 /** Newest messages to eagerly fetch full bodies for. */
 const BODY_WINDOW = 50;
+/** Max full-body fetches per sync run (throttle-safe on shared hosts). */
+const BODY_FETCH_PER_RUN = 8;
 const CRON_INTERVAL_MS = 5 * 60_000;
 const CRON_SKIP_IF_SYNCED_WITHIN_MS = 2 * 60_000;
 
@@ -475,11 +477,18 @@ export class MailSyncService implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      // Fetch full bodies for the newest BODY_WINDOW messages lacking one.
+      // Fetch full bodies for the newest messages lacking one. This shared host
+      // throttles many commands per connection (the envelope fetch already used
+      // a lot), so cap bodies per run and pace them — cron backfills the rest on
+      // later runs, and the detail view fetches on demand. Stop early after
+      // consecutive failures rather than hammering a throttled connection.
       const newestUids = [...summaries.keys()]
         .sort((a, b) => b - a)
         .slice(0, BODY_WINDOW);
+      let fetchedThisRun = 0;
+      let consecutiveFailures = 0;
       for (const uid of newestUids) {
+        if (fetchedThisRun >= BODY_FETCH_PER_RUN) break;
         const row =
           existingByUid.get(uid) ??
           (await this.messages.findOne({
@@ -494,9 +503,13 @@ export class MailSyncService implements OnModuleInit, OnModuleDestroy {
           );
           if (full && full.source) {
             await this.storeParsedBody(row, full.source);
+            fetchedThisRun += 1;
+            consecutiveFailures = 0;
+            await new Promise((r) => setTimeout(r, 250));
           }
         } catch {
-          // body fetch failed — summary row stays; detail view will retry
+          // body fetch failed — summary row stays; detail view will retry.
+          if (++consecutiveFailures >= 3) break;
         }
       }
     } finally {
