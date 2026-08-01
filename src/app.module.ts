@@ -52,6 +52,7 @@ import { SettingsAuditLog } from './runtime-settings/settings-audit-log.entity';
 import { ComplianceModule } from './compliance/compliance.module';
 import { ComplianceFormTemplate } from './compliance/entities/compliance-form-template.entity';
 import { JobComplianceSubmission } from './compliance/entities/job-compliance-submission.entity';
+import { JobCecItemTick } from './compliance/entities/job-cec-item-tick.entity';
 import { AlertsModule } from './alerts/alerts.module';
 import { Notification } from './notifications/entities/notification.entity';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -197,6 +198,7 @@ getSettingsEncryptionKey();
         Notification,
         ComplianceFormTemplate,
         JobComplianceSubmission,
+        JobCecItemTick,
         OrganizationProfile,
         SystemAuditLog,
         PermissionRoleProfile,

@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Req,
   UnauthorizedException,
   UseGuards,
@@ -25,6 +26,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/entities/user-role.enum';
 import { ComplianceService } from './compliance.service';
 import { SubmitJobComplianceDto } from './dto/submit-job-compliance.dto';
+import { SetChecklistTickDto } from './dto/set-checklist-tick.dto';
 
 @ApiTags('Job compliance')
 @ApiBearerAuth('JWT')
@@ -53,6 +55,45 @@ export class JobComplianceController {
       throw new UnauthorizedException('Missing authenticated user context');
     }
     return this.compliance.listSubmissionsForJob(jobId, { userId, role });
+  }
+
+  @Get('checklist-ticks')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Manual CEC checklist tick state for a job',
+    description:
+      'Items are defined centrally in admin settings (complianceChecklistConfig); ticks reference their string ids.',
+  })
+  listChecklistTicks(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+    return this.compliance.listChecklistTicks(jobId, { userId, role });
+  }
+
+  @Put('checklist-ticks/:itemId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({ summary: 'Set a manual CEC checklist tick (idempotent upsert)' })
+  setChecklistTick(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: SetChecklistTickDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    if (!userId || !role) {
+      throw new UnauthorizedException('Missing authenticated user context');
+    }
+    return this.compliance.setChecklistTick(jobId, itemId, dto.done, {
+      userId,
+      role,
+    });
   }
 
   @Post('submissions')

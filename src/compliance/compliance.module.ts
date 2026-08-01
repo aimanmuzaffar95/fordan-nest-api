@@ -11,6 +11,7 @@ import { ComplianceTemplatesController } from './compliance-templates.controller
 import { JobComplianceController } from './job-compliance.controller';
 import { ComplianceFormTemplate } from './entities/compliance-form-template.entity';
 import { JobComplianceSubmission } from './entities/job-compliance-submission.entity';
+import { JobCecItemTick } from './entities/job-cec-item-tick.entity';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { JobComplianceSubmission } from './entities/job-compliance-submission.en
     TypeOrmModule.forFeature([
       ComplianceFormTemplate,
       JobComplianceSubmission,
+      JobCecItemTick,
       Job,
       Assignment,
       TimelineEvent,

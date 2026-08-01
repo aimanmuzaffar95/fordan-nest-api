@@ -11,6 +11,7 @@ import { Job } from '../jobs/entities/job.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
+import { JobCecItemTick } from './entities/job-cec-item-tick.entity';
 import type {
   ComplianceFieldDto,
   CreateComplianceTemplateDto,
@@ -62,8 +63,65 @@ export class ComplianceService {
     private readonly assignmentsRepo: Repository<Assignment>,
     @InjectRepository(TimelineEvent)
     private readonly timelineRepo: Repository<TimelineEvent>,
+    @InjectRepository(JobCecItemTick)
+    private readonly cecTicksRepo: Repository<JobCecItemTick>,
     private readonly runtimeSettings: RuntimeSettingsService,
   ) {}
+
+  /** Manual CEC checklist tick state for a job (config-defined string item ids). */
+  async listChecklistTicks(
+    jobId: string,
+    viewer: ComplianceViewer,
+  ): Promise<{
+    items: Array<{
+      itemId: string;
+      done: boolean;
+      doneAt: string | null;
+      doneByUserId: string | null;
+    }>;
+  }> {
+    await this.assertJobAccess(jobId, viewer);
+    const rows = await this.cecTicksRepo.find({ where: { jobId } });
+    return {
+      items: rows.map((r) => ({
+        itemId: r.itemId,
+        done: r.done,
+        doneAt: r.doneAt ? r.doneAt.toISOString() : null,
+        doneByUserId: r.doneByUserId,
+      })),
+    };
+  }
+
+  async setChecklistTick(
+    jobId: string,
+    itemId: string,
+    done: boolean,
+    viewer: ComplianceViewer,
+  ): Promise<{
+    itemId: string;
+    done: boolean;
+    doneAt: string | null;
+    doneByUserId: string | null;
+  }> {
+    if (!/^[a-z0-9_-]{1,64}$/.test(itemId)) {
+      throw new BadRequestException('Invalid checklist item id');
+    }
+    await this.assertJobAccess(jobId, viewer);
+    const existing = await this.cecTicksRepo.findOne({
+      where: { jobId, itemId },
+    });
+    const row = existing ?? this.cecTicksRepo.create({ jobId, itemId });
+    row.done = done;
+    row.doneAt = done ? new Date() : null;
+    row.doneByUserId = done ? viewer.userId : null;
+    const saved = await this.cecTicksRepo.save(row);
+    return {
+      itemId: saved.itemId,
+      done: saved.done,
+      doneAt: saved.doneAt ? saved.doneAt.toISOString() : null,
+      doneByUserId: saved.doneByUserId,
+    };
+  }
 
   normalizeFields(raw: unknown): NormalizedComplianceField[] {
     if (!Array.isArray(raw) || raw.length === 0) {
