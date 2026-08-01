@@ -62,6 +62,13 @@ export class CreateMailboxDto {
   @IsBoolean()
   @IsOptional()
   smtpSecure?: boolean;
+
+  // Full HTML signature, sanitized server-side before storage. Capped so an
+  // over-long payload is rejected with 400 rather than truncated.
+  @IsString()
+  @MaxLength(20000)
+  @IsOptional()
+  signatureHtml?: string;
 }
 
 export class UpdateMailboxDto {
@@ -123,4 +130,10 @@ export class UpdateMailboxDto {
   @IsBoolean()
   @IsOptional()
   active?: boolean;
+
+  // undefined = keep current; '' = clear; otherwise sanitized + stored.
+  @IsString()
+  @MaxLength(20000)
+  @IsOptional()
+  signatureHtml?: string;
 }

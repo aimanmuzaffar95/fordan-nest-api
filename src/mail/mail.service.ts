@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MailMessage } from './mail-message.entity';
 import { MailOutbox } from './mail-outbox.entity';
-import { MailSyncService } from './mail-sync.service';
+import { MailSyncService, sanitizeSignatureHtml } from './mail-sync.service';
 import { ImapFlow } from 'imapflow';
 import * as nodemailer from 'nodemailer';
 import MailComposer = require('nodemailer/lib/mail-composer');
@@ -69,6 +69,7 @@ export class MailService {
       imapPort: box.imapPort,
       smtpHost: box.smtpHost,
       smtpPort: box.smtpPort,
+      signatureHtml: box.signatureHtml,
       active: box.active,
       createdAt: box.createdAt,
     };
@@ -114,7 +115,9 @@ export class MailService {
       smtpHost: dto.smtpHost,
       smtpPort: dto.smtpPort ?? 465,
       smtpSecure: dto.smtpSecure ?? true,
-      signatureHtml: null,
+      signatureHtml: dto.signatureHtml
+        ? sanitizeSignatureHtml(dto.signatureHtml)
+        : null,
       active: true,
     });
     const saved = await this.mailboxes.save(box);
@@ -169,6 +172,13 @@ export class MailService {
     if (dto.smtpPort !== undefined) box.smtpPort = dto.smtpPort;
     if (dto.smtpSecure !== undefined) box.smtpSecure = dto.smtpSecure;
     if (dto.active !== undefined) box.active = dto.active;
+    // undefined = keep; empty string = clear; otherwise sanitize + store.
+    if (dto.signatureHtml !== undefined) {
+      box.signatureHtml =
+        dto.signatureHtml === ''
+          ? null
+          : sanitizeSignatureHtml(dto.signatureHtml);
+    }
 
     const saved = await this.mailboxes.save(box);
     return this.toAdminView(saved, await this.userNameFor(saved.userId));
@@ -254,9 +264,10 @@ export class MailService {
 
   async updateSignature(userId: string, signatureHtml: string) {
     const box = await this.requireMailbox(userId);
-    box.signatureHtml = signatureHtml;
+    const clean = sanitizeSignatureHtml(signatureHtml);
+    box.signatureHtml = clean;
     await this.mailboxes.save(box);
-    return { ok: true };
+    return { ok: true, signatureHtml: clean };
   }
 
   async listFolders(userId: string) {

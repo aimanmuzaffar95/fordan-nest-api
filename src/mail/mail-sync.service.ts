@@ -92,6 +92,84 @@ export function sanitizeMailHtml(html: string): string {
 }
 
 /**
+ * Signature allowlist — slightly more permissive than message bodies: inline
+ * `style` is permitted (signatures are hand-authored, not received), plus a few
+ * formatting tags. Still no script/style/iframe/event-handlers, and dangerous
+ * CSS declarations are stripped in a post-pass. Schemes are limited to
+ * http/https/mailto (images http/https only).
+ */
+const SIGNATURE_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: [
+    'p',
+    'div',
+    'span',
+    'br',
+    'hr',
+    'a',
+    'img',
+    'table',
+    'thead',
+    'tbody',
+    'tfoot',
+    'tr',
+    'td',
+    'th',
+    'strong',
+    'em',
+    'b',
+    'i',
+    'u',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'ul',
+    'ol',
+    'li',
+    'font',
+    'small',
+  ],
+  allowedAttributes: {
+    '*': ['style'],
+    a: ['href', 'title'],
+    img: ['src', 'alt', 'width', 'height'],
+    td: ['colspan', 'rowspan', 'align', 'valign'],
+    th: ['colspan', 'rowspan', 'align', 'valign'],
+    table: ['border', 'cellpadding', 'cellspacing', 'width', 'align'],
+    font: ['color'],
+  },
+  allowedSchemes: ['http', 'https', 'mailto'],
+  allowedSchemesByTag: { img: ['http', 'https'] },
+  allowProtocolRelative: false,
+  disallowedTagsMode: 'discard',
+};
+
+/** Drop dangerous declarations from inline style attributes. */
+function stripDangerousCss(html: string): string {
+  return html.replace(/style="([^"]*)"/gi, (_match, css: string) => {
+    const cleaned = css
+      .split(';')
+      .map((decl) => decl.trim())
+      .filter((decl) => decl.length > 0)
+      .filter((decl) => {
+        const v = decl.toLowerCase().replace(/\s+/g, '');
+        if (v.includes('expression(')) return false;
+        if (v.includes('url(javascript:')) return false;
+        if (v.includes("url('javascript:")) return false;
+        if (v.includes('url("javascript:')) return false;
+        if (v.includes('position:fixed')) return false;
+        return true;
+      })
+      .join('; ');
+    return cleaned ? `style="${cleaned}"` : '';
+  });
+}
+
+export function sanitizeSignatureHtml(html: string): string {
+  return stripDangerousCss(sanitizeHtml(html, SIGNATURE_SANITIZE_OPTIONS));
+}
+
+/**
  * Background IMAP → DB sync. One IMAP connection per mailbox per run; runs
  * are sequential across mailboxes so a throttling shared host never sees
  * parallel connections from us. Sync failures are recorded on the mailbox
