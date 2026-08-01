@@ -79,6 +79,7 @@ import { JobDocumentSignRequest } from './documents/entities/job-document-sign-r
 import { MailModule } from './mail/mail.module';
 import { LinkedMailbox } from './mail/linked-mailbox.entity';
 import { MailMessage } from './mail/mail-message.entity';
+import { MailOutbox } from './mail/mail-outbox.entity';
 import { loadEnvFile } from './common/load-env.util';
 import { getSettingsEncryptionKey } from './common/crypto.util';
 
@@ -214,6 +215,7 @@ getSettingsEncryptionKey();
         McpAccessKey,
         LinkedMailbox,
         MailMessage,
+        MailOutbox,
       ],
       migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,

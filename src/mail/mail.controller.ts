@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   DefaultValuePipe,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -86,6 +87,23 @@ export class MailController {
   @HttpCode(HttpStatus.OK)
   send(@Req() req: AuthedRequest, @Body() dto: SendMailDto) {
     return this.mail.send(this.userId(req), dto);
+  }
+
+  @Get('outbox')
+  listOutbox(@Req() req: AuthedRequest) {
+    return this.mail.listOutbox(this.userId(req));
+  }
+
+  @Post('outbox/:id/retry')
+  @HttpCode(HttpStatus.OK)
+  retryOutbox(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.mail.retryOutbox(this.userId(req), id);
+  }
+
+  @Delete('outbox/:id')
+  @HttpCode(HttpStatus.OK)
+  deleteOutbox(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.mail.deleteOutbox(this.userId(req), id);
   }
 
   @Patch('signature')

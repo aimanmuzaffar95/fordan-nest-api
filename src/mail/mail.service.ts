@@ -1,5 +1,4 @@
 import {
-  BadGatewayException,
   BadRequestException,
   Injectable,
   Logger,
@@ -8,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MailMessage } from './mail-message.entity';
+import { MailOutbox } from './mail-outbox.entity';
 import { MailSyncService } from './mail-sync.service';
 import { ImapFlow } from 'imapflow';
 import * as nodemailer from 'nodemailer';
@@ -23,6 +23,18 @@ import { SendMailDto } from './dto/mail.dto';
 
 /** Connection/greeting/socket timeout for per-request IMAP sessions. */
 const IMAP_TIMEOUT_MS = 10_000;
+
+/** Backoff for the Nth attempt: min(30s * 2^attempts, 1h). */
+export function computeOutboxBackoffMs(attempts: number): number {
+  return Math.min(30_000 * 2 ** attempts, 3_600_000);
+}
+
+/** Outcome of one delivery attempt. `permanent` distinguishes fail-fast. */
+export interface DeliveryResult {
+  ok: boolean;
+  permanent?: boolean;
+  error?: string;
+}
 
 interface EnvelopeAddress {
   name?: string;
@@ -40,6 +52,8 @@ export class MailService {
     private readonly users: Repository<User>,
     @InjectRepository(MailMessage)
     private readonly messages: Repository<MailMessage>,
+    @InjectRepository(MailOutbox)
+    private readonly outbox: Repository<MailOutbox>,
     private readonly sync: MailSyncService,
   ) {}
 
@@ -509,20 +523,106 @@ export class MailService {
     };
   }
 
+  /**
+   * Enqueue a message and attempt one immediate delivery. Never throws on a
+   * delivery failure — a transient failure leaves the row queued for the
+   * worker, a permanent one marks it failed. Validation (empty recipients etc.)
+   * is enforced by the DTO before this runs.
+   */
   async send(userId: string, dto: SendMailDto) {
     const box = await this.requireMailbox(userId);
+
+    const row = this.outbox.create({
+      mailboxId: box.id,
+      userId,
+      toJson: dto.to,
+      ccJson: dto.cc && dto.cc.length > 0 ? dto.cc : null,
+      subject: dto.subject,
+      bodyHtml: dto.bodyHtml,
+      appendSignature: dto.appendSignature !== false,
+      inReplyToUid: null,
+      status: 'queued',
+      attempts: 0,
+      maxAttempts: 6,
+      lastError: null,
+      nextAttemptAt: new Date(),
+      sentAt: null,
+    });
+    const saved = await this.outbox.save(row);
+
+    const result = await this.deliverOutboxRow(saved);
+    await this.applyDeliveryResult(saved, result);
+
+    return {
+      ok: true,
+      queued: saved.status !== 'sent',
+      outboxId: saved.id,
+    };
+  }
+
+  /**
+   * Persist the effect of a delivery attempt onto an outbox row.
+   * - success           → sent, sentAt set
+   * - permanent failure → failed (fail fast, no retries)
+   * - transient failure → queued, attempts++, backoff scheduled unless the
+   *                        attempt cap is reached (then failed)
+   */
+  async applyDeliveryResult(
+    row: MailOutbox,
+    result: DeliveryResult,
+  ): Promise<void> {
+    if (result.ok) {
+      row.status = 'sent';
+      row.sentAt = new Date();
+      row.lastError = null;
+      row.nextAttemptAt = null;
+      await this.outbox.save(row);
+      return;
+    }
+
+    row.attempts += 1;
+    row.lastError = (result.error ?? 'Delivery failed').slice(0, 500);
+
+    if (result.permanent || row.attempts >= row.maxAttempts) {
+      row.status = 'failed';
+      row.nextAttemptAt = null;
+    } else {
+      row.status = 'queued';
+      row.nextAttemptAt = new Date(
+        Date.now() + computeOutboxBackoffMs(row.attempts),
+      );
+    }
+    await this.outbox.save(row);
+  }
+
+  /**
+   * Reusable delivery core shared by the immediate send path and the worker.
+   * Composes RFC822, sends over SMTP, and on success best-effort appends to the
+   * Sent folder + mirrors into the local store. Never throws — returns a
+   * classified result instead.
+   */
+  async deliverOutboxRow(row: MailOutbox): Promise<DeliveryResult> {
+    const box = await this.mailboxes.findOne({ where: { id: row.mailboxId } });
+    if (!box || !box.active) {
+      return {
+        ok: false,
+        permanent: true,
+        error: 'Linked mailbox not found or inactive.',
+      };
+    }
     const password = decryptSettingsValue(box.passwordEncrypted);
 
-    let html = dto.bodyHtml;
-    if (dto.appendSignature !== false && box.signatureHtml) {
+    let html = row.bodyHtml;
+    if (row.appendSignature && box.signatureHtml) {
       html = `${html}<br/><br/>${box.signatureHtml}`;
     }
 
+    const cc = row.ccJson && row.ccJson.length > 0 ? row.ccJson : undefined;
     const mail = {
       from: { name: '', address: box.emailAddress },
-      to: dto.to,
-      cc: dto.cc && dto.cc.length > 0 ? dto.cc : undefined,
-      subject: dto.subject,
+      to: row.toJson,
+      cc,
+      subject: row.subject,
       html,
     };
 
@@ -538,23 +638,20 @@ export class MailService {
       await transporter.sendMail({
         envelope: {
           from: box.emailAddress,
-          to: [...dto.to, ...(dto.cc ?? [])],
+          to: [...row.toJson, ...(row.ccJson ?? [])],
         },
         raw,
       });
     } catch (error: unknown) {
-      const detail = error instanceof Error ? error.message : String(error);
+      const { permanent, detail } = this.classifySmtpError(error);
       this.logger.error(
-        `SMTP send failed for mailbox ${box.emailAddress}: ${detail}`,
+        `SMTP send ${permanent ? '(permanent)' : '(transient)'} failed for ` +
+          `mailbox ${box.emailAddress}: ${detail}`,
       );
-      throw new BadGatewayException({
-        message:
-          'Could not send the email — the mail server rejected the connection or login. Check the mailbox settings or try again shortly.',
-        code: 'MAILBOX_CONNECT_FAILED',
-      });
+      return { ok: false, permanent, error: detail };
     }
 
-    // Best-effort copy into the Sent folder — never fail the request over it.
+    // Best-effort copy into the Sent folder — never fail delivery over it.
     try {
       await this.appendToSent(box, password, raw);
     } catch (error: unknown) {
@@ -566,7 +663,11 @@ export class MailService {
 
     // Mirror into the local store so the message is visible immediately.
     try {
-      await this.storeSentLocally(box, raw, dto);
+      await this.storeSentLocally(box, raw, {
+        subject: row.subject,
+        to: row.toJson,
+        cc: row.ccJson ?? undefined,
+      });
     } catch (error: unknown) {
       const detail = error instanceof Error ? error.message : String(error);
       this.logger.warn(
@@ -575,6 +676,114 @@ export class MailService {
     }
 
     return { ok: true };
+  }
+
+  /**
+   * Classify an SMTP send error as permanent (bad credentials / 5xx policy
+   * rejection — retrying is pointless) vs transient (network, timeout,
+   * connection reset — worth retrying with backoff).
+   */
+  private classifySmtpError(error: unknown): {
+    permanent: boolean;
+    detail: string;
+  } {
+    const err = error as {
+      responseCode?: number;
+      code?: string;
+      message?: string;
+    };
+    const detail = (
+      err?.message ?? (error instanceof Error ? error.message : String(error))
+    ).slice(0, 500);
+    const responseCode =
+      typeof err?.responseCode === 'number' ? err.responseCode : undefined;
+    const code = typeof err?.code === 'string' ? err.code : undefined;
+    // Permanent: an SMTP 5xx reply (bad recipient / policy / mailbox) or an
+    // explicit authentication failure (nodemailer code 'EAUTH', 535 login).
+    const permanent =
+      (responseCode !== undefined && responseCode >= 500 && responseCode < 600) ||
+      code === 'EAUTH';
+    return { permanent, detail };
+  }
+
+  // ------------------------------------------------------------------- outbox
+
+  private outboxView(row: MailOutbox) {
+    return {
+      id: row.id,
+      to: row.toJson ?? [],
+      cc: row.ccJson ?? [],
+      subject: row.subject,
+      status: row.status,
+      attempts: row.attempts,
+      lastError: row.lastError,
+      createdAt: row.createdAt,
+      nextAttemptAt: row.nextAttemptAt,
+      sentAt: row.sentAt,
+    };
+  }
+
+  /** Active queue + recently-sent rows for the caller's own mailbox. */
+  async listOutbox(userId: string) {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60_000);
+    const rows = await this.outbox.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+    const items = rows
+      .filter(
+        (r) =>
+          r.status !== 'sent' ||
+          (r.sentAt !== null && r.sentAt >= fiveMinAgo),
+      )
+      .map((r) => this.outboxView(r));
+    return { items };
+  }
+
+  private async requireOwnedOutboxRow(
+    userId: string,
+    id: string,
+  ): Promise<MailOutbox> {
+    const row = await this.outbox.findOne({ where: { id } });
+    if (!row || row.userId !== userId) {
+      throw new NotFoundException('Outbox message not found.');
+    }
+    return row;
+  }
+
+  /** Requeue a failed/queued row for another delivery attempt now. */
+  async retryOutbox(userId: string, id: string) {
+    const row = await this.requireOwnedOutboxRow(userId, id);
+    if (row.status === 'sent') {
+      throw new BadRequestException('This message was already sent.');
+    }
+    row.status = 'queued';
+    row.nextAttemptAt = new Date();
+    await this.outbox.save(row);
+    // Kick the worker so the retry is picked up promptly.
+    this.worker?.kick();
+    return { ok: true, status: row.status };
+  }
+
+  /** Cancel a queued/failed row (never one already sent). */
+  async deleteOutbox(userId: string, id: string) {
+    const row = await this.requireOwnedOutboxRow(userId, id);
+    if (row.status === 'sent') {
+      throw new BadRequestException(
+        'This message was already sent and cannot be cancelled.',
+      );
+    }
+    await this.outbox.delete({ id: row.id });
+    return { ok: true };
+  }
+
+  /**
+   * Wired up by MailOutboxService on init to avoid a circular constructor
+   * dependency; lets retry kick a delivery run immediately.
+   */
+  private worker?: { kick: () => void };
+  registerWorker(worker: { kick: () => void }): void {
+    this.worker = worker;
   }
 
   // ------------------------------------------------------------------ plumbing
@@ -660,7 +869,7 @@ export class MailService {
   private async storeSentLocally(
     box: LinkedMailbox,
     raw: Buffer,
-    dto: SendMailDto,
+    msg: { subject: string; to: string[]; cc?: string[] },
   ): Promise<void> {
     const folders = box.foldersJson ?? [];
     const sentPath =
@@ -673,11 +882,11 @@ export class MailService {
       folder: sentPath,
       // Negative synthetic uid — unique per (mailbox, folder), pruned on sync.
       uid: -Math.floor(Date.now() / 1000),
-      subject: dto.subject,
+      subject: msg.subject,
       fromName: '',
       fromAddress: box.emailAddress,
-      toJson: dto.to,
-      ccJson: dto.cc ?? [],
+      toJson: msg.to,
+      ccJson: msg.cc ?? [],
       date: new Date(),
       seen: true,
       hasAttachments: false,
