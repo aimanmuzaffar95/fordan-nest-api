@@ -74,21 +74,29 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     'sup',
   ],
   allowedAttributes: {
-    a: ['href', 'title'],
+    // Preserve visual styling: inline style, class (for <style> blocks),
+    // and the common presentational table/cell attributes email uses.
+    '*': ['style', 'class', 'align', 'valign', 'bgcolor', 'width', 'height', 'dir'],
+    a: ['href', 'title', 'target'],
     img: ['src', 'alt', 'width', 'height'],
-    td: ['colspan', 'rowspan', 'align', 'valign'],
-    th: ['colspan', 'rowspan', 'align', 'valign'],
-    table: ['border', 'cellpadding', 'cellspacing', 'width', 'align'],
+    td: ['colspan', 'rowspan', 'background'],
+    th: ['colspan', 'rowspan', 'background'],
+    table: ['border', 'cellpadding', 'cellspacing', 'background'],
     font: ['color', 'size', 'face'],
   },
   allowedSchemes: ['http', 'https', 'mailto'],
   allowedSchemesByTag: { img: ['http', 'https'] },
   allowProtocolRelative: false,
+  // Keep inline style values verbatim (the default CSS re-parser silently
+  // drops properties it doesn't recognize, e.g. Outlook mso-* / shorthands).
+  parseStyleAttributes: false,
   disallowedTagsMode: 'discard',
 };
 
 export function sanitizeMailHtml(html: string): string {
-  return sanitizeHtml(html, SANITIZE_OPTIONS);
+  return sanitizeCssBlocks(
+    stripDangerousCss(sanitizeHtml(html, withStyleTag(SANITIZE_OPTIONS))),
+  );
 }
 
 /**
@@ -130,19 +138,49 @@ const SIGNATURE_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     'small',
   ],
   allowedAttributes: {
-    '*': ['style'],
-    a: ['href', 'title'],
+    '*': ['style', 'class', 'align', 'valign', 'bgcolor', 'width', 'height', 'dir'],
+    a: ['href', 'title', 'target'],
     img: ['src', 'alt', 'width', 'height'],
-    td: ['colspan', 'rowspan', 'align', 'valign'],
-    th: ['colspan', 'rowspan', 'align', 'valign'],
-    table: ['border', 'cellpadding', 'cellspacing', 'width', 'align'],
-    font: ['color'],
+    td: ['colspan', 'rowspan', 'background'],
+    th: ['colspan', 'rowspan', 'background'],
+    table: ['border', 'cellpadding', 'cellspacing', 'background'],
+    font: ['color', 'size', 'face'],
   },
   allowedSchemes: ['http', 'https', 'mailto'],
   allowedSchemesByTag: { img: ['http', 'https'] },
   allowProtocolRelative: false,
+  parseStyleAttributes: false,
   disallowedTagsMode: 'discard',
 };
+
+/**
+ * Allow `<style>` blocks + class so real-world signatures/emails keep their CSS.
+ * Safe because output is only ever rendered in a sandboxed iframe (web) or a
+ * no-JS WebView (mobile); dangerous CSS is scrubbed in a post-pass.
+ */
+function withStyleTag(opts: sanitizeHtml.IOptions): sanitizeHtml.IOptions {
+  return {
+    ...opts,
+    allowedTags: [...(Array.isArray(opts.allowedTags) ? opts.allowedTags : []), 'style'],
+    allowVulnerableTags: true,
+  };
+}
+
+/** Scrub dangerous declarations from the CSS text inside <style> blocks. */
+function sanitizeCssBlocks(html: string): string {
+  return html.replace(
+    /<style([^>]*)>([\s\S]*?)<\/style>/gi,
+    (_m, attrs: string, css: string) => {
+      const cleaned = css
+        .replace(/@import[^;]*;?/gi, '')
+        .replace(/expression\s*\(/gi, '(')
+        .replace(/javascript:/gi, '')
+        .replace(/behavior\s*:/gi, 'x-behavior:')
+        .replace(/position\s*:\s*fixed/gi, 'position:static');
+      return `<style${attrs}>${cleaned}</style>`;
+    },
+  );
+}
 
 /** Drop dangerous declarations from inline style attributes. */
 function stripDangerousCss(html: string): string {
@@ -166,7 +204,9 @@ function stripDangerousCss(html: string): string {
 }
 
 export function sanitizeSignatureHtml(html: string): string {
-  return stripDangerousCss(sanitizeHtml(html, SIGNATURE_SANITIZE_OPTIONS));
+  return sanitizeCssBlocks(
+    stripDangerousCss(sanitizeHtml(html, withStyleTag(SIGNATURE_SANITIZE_OPTIONS))),
+  );
 }
 
 /**
