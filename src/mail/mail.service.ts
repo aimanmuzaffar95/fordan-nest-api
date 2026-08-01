@@ -5,8 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { MailMessage } from './mail-message.entity';
+import { Customer } from '../customers/entities/customer.entity';
 import { MailOutbox } from './mail-outbox.entity';
 import { MailSyncService, sanitizeSignatureHtml } from './mail-sync.service';
 import { ImapFlow } from 'imapflow';
@@ -54,8 +55,82 @@ export class MailService {
     private readonly messages: Repository<MailMessage>,
     @InjectRepository(MailOutbox)
     private readonly outbox: Repository<MailOutbox>,
+    @InjectRepository(Customer)
+    private readonly customers: Repository<Customer>,
     private readonly sync: MailSyncService,
   ) {}
+
+  // -------------------------------------------------------- unified ALL helpers
+
+  /** Virtual folder path for the merged INBOX + Sent view. */
+  private static readonly ALL_FOLDER = 'ALL';
+
+  /**
+   * Resolve the mailbox's Sent-equivalent folder path from the folder snapshot:
+   * prefer specialUse '\\Sent', else any folder whose path/name matches /sent/i.
+   * Returns null when none can be determined.
+   */
+  private resolveSentPath(box: LinkedMailbox): string | null {
+    const folders = box.foldersJson ?? [];
+    const bySpecial = folders.find((f) => f.specialUse === '\\Sent');
+    if (bySpecial) return bySpecial.path;
+    const byName = folders.find(
+      (f) => /sent/i.test(f.name) || /sent/i.test(f.path),
+    );
+    return byName?.path ?? null;
+  }
+
+  /** The set of real folders unioned by the ALL view (INBOX + Sent-equiv). */
+  private allFolderPaths(box: LinkedMailbox): string[] {
+    const sent = this.resolveSentPath(box);
+    return sent && sent !== 'INBOX' ? ['INBOX', sent] : ['INBOX'];
+  }
+
+  /**
+   * For a batch of message rows, resolve the counterparty address of each
+   * (first `to` for Sent-equivalent folder rows, otherwise fromAddress) and
+   * match case-insensitively against customers.email in ONE query. Returns a
+   * lowercased-address → { id, name } map. No N+1.
+   */
+  private async matchCustomers(
+    rows: { folder: string; fromAddress: string; toJson: string[] | null }[],
+    sentPath: string | null,
+  ): Promise<Map<string, { id: string; name: string }>> {
+    const addresses = new Set<string>();
+    for (const r of rows) {
+      const addr = this.counterpartyAddress(r, sentPath);
+      if (addr) addresses.add(addr);
+    }
+    const result = new Map<string, { id: string; name: string }>();
+    if (addresses.size === 0) return result;
+
+    const matches = await this.customers
+      .createQueryBuilder('c')
+      .select(['c.id', 'c.firstName', 'c.lastName', 'c.email'])
+      .where('LOWER(c.email) IN (:...emails)', {
+        emails: [...addresses],
+      })
+      .getMany();
+    for (const c of matches) {
+      result.set(c.email.toLowerCase(), {
+        id: c.id,
+        name: `${c.firstName} ${c.lastName}`.trim(),
+      });
+    }
+    return result;
+  }
+
+  /** Lowercased counterparty address for one row, or '' when unavailable. */
+  private counterpartyAddress(
+    row: { folder: string; fromAddress: string; toJson: string[] | null },
+    sentPath: string | null,
+  ): string {
+    const isSent = sentPath !== null && row.folder === sentPath;
+    const addr = isSent
+      ? (row.toJson ?? [])[0] ?? ''
+      : row.fromAddress ?? '';
+    return addr.toLowerCase();
+  }
 
   // ---------------------------------------------------------------- admin CRUD
 
@@ -270,17 +345,35 @@ export class MailService {
     return { ok: true, signatureHtml: clean };
   }
 
+  /**
+   * Prepend the virtual "ALL" folder: unseen = sum of unseen across INBOX +
+   * the Sent-equivalent folder, derived from the snapshot rows themselves.
+   */
+  private withAllFolder(
+    items: { path: string; name: string; unseen: number }[],
+  ): { path: string; name: string; unseen: number }[] {
+    const inbox = items.find((f) => f.path === 'INBOX');
+    const sent = items.find(
+      (f) =>
+        f.path !== 'INBOX' && (/sent/i.test(f.name) || /sent/i.test(f.path)),
+    );
+    const unseen = (inbox?.unseen ?? 0) + (sent?.unseen ?? 0);
+    return [{ path: 'ALL', name: 'All mail', unseen }, ...items];
+  }
+
   async listFolders(userId: string) {
     const box = await this.requireMailbox(userId);
 
     // Served from the folder snapshot stored during the last sync.
     if (box.foldersJson && box.foldersJson.length > 0) {
       return {
-        items: box.foldersJson.map((f) => ({
-          path: f.path,
-          name: f.name,
-          unseen: f.unseen,
-        })),
+        items: this.withAllFolder(
+          box.foldersJson.map((f) => ({
+            path: f.path,
+            name: f.name,
+            unseen: f.unseen,
+          })),
+        ),
       };
     }
 
@@ -290,11 +383,13 @@ export class MailService {
     const folders = fresh?.foldersJson ?? [];
     if (folders.length > 0) {
       return {
-        items: folders.map((f) => ({
-          path: f.path,
-          name: f.name,
-          unseen: f.unseen,
-        })),
+        items: this.withAllFolder(
+          folders.map((f) => ({
+            path: f.path,
+            name: f.name,
+            unseen: f.unseen,
+          })),
+        ),
       };
     }
 
@@ -314,7 +409,7 @@ export class MailService {
     if (items.length === 0) {
       items.push({ path: 'INBOX', name: 'INBOX', unseen: 0 });
     }
-    return { items };
+    return { items: this.withAllFolder(items) };
   }
 
   async listMessages(
@@ -342,12 +437,21 @@ export class MailService {
       await this.sync.syncMailbox(box.id);
     }
 
+    // ALL: union of INBOX + the Sent-equivalent folder, ordered by date DESC.
+    const isAll = folderPath === MailService.ALL_FOLDER;
+    const where = isAll
+      ? { mailboxId: box.id, folder: In(this.allFolderPaths(box)) }
+      : { mailboxId: box.id, folder: folderPath };
+
     const [rows, total] = await this.messages.findAndCount({
-      where: { mailboxId: box.id, folder: folderPath },
+      where,
       order: { date: 'DESC', uid: 'DESC' },
       skip: (safePage - 1) * safeLimit,
       take: safeLimit,
     });
+
+    const sentPath = this.resolveSentPath(box);
+    const customerByAddr = await this.matchCustomers(rows, sentPath);
 
     const items = rows.map((m) => ({
       uid: m.uid,
@@ -359,6 +463,9 @@ export class MailService {
       seen: m.seen,
       hasAttachments: m.hasAttachments,
       snippet: m.snippet ?? '',
+      folder: m.folder,
+      customer:
+        customerByAddr.get(this.counterpartyAddress(m, sentPath)) ?? null,
     }));
 
     const fresh = await this.mailboxes.findOne({ where: { id: box.id } });
@@ -373,11 +480,26 @@ export class MailService {
 
   async getMessage(userId: string, uid: number, folder: string) {
     const box = await this.requireMailbox(userId);
-    const folderPath = folder || 'INBOX';
+    const requested = folder || 'INBOX';
+    const isAll = requested === MailService.ALL_FOLDER;
 
-    let row = await this.messages.findOne({
-      where: { mailboxId: box.id, folder: folderPath, uid },
-    });
+    let row: MailMessage | null = null;
+    if (isAll) {
+      // Search across INBOX + Sent for this uid; prefer INBOX if ambiguous.
+      const paths = this.allFolderPaths(box);
+      const candidates = await this.messages.find({
+        where: { mailboxId: box.id, folder: In(paths), uid },
+      });
+      row =
+        candidates.find((c) => c.folder === 'INBOX') ?? candidates[0] ?? null;
+    } else {
+      row = await this.messages.findOne({
+        where: { mailboxId: box.id, folder: requested, uid },
+      });
+    }
+
+    // Real folder to use for any live IMAP work below.
+    const folderPath = row?.folder ?? (isAll ? 'INBOX' : requested);
 
     // Not synced yet at all — fall back to a single live fetch and store it.
     if (!row) {
@@ -405,6 +527,11 @@ export class MailService {
       this.flagSeenBestEffort(box, folderPath, uid);
     }
 
+    const sentPath = this.resolveSentPath(box);
+    const customerByAddr = await this.matchCustomers([row], sentPath);
+    const customer =
+      customerByAddr.get(this.counterpartyAddress(row, sentPath)) ?? null;
+
     return {
       uid,
       subject: row.subject,
@@ -417,6 +544,8 @@ export class MailService {
       bodyHtml: row.bodyHtml ?? '',
       bodyText: row.bodyText ?? '',
       attachments: row.attachmentsJson ?? [],
+      folder: row.folder,
+      customer,
       ...(bodyPending ? { bodyPending: true } : {}),
     };
   }
@@ -500,10 +629,23 @@ export class MailService {
 
   async markRead(userId: string, uid: number, folder: string) {
     const box = await this.requireMailbox(userId);
-    const folderPath = folder || 'INBOX';
-    const row = await this.messages.findOne({
-      where: { mailboxId: box.id, folder: folderPath, uid },
-    });
+    const requested = folder || 'INBOX';
+
+    let row: MailMessage | null = null;
+    if (requested === MailService.ALL_FOLDER) {
+      // Resolve the real folder by searching INBOX + Sent; prefer INBOX.
+      const candidates = await this.messages.find({
+        where: { mailboxId: box.id, folder: In(this.allFolderPaths(box)), uid },
+      });
+      row =
+        candidates.find((c) => c.folder === 'INBOX') ?? candidates[0] ?? null;
+    } else {
+      row = await this.messages.findOne({
+        where: { mailboxId: box.id, folder: requested, uid },
+      });
+    }
+
+    const folderPath = row?.folder ?? (requested === MailService.ALL_FOLDER ? 'INBOX' : requested);
     if (row && !row.seen) {
       row.seen = true;
       await this.messages.save(row);

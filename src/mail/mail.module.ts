@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { resolveJwtSecret } from '../auth/jwt-secret.util';
 import { User } from '../users/entities/user.entity';
+import { Customer } from '../customers/entities/customer.entity';
 import { LinkedMailbox } from './linked-mailbox.entity';
 import { MailMessage } from './mail-message.entity';
 import { MailOutbox } from './mail-outbox.entity';
@@ -17,7 +18,13 @@ import { MailboxesController } from './mailboxes.controller';
     JwtModule.register({
       secret: resolveJwtSecret(),
     }),
-    TypeOrmModule.forFeature([LinkedMailbox, MailMessage, MailOutbox, User]),
+    TypeOrmModule.forFeature([
+      LinkedMailbox,
+      MailMessage,
+      MailOutbox,
+      User,
+      Customer,
+    ]),
   ],
   controllers: [MailController, MailboxesController],
   providers: [MailService, MailSyncService, MailOutboxService],
