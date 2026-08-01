@@ -1,4 +1,5 @@
 import {
+  Matches,
   IsBoolean,
   IsEmail,
   IsInt,
@@ -21,6 +22,12 @@ export class CreateMailboxDto {
 
   @IsString()
   @MaxLength(255)
+  // A mail login never contains spaces — this catches display names typed into
+  // the username field (e.g. "Ahmad (Fordan Dev)"), which cause permanent 535s.
+  @Matches(/^\S*$/, {
+    message:
+      'Mail username cannot contain spaces — leave it blank to use the email address.',
+  })
   @IsOptional()
   username?: string;
 
@@ -69,6 +76,12 @@ export class UpdateMailboxDto {
 
   @IsString()
   @MaxLength(255)
+  // A mail login never contains spaces — this catches display names typed into
+  // the username field (e.g. "Ahmad (Fordan Dev)"), which cause permanent 535s.
+  @Matches(/^\S*$/, {
+    message:
+      'Mail username cannot contain spaces — leave it blank to use the email address.',
+  })
   @IsOptional()
   username?: string;
 
