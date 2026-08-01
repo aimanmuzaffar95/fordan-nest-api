@@ -4,6 +4,27 @@ import { Repository } from 'typeorm';
 import { ListAuditLogQueryDto } from './dto/list-audit-log-query.dto';
 import { SystemAuditLog } from './entities/system-audit-log.entity';
 
+/** Escape LIKE wildcards so user input is matched literally as a prefix. */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/** Start of the given calendar day (UTC) for a YYYY-MM-DD / ISO string. */
+function startOfDayUtc(value: string): Date {
+  const d = new Date(value);
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
+}
+
+/** Exclusive upper bound: start of the day after the given day (UTC). */
+function startOfNextDayUtc(value: string): Date {
+  const d = new Date(value);
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1),
+  );
+}
+
 export type RecordSystemAuditInput = {
   action: string;
   actorUserId?: string | null;
@@ -61,6 +82,27 @@ export class SystemAuditLogService {
       .orderBy('log.createdAt', 'DESC')
       .skip(skip)
       .take(pageSize);
+
+    if (query.action) {
+      qb.andWhere('log.action LIKE :actionPrefix', {
+        actionPrefix: `${escapeLikePattern(query.action)}%`,
+      });
+    }
+    if (query.userId) {
+      qb.andWhere('log.actorUserId = :actorUserId', {
+        actorUserId: query.userId,
+      });
+    }
+    if (query.from) {
+      qb.andWhere('log.createdAt >= :from', {
+        from: startOfDayUtc(query.from),
+      });
+    }
+    if (query.to) {
+      qb.andWhere('log.createdAt < :to', {
+        to: startOfNextDayUtc(query.to),
+      });
+    }
 
     const [rows, total] = await qb.getManyAndCount();
 
