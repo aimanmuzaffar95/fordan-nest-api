@@ -12,10 +12,13 @@ import {
   Post,
   Query,
   Req,
+  Res,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MailService } from './mail.service';
 import { SendMailDto, UpdateSignatureDto } from './dto/mail.dto';
@@ -65,6 +68,25 @@ export class MailController {
     @Query('folder', new DefaultValuePipe('INBOX')) folder: string,
   ) {
     return this.mail.getMessage(this.userId(req), uid, folder);
+  }
+
+  @Get('messages/:uid/attachments/:index')
+  async downloadAttachment(
+    @Req() req: AuthedRequest,
+    @Param('uid', ParseIntPipe) uid: number,
+    @Param('index', ParseIntPipe) index: number,
+    @Query('folder', new DefaultValuePipe('INBOX')) folder: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { buffer, contentType, filename, disposition } =
+      await this.mail.getAttachment(this.userId(req), uid, index, folder);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', String(buffer.length));
+    res.setHeader(
+      'Content-Disposition',
+      `${disposition}; filename="${filename}"`,
+    );
+    return new StreamableFile(buffer);
   }
 
   @Post('messages/:uid/read')

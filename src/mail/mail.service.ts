@@ -1,9 +1,12 @@
 import {
+  BadGatewayException,
   BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
+import { simpleParser } from 'mailparser';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { MailMessage } from './mail-message.entity';
@@ -543,11 +546,111 @@ export class MailService {
       seen: true,
       bodyHtml: row.bodyHtml ?? '',
       bodyText: row.bodyText ?? '',
-      attachments: row.attachmentsJson ?? [],
+      attachments: (row.attachmentsJson ?? []).map((a, index) => ({
+        ...a,
+        index,
+      })),
       folder: row.folder,
       customer,
       ...(bodyPending ? { bodyPending: true } : {}),
     };
+  }
+
+  /** Cap on a single attachment's decoded size streamed back to the client. */
+  private static readonly MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+  /**
+   * Download a single attachment by its index in the parsed attachments array.
+   * Re-fetches the raw message source from IMAP (one fetchOne, like the detail
+   * live-fetch), parses it, and returns the raw content buffer + headers.
+   */
+  async getAttachment(
+    userId: string,
+    uid: number,
+    index: number,
+    folder: string,
+  ): Promise<{
+    buffer: Buffer;
+    contentType: string;
+    filename: string;
+    disposition: 'inline' | 'attachment';
+  }> {
+    const box = await this.requireMailbox(userId);
+    const requested = folder || 'INBOX';
+    const isAll = requested === MailService.ALL_FOLDER;
+
+    // Resolve the real folder holding this uid, mirroring getMessage/markRead.
+    let folderPath = isAll ? 'INBOX' : requested;
+    if (isAll) {
+      const paths = this.allFolderPaths(box);
+      const candidates = await this.messages.find({
+        where: { mailboxId: box.id, folder: In(paths), uid },
+      });
+      const row =
+        candidates.find((c) => c.folder === 'INBOX') ?? candidates[0] ?? null;
+      if (row) folderPath = row.folder;
+    }
+
+    let source: Buffer | null;
+    try {
+      source = await this.withImapRaw(box, async (client) => {
+        const lock = await client.getMailboxLock(folderPath);
+        try {
+          const msg = await client.fetchOne(
+            String(uid),
+            { uid: true, source: true },
+            { uid: true },
+          );
+          return msg && msg.source ? msg.source : null;
+        } finally {
+          lock.release();
+        }
+      });
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Attachment fetch failed for ${box.emailAddress} ${folderPath}/${uid}: ${detail}`,
+      );
+      throw new BadGatewayException({
+        message: 'Could not connect to the mail server.',
+        code: 'MAILBOX_CONNECT_FAILED',
+      });
+    }
+
+    if (!source) {
+      throw new NotFoundException('Message not found in this folder.');
+    }
+
+    const parsed = await simpleParser(source);
+    const attachments = parsed.attachments ?? [];
+    const attachment = attachments[index];
+    if (!attachment || !attachment.content) {
+      throw new NotFoundException('Attachment not found.');
+    }
+
+    const buffer = Buffer.isBuffer(attachment.content)
+      ? attachment.content
+      : Buffer.from(attachment.content);
+    if (buffer.length > MailService.MAX_ATTACHMENT_BYTES) {
+      throw new PayloadTooLargeException(
+        'Attachment exceeds the 25MB download limit.',
+      );
+    }
+
+    const contentType = attachment.contentType || 'application/octet-stream';
+    const filename = this.sanitizeAttachmentFilename(attachment.filename);
+    const disposition =
+      contentType.startsWith('image/') || contentType === 'application/pdf'
+        ? 'inline'
+        : 'attachment';
+
+    return { buffer, contentType, filename, disposition };
+  }
+
+  /** Strip quotes/newlines from a filename so it is safe in a header value. */
+  private sanitizeAttachmentFilename(name: string | undefined): string {
+    const clean = (name ?? '').replace(/[\r\n"\\]/g, '').trim();
+    return clean || 'attachment';
   }
 
   /**
