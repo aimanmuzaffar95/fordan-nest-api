@@ -43,6 +43,13 @@ export class MailOutbox {
   @Column({ type: 'boolean', default: true })
   appendSignature: boolean;
 
+  // Outbound attachments as submitted (base64), stored so they survive retries.
+  // json on Postgres, longtext under MySQL/MariaDB (see migration).
+  @Column({ type: 'json', nullable: true })
+  attachmentsJson:
+    | { filename: string; contentType: string; contentBase64: string }[]
+    | null;
+
   // Informational only in v1 — no threading headers are emitted.
   @Column({ type: 'int', nullable: true })
   inReplyToUid: number | null;

@@ -23,7 +23,7 @@ import {
 import { User } from '../users/entities/user.entity';
 import { LinkedMailbox } from './linked-mailbox.entity';
 import { CreateMailboxDto, UpdateMailboxDto } from './dto/mailbox.dto';
-import { SendMailDto } from './dto/mail.dto';
+import { SendMailDto, MailAttachmentInput } from './dto/mail.dto';
 
 /** Connection/greeting/socket timeout for per-request IMAP sessions. */
 const IMAP_TIMEOUT_MS = 10_000;
@@ -785,8 +785,36 @@ export class MailService {
    * worker, a permanent one marks it failed. Validation (empty recipients etc.)
    * is enforced by the DTO before this runs.
    */
+  /** Combined decoded cap on outbound attachments. */
+  private static readonly MAX_OUTBOUND_ATTACHMENTS_BYTES = 15 * 1024 * 1024;
+
+  /**
+   * Decoded byte size of a base64 string (accounting for '=' padding), without
+   * allocating the buffer. base64 encodes 3 bytes per 4 chars.
+   */
+  private decodedBase64Size(b64: string): number {
+    const len = b64.length;
+    if (len === 0) return 0;
+    const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+    return Math.floor((len * 3) / 4) - padding;
+  }
+
   async send(userId: string, dto: SendMailDto) {
     const box = await this.requireMailbox(userId);
+
+    const attachments =
+      dto.attachments && dto.attachments.length > 0 ? dto.attachments : null;
+    if (attachments) {
+      const total = attachments.reduce(
+        (sum, a) => sum + this.decodedBase64Size(a.contentBase64),
+        0,
+      );
+      if (total > MailService.MAX_OUTBOUND_ATTACHMENTS_BYTES) {
+        throw new BadRequestException(
+          'Attachments exceed the 15MB combined size limit.',
+        );
+      }
+    }
 
     const row = this.outbox.create({
       mailboxId: box.id,
@@ -796,6 +824,7 @@ export class MailService {
       subject: dto.subject,
       bodyHtml: dto.bodyHtml,
       appendSignature: dto.appendSignature !== false,
+      attachmentsJson: attachments,
       inReplyToUid: null,
       status: 'queued',
       attempts: 0,
@@ -874,12 +903,25 @@ export class MailService {
     }
 
     const cc = row.ccJson && row.ccJson.length > 0 ? row.ccJson : undefined;
+    const rowAttachments =
+      row.attachmentsJson && row.attachmentsJson.length > 0
+        ? row.attachmentsJson
+        : null;
     const mail = {
       from: { name: '', address: box.emailAddress },
       to: row.toJson,
       cc,
       subject: row.subject,
       html,
+      ...(rowAttachments
+        ? {
+            attachments: rowAttachments.map((a) => ({
+              filename: a.filename,
+              content: Buffer.from(a.contentBase64, 'base64'),
+              contentType: a.contentType,
+            })),
+          }
+        : {}),
     };
 
     // Compose the raw RFC822 message once so the exact bytes we send are what
@@ -923,6 +965,13 @@ export class MailService {
         subject: row.subject,
         to: row.toJson,
         cc: row.ccJson ?? undefined,
+        attachments: rowAttachments
+          ? rowAttachments.map((a) => ({
+              filename: a.filename,
+              size: this.decodedBase64Size(a.contentBase64),
+              contentType: a.contentType,
+            }))
+          : undefined,
       });
     } catch (error: unknown) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -1125,7 +1174,12 @@ export class MailService {
   private async storeSentLocally(
     box: LinkedMailbox,
     raw: Buffer,
-    msg: { subject: string; to: string[]; cc?: string[] },
+    msg: {
+      subject: string;
+      to: string[];
+      cc?: string[];
+      attachments?: { filename: string; size: number; contentType: string }[];
+    },
   ): Promise<void> {
     const folders = box.foldersJson ?? [];
     const sentPath =
@@ -1145,11 +1199,18 @@ export class MailService {
       ccJson: msg.cc ?? [],
       date: new Date(),
       seen: true,
-      hasAttachments: false,
+      hasAttachments: (msg.attachments?.length ?? 0) > 0,
       snippet: '',
+      attachmentsJson: msg.attachments ?? null,
       syncedAt: new Date(),
     });
     const saved = await this.messages.save(row);
+    // storeParsedBody re-derives attachmentsJson from the raw source; re-assert
+    // hasAttachments afterwards since it doesn't touch that flag.
     await this.sync.storeParsedBody(saved, raw);
+    if ((msg.attachments?.length ?? 0) > 0 && !saved.hasAttachments) {
+      saved.hasAttachments = true;
+      await this.messages.save(saved);
+    }
   }
 }

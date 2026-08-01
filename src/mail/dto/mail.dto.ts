@@ -7,7 +7,24 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class MailAttachmentInput {
+  @IsString()
+  @MaxLength(255)
+  filename: string;
+
+  @IsString()
+  @MaxLength(128)
+  contentType: string;
+
+  // Raw file base64 (no data: prefix). Combined decoded size is capped in the
+  // service (≤ 15MB) — validated there since it needs the whole array.
+  @IsString()
+  contentBase64: string;
+}
 
 export class SendMailDto {
   @IsArray()
@@ -33,6 +50,13 @@ export class SendMailDto {
   @IsBoolean()
   @IsOptional()
   appendSignature?: boolean;
+
+  @IsArray()
+  @ArrayMaxSize(15)
+  @ValidateNested({ each: true })
+  @Type(() => MailAttachmentInput)
+  @IsOptional()
+  attachments?: MailAttachmentInput[];
 }
 
 export class UpdateSignatureDto {
