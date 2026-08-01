@@ -2,6 +2,9 @@ import {
   Body,
   Controller,
   Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -26,6 +29,8 @@ import {
   GlobalClockOutDto,
 } from './dto/global-attendance.dto';
 import { AttendanceSessionsQueryDto } from './dto/attendance-sessions-query.dto';
+import { TeamSessionsQueryDto } from './dto/team-sessions-query.dto';
+import { PatchSessionDto } from './dto/patch-session.dto';
 
 type AuthenticatedRequest = Request & {
   user?: { sub?: string; role?: UserRole };
@@ -74,6 +79,42 @@ export class AttendanceSessionController {
   async getMySession(@Req() req: AuthenticatedRequest) {
     const actor = await this.authorize(req, 'attendance:self:view');
     const session = await this.attendanceService.getMyOpenSession(actor.userId);
+    return { session };
+  }
+
+  @Get('sessions')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'List team attendance sessions (admin/manager)',
+    description: 'Optional from/to date range and userId filter; newest first, capped at 500.',
+  })
+  async listTeamSessions(
+    @Query() query: TeamSessionsQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.authorize(req, 'attendance:view');
+    const items = await this.attendanceService.listTeamSessions(
+      query.from,
+      query.to,
+      query.userId,
+    );
+    return { items };
+  }
+
+  @Patch('sessions/:id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Correct a team attendance session (adds a correction note)' })
+  async patchSession(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PatchSessionDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const actor = await this.authorize(req, 'attendance:view');
+    const session = await this.attendanceService.patchSessionCorrection(
+      id,
+      dto.correctionNote,
+      actor.userId,
+    );
     return { session };
   }
 

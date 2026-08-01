@@ -164,6 +164,55 @@ export class AttendanceService {
     );
   }
 
+  /** Team-wide session list for admins/managers (mobile team attendance screen). */
+  async listTeamSessions(
+    from: string | undefined,
+    to: string | undefined,
+    userId: string | undefined,
+  ): Promise<AttendanceSessionSummary[]> {
+    const qb = this.attendanceRepo
+      .createQueryBuilder('a')
+      .orderBy('a.clockInAt', 'DESC')
+      .take(500);
+    if (from) {
+      qb.andWhere('a.clockInAt >= :fromDate', {
+        fromDate: new Date(`${from}T00:00:00.000Z`),
+      });
+    }
+    if (to) {
+      qb.andWhere('a.clockInAt <= :toDate', {
+        toDate: new Date(`${to}T23:59:59.999Z`),
+      });
+    }
+    if (userId) {
+      qb.andWhere('a.staffId = :userId', { userId });
+    }
+    const records = await qb.getMany();
+    return records.map((r) =>
+      this.toSessionSummary(this.toRecordResponse(r), r.staffId),
+    );
+  }
+
+  async patchSessionCorrection(
+    sessionId: string,
+    correctionNote: string | undefined,
+    actorUserId: string,
+  ): Promise<AttendanceSessionSummary> {
+    const record = await this.attendanceRepo.findOne({
+      where: { id: sessionId },
+    });
+    if (!record) {
+      throw new NotFoundException('Attendance session not found');
+    }
+    if (typeof correctionNote === 'string') {
+      record.correctionNote = correctionNote;
+      record.correctedAt = new Date();
+      record.correctedBy = actorUserId;
+    }
+    const saved = await this.attendanceRepo.save(record);
+    return this.toSessionSummary(this.toRecordResponse(saved), saved.staffId);
+  }
+
   async clockIn(
     jobId: string,
     dto: AttendanceLocationDto,
