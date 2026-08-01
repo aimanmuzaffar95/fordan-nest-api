@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsDateString,
   IsEnum,
   IsInt,
   IsLatitude,
@@ -40,4 +41,12 @@ export class AttendanceLocationDto {
 
   @IsEnum(ATTENDANCE_LOCATION_STATUSES)
   locationStatus: (typeof ATTENDANCE_LOCATION_STATUSES)[number];
+
+  // When a clock event was captured offline and synced later, the client sends
+  // the original capture time. Advisory like the coordinates: the server only
+  // accepts it within a sane window (not future, at most 48h old) and falls
+  // back to the server clock otherwise.
+  @IsOptional()
+  @IsDateString()
+  capturedAt?: string;
 }

@@ -11,6 +11,7 @@ import { JobProposalSelection } from './entities/job-proposal-selection.entity';
 import { Job } from './entities/job.entity';
 import { JobSignatureRequest } from './entities/job-signature-request.entity';
 import { Assignment } from '../assignments/entities/assignment.entity';
+import { AttendanceRecord } from '../attendance/entities/attendance-record.entity';
 import { Battery } from '../batteries/entities/battery.entity';
 import { MeterApplication } from '../metering/entities/meter-application.entity';
 import { Customer } from '../customers/entities/customer.entity';
@@ -26,6 +27,7 @@ import { InvoicePayment } from '../invoices/entities/invoice-payment.entity';
 import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.service';
 import { AdminDashboardController } from '../reports/admin-dashboard.controller';
 import { AdminDashboardReportsService } from '../reports/admin-dashboard.service';
+import { InstallerReportsService } from '../reports/installer-reports.service';
 import { ReportsController } from '../reports/reports.controller';
 import { JobQuotationPdfService } from './job-quotation-pdf.service';
 import { JobQuotationService } from './job-quotation.service';
@@ -55,6 +57,7 @@ import { PermissionsModule } from '../permissions/permissions.module';
       JobProposalSelection,
       MeterApplication,
       Assignment,
+      AttendanceRecord,
       Customer,
       TimelineEvent,
       User,
@@ -82,6 +85,7 @@ import { PermissionsModule } from '../permissions/permissions.module';
     JobAuditLogsService,
     LeadCaptureInsightsService,
     AdminDashboardReportsService,
+    InstallerReportsService,
   ],
   exports: [JobsService, JobAuditLogsService],
 })

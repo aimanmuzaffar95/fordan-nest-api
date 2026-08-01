@@ -1,4 +1,12 @@
-import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -12,6 +20,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import { AdminDashboardReportsService } from './admin-dashboard.service';
+import { InstallerReportsService } from './installer-reports.service';
+import { ReportsInstallersQueryDto } from './dto/reports-installers-query.dto';
 import { ReportsKpisQueryDto } from './dto/reports-kpis-query.dto';
 import { ReportsPipelineQueryDto } from './dto/reports-pipeline-query.dto';
 import { ReportsRevenueQueryDto } from './dto/reports-revenue-query.dto';
@@ -26,8 +36,42 @@ import { ReportsRevenueQueryDto } from './dto/reports-revenue-query.dto';
 export class ReportsController {
   constructor(
     private readonly reportsService: AdminDashboardReportsService,
+    private readonly installerReports: InstallerReportsService,
     private readonly permissions: PermissionsService,
   ) {}
+
+  @Get('installers')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Installer performance leaderboard',
+    description:
+      'Per active installer: installs completed, kW installed, on-time %. ' +
+      '**Query:** optional `from`, `to` (`YYYY-MM-DD`); default last 180 days. ' +
+      '**Admin:** all jobs. **Manager (own scope):** only jobs where `jobs.managerId = you`.',
+  })
+  async getInstallers(
+    @Query() query: ReportsInstallersQueryDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeReports(req);
+    return this.installerReports.getLeaderboard(query, viewer);
+  }
+
+  @Get('installers/:id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Installer performance detail',
+    description:
+      'Leaderboard metrics plus monthly install series and recent jobs for one installer.',
+  })
+  async getInstallerDetail(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query() query: ReportsInstallersQueryDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeReports(req);
+    return this.installerReports.getInstallerDetail(id, query, viewer);
+  }
 
   @Get('kpis')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)

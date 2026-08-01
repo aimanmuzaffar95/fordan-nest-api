@@ -213,6 +213,26 @@ export class AttendanceService {
     return this.toSessionSummary(this.toRecordResponse(saved), saved.staffId);
   }
 
+  /**
+   * Event time for a clock action: the client's offline capture time when
+   * plausible (not in the future beyond clock skew, at most 48h old),
+   * otherwise the server clock.
+   */
+  private resolveEventTime(capturedAt: string | undefined): Date {
+    if (capturedAt) {
+      const captured = new Date(capturedAt);
+      const serverNow = Date.now();
+      if (
+        !Number.isNaN(captured.getTime()) &&
+        captured.getTime() <= serverNow + 5 * 60 * 1000 &&
+        captured.getTime() >= serverNow - 48 * 60 * 60 * 1000
+      ) {
+        return captured;
+      }
+    }
+    return new Date();
+  }
+
   async clockIn(
     jobId: string,
     dto: AttendanceLocationDto,
@@ -241,7 +261,7 @@ export class AttendanceService {
       created = await this.dataSource.transaction(async (manager) => {
       const attendanceRepository = manager.getRepository(AttendanceRecord);
       const timelineRepository = manager.getRepository(TimelineEvent);
-      const now = new Date();
+      const now = this.resolveEventTime(dto.capturedAt);
       // BE-ATTEND-02: lat/lng/accuracy/locationStatus are client-reported and
       // cannot be server-verified. They are already bounds-checked in the DTO
       // (lat -90..90, lng -180..180) and are persisted verbatim as advisory
@@ -347,7 +367,7 @@ export class AttendanceService {
     const updated = await this.dataSource.transaction(async (manager) => {
       const attendanceRepository = manager.getRepository(AttendanceRecord);
       const timelineRepository = manager.getRepository(TimelineEvent);
-      const now = new Date();
+      const now = this.resolveEventTime(dto.capturedAt);
       const nextRecord = {
         ...record,
         clockOutAt: now,
