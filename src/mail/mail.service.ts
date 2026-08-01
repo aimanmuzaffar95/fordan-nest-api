@@ -7,8 +7,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { MailMessage } from './mail-message.entity';
+import { MailSyncService } from './mail-sync.service';
 import { ImapFlow } from 'imapflow';
-import { simpleParser, type AddressObject } from 'mailparser';
 import * as nodemailer from 'nodemailer';
 import MailComposer = require('nodemailer/lib/mail-composer');
 import {
@@ -37,6 +38,9 @@ export class MailService {
     private readonly mailboxes: Repository<LinkedMailbox>,
     @InjectRepository(User)
     private readonly users: Repository<User>,
+    @InjectRepository(MailMessage)
+    private readonly messages: Repository<MailMessage>,
+    private readonly sync: MailSyncService,
   ) {}
 
   // ---------------------------------------------------------------- admin CRUD
@@ -100,6 +104,8 @@ export class MailService {
       active: true,
     });
     const saved = await this.mailboxes.save(box);
+    // Kick off an initial background sync so mail is ready on first open.
+    this.sync.syncMailbox(saved.id).catch(() => undefined);
     return this.toAdminView(saved, await this.userNameFor(saved.userId));
   }
 
@@ -134,6 +140,13 @@ export class MailService {
     }
     if (dto.password !== undefined && dto.password !== '') {
       box.passwordEncrypted = encryptSettingsValue(dto.password);
+      box.lastSyncError = null;
+    }
+    if (dto.imapHost !== undefined && dto.imapHost !== box.imapHost) {
+      box.lastSyncError = null;
+    }
+    if (dto.smtpHost !== undefined && dto.smtpHost !== box.smtpHost) {
+      box.lastSyncError = null;
     }
     if (dto.imapHost !== undefined) box.imapHost = dto.imapHost;
     if (dto.imapPort !== undefined) box.imapPort = dto.imapPort;
@@ -218,6 +231,10 @@ export class MailService {
       emailAddress: box.emailAddress,
       signatureHtml: box.signatureHtml,
       active: box.active,
+      lastSyncedAt: box.lastSyncedAt
+        ? new Date(box.lastSyncedAt).toISOString()
+        : null,
+      lastSyncError: box.lastSyncError ?? null,
     };
   }
 
@@ -230,25 +247,57 @@ export class MailService {
 
   async listFolders(userId: string) {
     const box = await this.requireMailbox(userId);
-    return this.withImap(box, async (client) => {
-      const folders = await client.list();
-      const items: { path: string; name: string; unseen: number }[] = [];
-      for (const folder of folders) {
-        if (folder.flags?.has('\\Noselect')) continue;
-        let unseen = 0;
-        try {
-          const status = await client.status(folder.path, { unseen: true });
-          unseen = status.unseen ?? 0;
-        } catch {
-          // some servers refuse STATUS on certain folders — report 0
-        }
-        items.push({ path: folder.path, name: folder.name, unseen });
-      }
-      return { items };
-    });
+
+    // Served from the folder snapshot stored during the last sync.
+    if (box.foldersJson && box.foldersJson.length > 0) {
+      return {
+        items: box.foldersJson.map((f) => ({
+          path: f.path,
+          name: f.name,
+          unseen: f.unseen,
+        })),
+      };
+    }
+
+    // Never synced yet — best-effort synchronous sync, then re-read.
+    await this.sync.syncMailbox(box.id);
+    const fresh = await this.mailboxes.findOne({ where: { id: box.id } });
+    const folders = fresh?.foldersJson ?? [];
+    if (folders.length > 0) {
+      return {
+        items: folders.map((f) => ({
+          path: f.path,
+          name: f.name,
+          unseen: f.unseen,
+        })),
+      };
+    }
+
+    // Sync failed too — derive from whatever messages we have stored.
+    const rows: { folder: string; unseen: string }[] = await this.messages
+      .createQueryBuilder('m')
+      .select('m.folder', 'folder')
+      .addSelect('SUM(CASE WHEN m.seen = false THEN 1 ELSE 0 END)', 'unseen')
+      .where('m.mailboxId = :id', { id: box.id })
+      .groupBy('m.folder')
+      .getRawMany();
+    const items = rows.map((r) => ({
+      path: r.folder,
+      name: r.folder.split('/').pop() ?? r.folder,
+      unseen: Number(r.unseen) || 0,
+    }));
+    if (items.length === 0) {
+      items.push({ path: 'INBOX', name: 'INBOX', unseen: 0 });
+    }
+    return { items };
   }
 
-  async listMessages(userId: string, folder: string, page: number, limit: number) {
+  async listMessages(
+    userId: string,
+    folder: string,
+    page: number,
+    limit: number,
+  ) {
     const box = await this.requireMailbox(userId);
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const safeLimit =
@@ -256,92 +305,208 @@ export class MailService {
         ? Math.floor(limit)
         : 25;
 
-    return this.withImap(box, async (client) => {
-      const lock = await client.getMailboxLock(folder || 'INBOX');
-      try {
-        const mailbox = client.mailbox;
-        const total =
-          typeof mailbox === 'object' && mailbox ? (mailbox.exists ?? 0) : 0;
+    const folderPath = folder || 'INBOX';
 
-        const items: Record<string, unknown>[] = [];
-        // Newest first: page 1 = highest sequence numbers.
-        const end = total - (safePage - 1) * safeLimit;
-        const start = Math.max(1, end - safeLimit + 1);
-        if (end >= 1) {
-          for await (const msg of client.fetch(`${start}:${end}`, {
-            uid: true,
-            envelope: true,
-            flags: true,
-            bodyStructure: true,
-          })) {
-            const from = (msg.envelope?.from?.[0] ?? {}) as EnvelopeAddress;
-            const to = (msg.envelope?.to ?? []) as EnvelopeAddress[];
-            items.push({
-              uid: msg.uid,
-              subject: msg.envelope?.subject ?? '',
-              fromName: from.name ?? '',
-              fromAddress: from.address ?? '',
-              to: to
-                .map((a) => a.address ?? '')
-                .filter((a): a is string => a !== ''),
-              date: msg.envelope?.date ?? null,
-              seen: msg.flags?.has('\\Seen') ?? false,
-              hasAttachments: this.structureHasAttachments(msg.bodyStructure),
-              snippet: '',
-            });
-          }
-        }
-        items.reverse();
-        return { items, total, page: safePage, limit: safeLimit };
-      } finally {
-        lock.release();
-      }
+    // First-ever read for this mailbox: best-effort synchronous sync so the
+    // user doesn't see an empty inbox. Failures are tolerated — we serve
+    // whatever the DB has.
+    const anyRow = await this.messages.findOne({
+      where: { mailboxId: box.id },
     });
+    if (!anyRow) {
+      await this.sync.syncMailbox(box.id);
+    }
+
+    const [rows, total] = await this.messages.findAndCount({
+      where: { mailboxId: box.id, folder: folderPath },
+      order: { date: 'DESC', uid: 'DESC' },
+      skip: (safePage - 1) * safeLimit,
+      take: safeLimit,
+    });
+
+    const items = rows.map((m) => ({
+      uid: m.uid,
+      subject: m.subject,
+      fromName: m.fromName,
+      fromAddress: m.fromAddress,
+      to: m.toJson ?? [],
+      date: m.date ?? null,
+      seen: m.seen,
+      hasAttachments: m.hasAttachments,
+      snippet: m.snippet ?? '',
+    }));
+
+    const fresh = await this.mailboxes.findOne({ where: { id: box.id } });
+    const syncedAt = fresh?.lastSyncedAt
+      ? new Date(fresh.lastSyncedAt).toISOString()
+      : null;
+    const stale =
+      !syncedAt || Date.now() - new Date(syncedAt).getTime() > 10 * 60_000;
+
+    return { items, total, page: safePage, limit: safeLimit, syncedAt, stale };
   }
 
   async getMessage(userId: string, uid: number, folder: string) {
     const box = await this.requireMailbox(userId);
-    return this.withImap(box, async (client) => {
-      const lock = await client.getMailboxLock(folder || 'INBOX');
-      try {
-        const msg = await client.fetchOne(
-          String(uid),
-          { uid: true, source: true, flags: true },
-          { uid: true },
-        );
-        if (!msg || !msg.source) {
-          throw new NotFoundException('Message not found in this folder.');
-        }
+    const folderPath = folder || 'INBOX';
 
-        const parsed = await simpleParser(msg.source);
-        // Opening a message marks it read (best-effort).
+    let row = await this.messages.findOne({
+      where: { mailboxId: box.id, folder: folderPath, uid },
+    });
+
+    // Not synced yet at all — fall back to a single live fetch and store it.
+    if (!row) {
+      row = await this.liveFetchIntoDb(box, folderPath, uid);
+      if (!row) {
+        throw new NotFoundException('Message not found in this folder.');
+      }
+    }
+
+    // Summary row without a body — attempt one live body fetch.
+    let bodyPending = false;
+    if (row.bodyText === null && row.bodyHtml === null) {
+      const fetched = await this.liveFetchIntoDb(box, folderPath, uid, row);
+      if (fetched) {
+        row = fetched;
+      } else {
+        bodyPending = true;
+      }
+    }
+
+    // Opening a message marks it read: DB immediately, IMAP best-effort.
+    if (!row.seen) {
+      row.seen = true;
+      await this.messages.save(row);
+      this.flagSeenBestEffort(box, folderPath, uid);
+    }
+
+    return {
+      uid,
+      subject: row.subject,
+      fromName: row.fromName,
+      fromAddress: row.fromAddress,
+      to: row.toJson ?? [],
+      cc: row.ccJson ?? [],
+      date: row.date ?? null,
+      seen: true,
+      bodyHtml: row.bodyHtml ?? '',
+      bodyText: row.bodyText ?? '',
+      attachments: row.attachmentsJson ?? [],
+      ...(bodyPending ? { bodyPending: true } : {}),
+    };
+  }
+
+  /**
+   * Single live IMAP fetch of one message; parses, sanitizes and stores it.
+   * Returns null on any failure — callers degrade gracefully.
+   */
+  private async liveFetchIntoDb(
+    box: LinkedMailbox,
+    folderPath: string,
+    uid: number,
+    existing?: MailMessage,
+  ): Promise<MailMessage | null> {
+    try {
+      return await this.withImapRaw(box, async (client) => {
+        const lock = await client.getMailboxLock(folderPath);
         try {
-          await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
-        } catch {
-          // non-fatal
-        }
+          const msg = await client.fetchOne(
+            String(uid),
+            { uid: true, source: true, envelope: true, flags: true },
+            { uid: true },
+          );
+          if (!msg || !msg.source) return null;
 
-        return {
-          uid,
-          subject: parsed.subject ?? '',
-          fromName: parsed.from?.value?.[0]?.name ?? '',
-          fromAddress: parsed.from?.value?.[0]?.address ?? '',
-          to: this.addressList(parsed.to),
-          cc: this.addressList(parsed.cc),
-          date: parsed.date ?? null,
-          seen: true,
-          bodyHtml: typeof parsed.html === 'string' ? parsed.html : '',
-          bodyText: parsed.text ?? '',
-          attachments: (parsed.attachments ?? []).map((a) => ({
-            filename: a.filename ?? 'attachment',
-            size: a.size ?? 0,
-            contentType: a.contentType ?? 'application/octet-stream',
-          })),
-        };
+          let row = existing;
+          if (!row) {
+            const from = (msg.envelope?.from?.[0] ?? {}) as EnvelopeAddress;
+            const to = (msg.envelope?.to ?? []) as EnvelopeAddress[];
+            const cc = (msg.envelope?.cc ?? []) as EnvelopeAddress[];
+            row = this.messages.create({
+              mailboxId: box.id,
+              folder: folderPath,
+              uid,
+              subject: msg.envelope?.subject ?? '',
+              fromName: (from.name ?? '').slice(0, 255),
+              fromAddress: (from.address ?? '').slice(0, 320),
+              toJson: to.map((a) => a.address ?? '').filter((a) => a !== ''),
+              ccJson: cc.map((a) => a.address ?? '').filter((a) => a !== ''),
+              date: msg.envelope?.date ?? null,
+              seen: msg.flags?.has('\\Seen') ?? false,
+              hasAttachments: false,
+              snippet: '',
+              syncedAt: new Date(),
+            });
+            row = await this.messages.save(row);
+          }
+          await this.sync.storeParsedBody(row, msg.source);
+          row.hasAttachments =
+            (row.attachmentsJson?.length ?? 0) > 0 ? true : row.hasAttachments;
+          await this.messages.save(row);
+          return row;
+        } finally {
+          lock.release();
+        }
+      });
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Live body fetch failed for ${box.emailAddress} ${folderPath}/${uid}: ${detail}`,
+      );
+      return null;
+    }
+  }
+
+  /** Fire-and-forget \Seen flag on the IMAP server. */
+  private flagSeenBestEffort(
+    box: LinkedMailbox,
+    folderPath: string,
+    uid: number,
+  ): void {
+    void this.withImapRaw(box, async (client) => {
+      const lock = await client.getMailboxLock(folderPath);
+      try {
+        await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
       } finally {
         lock.release();
       }
+    }).catch(() => undefined);
+  }
+
+  async markRead(userId: string, uid: number, folder: string) {
+    const box = await this.requireMailbox(userId);
+    const folderPath = folder || 'INBOX';
+    const row = await this.messages.findOne({
+      where: { mailboxId: box.id, folder: folderPath, uid },
     });
+    if (row && !row.seen) {
+      row.seen = true;
+      await this.messages.save(row);
+    }
+    this.flagSeenBestEffort(box, folderPath, uid);
+    return { ok: true };
+  }
+
+  /** On-demand sync for the caller's mailbox (30s rate limit). */
+  async refresh(userId: string) {
+    const box = await this.requireMailbox(userId);
+    if (
+      box.lastSyncedAt &&
+      Date.now() - new Date(box.lastSyncedAt).getTime() < 30_000
+    ) {
+      return {
+        ok: true,
+        syncedAt: new Date(box.lastSyncedAt).toISOString(),
+      };
+    }
+    await this.sync.syncMailbox(box.id);
+    const fresh = await this.mailboxes.findOne({ where: { id: box.id } });
+    return {
+      ok: !fresh?.lastSyncError,
+      syncedAt: fresh?.lastSyncedAt
+        ? new Date(fresh.lastSyncedAt).toISOString()
+        : null,
+    };
   }
 
   async send(userId: string, dto: SendMailDto) {
@@ -399,6 +564,16 @@ export class MailService {
       );
     }
 
+    // Mirror into the local store so the message is visible immediately.
+    try {
+      await this.storeSentLocally(box, raw, dto);
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Could not store local sent copy for ${box.emailAddress}: ${detail}`,
+      );
+    }
+
     return { ok: true };
   }
 
@@ -429,26 +604,16 @@ export class MailService {
     });
   }
 
-  /** Connect, run `fn`, and always try to logout — mapping connect failures to 502. */
-  private async withImap<T>(
+  /** Like withImap but propagates raw errors — for best-effort internal work. */
+  private async withImapRaw<T>(
     box: LinkedMailbox,
     fn: (client: ImapFlow) => Promise<T>,
   ): Promise<T> {
-    const password = decryptSettingsValue(box.passwordEncrypted);
-    const client = this.buildImapClient(box, password);
-    try {
-      await client.connect();
-    } catch (error: unknown) {
-      const detail = error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `IMAP connect failed for mailbox ${box.emailAddress}: ${detail}`,
-      );
-      throw new BadGatewayException({
-        message:
-          'Could not connect to the mailbox — the mail server refused the connection or login. Check the mailbox settings or try again shortly.',
-        code: 'MAILBOX_CONNECT_FAILED',
-      });
-    }
+    const client = this.buildImapClient(
+      box,
+      decryptSettingsValue(box.passwordEncrypted),
+    );
+    await client.connect();
     try {
       return await fn(client);
     } finally {
@@ -487,28 +652,39 @@ export class MailService {
     }
   }
 
-  private addressList(value: AddressObject | AddressObject[] | undefined) {
-    const objects = Array.isArray(value) ? value : value ? [value] : [];
-    return objects
-      .flatMap((o) => o.value ?? [])
-      .map((a) => a.address ?? '')
-      .filter((a) => a !== '');
-  }
+  /**
+   * Insert the just-sent message into mail_messages under the Sent folder with
+   * a synthetic negative uid (the server assigns the real UID; the next sync
+   * inserts the real row and prunes synthetic ones).
+   */
+  private async storeSentLocally(
+    box: LinkedMailbox,
+    raw: Buffer,
+    dto: SendMailDto,
+  ): Promise<void> {
+    const folders = box.foldersJson ?? [];
+    const sentPath =
+      folders.find((f) => f.specialUse === '\\Sent')?.path ??
+      folders.find((f) => /sent/i.test(f.name))?.path ??
+      'Sent';
 
-  /** True when any non-inline non-text part exists in the BODYSTRUCTURE tree. */
-  private structureHasAttachments(node: unknown): boolean {
-    if (!node || typeof node !== 'object') return false;
-    const struct = node as {
-      disposition?: string;
-      type?: string;
-      childNodes?: unknown[];
-    };
-    if (struct.disposition?.toLowerCase() === 'attachment') return true;
-    if (Array.isArray(struct.childNodes)) {
-      return struct.childNodes.some((child) =>
-        this.structureHasAttachments(child),
-      );
-    }
-    return false;
+    const row = this.messages.create({
+      mailboxId: box.id,
+      folder: sentPath,
+      // Negative synthetic uid — unique per (mailbox, folder), pruned on sync.
+      uid: -Math.floor(Date.now() / 1000),
+      subject: dto.subject,
+      fromName: '',
+      fromAddress: box.emailAddress,
+      toJson: dto.to,
+      ccJson: dto.cc ?? [],
+      date: new Date(),
+      seen: true,
+      hasAttachments: false,
+      snippet: '',
+      syncedAt: new Date(),
+    });
+    const saved = await this.messages.save(row);
+    await this.sync.storeParsedBody(saved, raw);
   }
 }

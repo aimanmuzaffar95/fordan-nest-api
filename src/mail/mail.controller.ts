@@ -66,6 +66,22 @@ export class MailController {
     return this.mail.getMessage(this.userId(req), uid, folder);
   }
 
+  @Post('messages/:uid/read')
+  @HttpCode(HttpStatus.OK)
+  markRead(
+    @Req() req: AuthedRequest,
+    @Param('uid', ParseIntPipe) uid: number,
+    @Query('folder', new DefaultValuePipe('INBOX')) folder: string,
+  ) {
+    return this.mail.markRead(this.userId(req), uid, folder);
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  refresh(@Req() req: AuthedRequest) {
+    return this.mail.refresh(this.userId(req));
+  }
+
   @Post('send')
   @HttpCode(HttpStatus.OK)
   send(@Req() req: AuthedRequest, @Body() dto: SendMailDto) {

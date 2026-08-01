@@ -57,6 +57,20 @@ export class LinkedMailbox {
   @Column({ type: 'boolean', default: true })
   active: boolean;
 
+  // Last successful (or attempted-with-error) background sync.
+  @Column({ type: 'timestamp', nullable: true })
+  lastSyncedAt: Date | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  lastSyncError: string | null;
+
+  // [{path,name,unseen}] snapshot captured during each sync — serves
+  // GET /mail/folders without a live IMAP connection.
+  @Column({ type: 'json', nullable: true })
+  foldersJson:
+    | { path: string; name: string; unseen: number; specialUse?: string }[]
+    | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

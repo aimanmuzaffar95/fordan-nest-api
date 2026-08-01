@@ -78,6 +78,7 @@ import { JobGeneratedDocument } from './documents/entities/job-generated-documen
 import { JobDocumentSignRequest } from './documents/entities/job-document-sign-request.entity';
 import { MailModule } from './mail/mail.module';
 import { LinkedMailbox } from './mail/linked-mailbox.entity';
+import { MailMessage } from './mail/mail-message.entity';
 import { loadEnvFile } from './common/load-env.util';
 import { getSettingsEncryptionKey } from './common/crypto.util';
 
@@ -212,6 +213,7 @@ getSettingsEncryptionKey();
         JobDocumentSignRequest,
         McpAccessKey,
         LinkedMailbox,
+        MailMessage,
       ],
       migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,
