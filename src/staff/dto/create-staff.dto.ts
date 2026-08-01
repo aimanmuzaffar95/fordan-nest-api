@@ -30,10 +30,13 @@ export class CreateStaffDto {
   @MaxLength(255)
   address: string;
 
+  // Optional: the service autogenerates an ID number when omitted (the
+  // required-ness here previously made that branch unreachable).
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(255)
-  identificationNumber: string;
+  identificationNumber?: string;
 
   @IsIn([UserRole.MANAGER, UserRole.INSTALLER, UserRole.EMPLOYEE])
   staffType: UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE;
