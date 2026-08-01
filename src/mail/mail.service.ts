@@ -126,8 +126,11 @@ export class MailService {
     }
 
     if (dto.emailAddress !== undefined) box.emailAddress = dto.emailAddress;
-    if (dto.username !== undefined && dto.username.trim() !== '') {
-      box.username = dto.username.trim();
+    // Blank username resets to the email address — previously a bad username
+    // (e.g. a display name pasted by mistake) was impossible to clear from the
+    // UI and caused permanent 535 auth failures.
+    if (dto.username !== undefined) {
+      box.username = dto.username.trim() || box.emailAddress;
     }
     if (dto.password !== undefined && dto.password !== '') {
       box.passwordEncrypted = encryptSettingsValue(dto.password);
