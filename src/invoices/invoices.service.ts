@@ -547,6 +547,15 @@ export class InvoicesService {
         code: 'EMAIL_DELIVERY_FAILED',
       });
     }
+    await this.appendActivity(
+      invoice,
+      {
+        type: 'invoice_reminder_sent',
+        description: `Overdue payment reminder emailed to ${customerEmail}`,
+        payload: { to: customerEmail },
+      },
+      viewer?.userId,
+    );
   }
 
   private assertManagerJobAccess(job: Job | null | undefined, userId: string) {
