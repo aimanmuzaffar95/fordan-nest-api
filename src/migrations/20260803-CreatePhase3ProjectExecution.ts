@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
+import { resolveUuidColumn } from '../common/migration-uuid.util';
 
 /**
  * PRD v2 Phase 3 — the Opportunity/Project split and everything that hangs off
@@ -13,6 +14,7 @@ import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
 export class CreatePhase3ProjectExecution20260803_1700000002000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPostgres = queryRunner.connection.options.type === 'postgres';
+    const uuidCol = await resolveUuidColumn(queryRunner);
     const ts = isPostgres ? 'timestamp' : 'datetime';
     const json = isPostgres ? 'jsonb' : 'json';
     const uuidDefault = isPostgres ? { default: 'uuid_generate_v4()' } : {};
@@ -31,20 +33,20 @@ export class CreatePhase3ProjectExecution20260803_1700000002000 implements Migra
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
             // Unique: a job has at most one delivery project.
-            { name: 'jobId', type: 'uuid', isUnique: true },
+            { name: 'jobId', ...uuidCol, isUnique: true },
             {
               name: 'projectNumber',
               type: 'varchar',
               length: '50',
               isUnique: true,
             },
-            { name: 'customerId', type: 'uuid' },
+            { name: 'customerId', ...uuidCol },
             {
               name: 'stage',
               type: 'varchar',
@@ -79,7 +81,11 @@ export class CreatePhase3ProjectExecution20260803_1700000002000 implements Migra
               isNullable: true,
             },
             { name: 'contractSignedAt', type: ts, isNullable: true },
-            { name: 'projectManagerUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'projectManagerUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'targetInstallDate', type: 'date', isNullable: true },
             { name: 'actualInstallDate', type: 'date', isNullable: true },
             { name: 'targetPtoDate', type: 'date', isNullable: true },
@@ -89,7 +95,7 @@ export class CreatePhase3ProjectExecution20260803_1700000002000 implements Migra
             { name: 'readinessConfirmedAt', type: ts, isNullable: true },
             {
               name: 'readinessConfirmedByUserId',
-              type: 'uuid',
+              ...uuidCol,
               isNullable: true,
             },
             {
@@ -129,12 +135,12 @@ export class CreatePhase3ProjectExecution20260803_1700000002000 implements Migra
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'projectId', type: 'uuid' },
+            { name: 'projectId', ...uuidCol },
             { name: 'permitType', type: 'varchar', length: '60' },
             { name: 'authorityName', type: 'varchar', length: '160' },
             {
@@ -171,7 +177,11 @@ export class CreatePhase3ProjectExecution20260803_1700000002000 implements Migra
             },
             { name: 'stalledAlertSentAt', type: ts, isNullable: true },
             { name: 'notes', type: 'text', isNullable: true },
-            { name: 'createdByUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'createdByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'createdAt', type: ts, default: 'now()' },
             { name: 'updatedAt', type: ts, default: 'now()' },
           ],
@@ -194,12 +204,12 @@ export class CreatePhase3ProjectExecution20260803_1700000002000 implements Migra
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'projectId', type: 'uuid' },
+            { name: 'projectId', ...uuidCol },
             { name: 'type', type: 'varchar', length: '20' },
             {
               name: 'status',
@@ -225,7 +235,11 @@ export class CreatePhase3ProjectExecution20260803_1700000002000 implements Migra
             { name: 'correctionList', type: 'text', isNullable: true },
             { name: 'attemptNumber', type: 'int', default: 1 },
             { name: 'notes', type: 'text', isNullable: true },
-            { name: 'createdByUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'createdByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'createdAt', type: ts, default: 'now()' },
             { name: 'updatedAt', type: ts, default: 'now()' },
           ],
@@ -254,12 +268,12 @@ export class CreatePhase3ProjectExecution20260803_1700000002000 implements Migra
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'projectId', type: 'uuid' },
+            { name: 'projectId', ...uuidCol },
             { name: 'visitNumber', type: 'int', default: 1 },
             {
               name: 'status',
@@ -271,7 +285,11 @@ export class CreatePhase3ProjectExecution20260803_1700000002000 implements Migra
             { name: 'startedAt', type: ts, isNullable: true },
             { name: 'completedAt', type: ts, isNullable: true },
             { name: 'crewUserIds', type: json, isNullable: true },
-            { name: 'leadInstallerUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'leadInstallerUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'completionPercent', type: 'int', isNullable: true },
             { name: 'outstandingWork', type: 'text', isNullable: true },
             {
@@ -303,13 +321,17 @@ export class CreatePhase3ProjectExecution20260803_1700000002000 implements Migra
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'projectId', type: 'uuid' },
-            { name: 'installVisitId', type: 'uuid', isNullable: true },
+            { name: 'projectId', ...uuidCol },
+            {
+              name: 'installVisitId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'title', type: 'varchar', length: '200' },
             { name: 'description', type: 'text', isNullable: true },
             {
@@ -324,10 +346,22 @@ export class CreatePhase3ProjectExecution20260803_1700000002000 implements Migra
               length: '20',
               default: "'open'",
             },
-            { name: 'reportedByUserId', type: 'uuid', isNullable: true },
-            { name: 'assignedUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'reportedByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
+            {
+              name: 'assignedUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'resolvedAt', type: ts, isNullable: true },
-            { name: 'resolvedByUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'resolvedByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'resolutionNotes', type: 'text', isNullable: true },
             {
               name: 'waiverReason',

@@ -5,6 +5,7 @@ import {
   TableColumn,
   TableIndex,
 } from 'typeorm';
+import { resolveUuidColumn } from '../common/migration-uuid.util';
 
 /**
  * PRD v2 Phase 2 — site surveys, proposal versions, financing applications,
@@ -17,6 +18,7 @@ import {
 export class CreatePhase2FieldAndProposal20260803_1700000001900 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPostgres = queryRunner.connection.options.type === 'postgres';
+    const uuidCol = await resolveUuidColumn(queryRunner);
     const ts = isPostgres ? 'timestamp' : 'datetime';
     const json = isPostgres ? 'jsonb' : 'json';
     const uuidDefault = isPostgres ? { default: 'uuid_generate_v4()' } : {};
@@ -35,12 +37,12 @@ export class CreatePhase2FieldAndProposal20260803_1700000001900 implements Migra
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'jobId', type: 'uuid' },
+            { name: 'jobId', ...uuidCol },
             {
               name: 'status',
               type: 'varchar',
@@ -53,11 +55,19 @@ export class CreatePhase2FieldAndProposal20260803_1700000001900 implements Migra
               length: '30',
               isNullable: true,
             },
-            { name: 'assignedUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'assignedUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'scheduledAt', type: ts, isNullable: true },
             { name: 'startedAt', type: ts, isNullable: true },
             { name: 'completedAt', type: ts, isNullable: true },
-            { name: 'completedByUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'completedByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             {
               name: 'roofType',
               type: 'varchar',
@@ -156,12 +166,12 @@ export class CreatePhase2FieldAndProposal20260803_1700000001900 implements Migra
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'jobId', type: 'uuid' },
+            { name: 'jobId', ...uuidCol },
             { name: 'versionNumber', type: 'int' },
             {
               name: 'status',
@@ -222,7 +232,11 @@ export class CreatePhase2FieldAndProposal20260803_1700000001900 implements Migra
             { name: 'systemSnapshot', type: json, isNullable: true },
             { name: 'notes', type: 'text', isNullable: true },
             { name: 'sentAt', type: ts, isNullable: true },
-            { name: 'sentByUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'sentByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             {
               name: 'sentToEmail',
               type: 'varchar',
@@ -241,7 +255,11 @@ export class CreatePhase2FieldAndProposal20260803_1700000001900 implements Migra
               length: '200',
               isNullable: true,
             },
-            { name: 'createdByUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'createdByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'createdAt', type: ts, default: 'now()' },
             { name: 'updatedAt', type: ts, default: 'now()' },
           ],
@@ -279,12 +297,12 @@ export class CreatePhase2FieldAndProposal20260803_1700000001900 implements Migra
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'jobId', type: 'uuid' },
+            { name: 'jobId', ...uuidCol },
             {
               name: 'status',
               type: 'varchar',
@@ -346,7 +364,11 @@ export class CreatePhase2FieldAndProposal20260803_1700000001900 implements Migra
             { name: 'outstandingRequirements', type: 'text', isNullable: true },
             { name: 'notes', type: 'text', isNullable: true },
             { name: 'expiryReminderSentAt', type: ts, isNullable: true },
-            { name: 'createdByUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'createdByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'createdAt', type: ts, default: 'now()' },
             { name: 'updatedAt', type: ts, default: 'now()' },
           ],

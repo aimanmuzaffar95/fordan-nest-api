@@ -1,4 +1,8 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
+import {
+  resolveUuidColumn,
+  type UuidColumnSpec,
+} from '../common/migration-uuid.util';
 
 type LeadMetaBlob = {
   formSlug?: unknown;
@@ -18,26 +22,32 @@ type LeadMetaBlob = {
  * be re-run or rolled back without losing anything.
  */
 export class AddLeadAttributionToCustomers20260803_1700000001700 implements MigrationInterface {
-  private readonly columns: Array<{
+  /** Built per dialect: `leadOwnerUserId` must match the id convention on disk. */
+  private columnsFor(uuidCol: UuidColumnSpec): Array<{
     name: string;
     type: string;
     length?: string;
-  }> = [
-    { name: 'leadSource', type: 'varchar', length: '60' },
-    { name: 'leadMedium', type: 'varchar', length: '60' },
-    { name: 'leadCampaign', type: 'varchar', length: '120' },
-    { name: 'leadFormSlug', type: 'varchar', length: '60' },
-    { name: 'leadPageReferrer', type: 'text' },
-    { name: 'leadSelfReportedSource', type: 'varchar', length: '120' },
-    { name: 'leadOwnerUserId', type: 'uuid' },
-  ];
+    charset?: string;
+    collation?: string;
+  }> {
+    return [
+      { name: 'leadSource', type: 'varchar', length: '60' },
+      { name: 'leadMedium', type: 'varchar', length: '60' },
+      { name: 'leadCampaign', type: 'varchar', length: '120' },
+      { name: 'leadFormSlug', type: 'varchar', length: '60' },
+      { name: 'leadPageReferrer', type: 'text' },
+      { name: 'leadSelfReportedSource', type: 'varchar', length: '120' },
+      { name: 'leadOwnerUserId', ...uuidCol },
+    ];
+  }
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable('customers'))) return;
 
     const isPostgres = queryRunner.connection.options.type === 'postgres';
+    const uuidCol = await resolveUuidColumn(queryRunner);
 
-    for (const col of this.columns) {
+    for (const col of this.columnsFor(uuidCol)) {
       if (await queryRunner.hasColumn('customers', col.name)) continue;
       await queryRunner.addColumn(
         'customers',
@@ -45,6 +55,8 @@ export class AddLeadAttributionToCustomers20260803_1700000001700 implements Migr
           name: col.name,
           type: col.type,
           ...(col.length ? { length: col.length } : {}),
+          ...(col.charset ? { charset: col.charset } : {}),
+          ...(col.collation ? { collation: col.collation } : {}),
           isNullable: true,
         }),
       );
@@ -187,7 +199,7 @@ export class AddLeadAttributionToCustomers20260803_1700000001700 implements Migr
   public async down(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable('customers'))) return;
     const names = [
-      ...this.columns.map((c) => c.name),
+      ...this.columnsFor({ type: 'uuid' }).map((c) => c.name),
       'leadCapturedAt',
       'leadOwnershipHistory',
     ];

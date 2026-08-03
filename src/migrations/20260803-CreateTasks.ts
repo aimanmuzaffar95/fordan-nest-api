@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
+import { resolveUuidColumn } from '../common/migration-uuid.util';
 
 /**
  * PRD v2 Phase 0 — the Task + SLA engine's backing table.
@@ -13,6 +14,7 @@ export class CreateTasks20260803_1700000001600 implements MigrationInterface {
     if (await queryRunner.hasTable('tasks')) return;
 
     const isPostgres = queryRunner.connection.options.type === 'postgres';
+    const uuidCol = await resolveUuidColumn(queryRunner);
     const timestampType = isPostgres ? 'timestamp' : 'datetime';
 
     await queryRunner.createTable(
@@ -21,12 +23,12 @@ export class CreateTasks20260803_1700000001600 implements MigrationInterface {
         columns: [
           {
             name: 'id',
-            type: 'uuid',
+            ...uuidCol,
             isPrimary: true,
             generationStrategy: 'uuid',
             ...(isPostgres ? { default: 'uuid_generate_v4()' } : {}),
           },
-          { name: 'jobId', type: 'uuid', isNullable: true },
+          { name: 'jobId', ...uuidCol, isNullable: true },
           { name: 'title', type: 'varchar', length: '160' },
           { name: 'description', type: 'text', isNullable: true },
           { name: 'status', type: 'varchar', length: '20', default: "'open'" },
@@ -49,15 +51,27 @@ export class CreateTasks20260803_1700000001600 implements MigrationInterface {
             length: '64',
             isNullable: true,
           },
-          { name: 'assigneeUserId', type: 'uuid', isNullable: true },
-          { name: 'createdByUserId', type: 'uuid', isNullable: true },
+          {
+            name: 'assigneeUserId',
+            ...uuidCol,
+            isNullable: true,
+          },
+          {
+            name: 'createdByUserId',
+            ...uuidCol,
+            isNullable: true,
+          },
           { name: 'dueAt', type: timestampType, isNullable: true },
           { name: 'slaDueAt', type: timestampType, isNullable: true },
           { name: 'slaBreachedAt', type: timestampType, isNullable: true },
           { name: 'escalationLevel', type: 'int', default: 0 },
           { name: 'escalatedAt', type: timestampType, isNullable: true },
           { name: 'completedAt', type: timestampType, isNullable: true },
-          { name: 'completedByUserId', type: 'uuid', isNullable: true },
+          {
+            name: 'completedByUserId',
+            ...uuidCol,
+            isNullable: true,
+          },
           { name: 'createdAt', type: timestampType, default: 'now()' },
           { name: 'updatedAt', type: timestampType, default: 'now()' },
         ],

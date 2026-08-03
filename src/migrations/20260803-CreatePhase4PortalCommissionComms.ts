@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
+import { resolveUuidColumn } from '../common/migration-uuid.util';
 
 /**
  * PRD v2 Phase 4 — customer portal access tokens, commission events, and the
@@ -11,6 +12,7 @@ import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
 export class CreatePhase4PortalCommissionComms20260803_1700000002100 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPostgres = queryRunner.connection.options.type === 'postgres';
+    const uuidCol = await resolveUuidColumn(queryRunner);
     const ts = isPostgres ? 'timestamp' : 'datetime';
     const uuidDefault = isPostgres ? { default: 'uuid_generate_v4()' } : {};
 
@@ -22,20 +24,24 @@ export class CreatePhase4PortalCommissionComms20260803_1700000002100 implements 
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
             // SHA-256 hex. Never the plaintext token.
             { name: 'tokenHash', type: 'varchar', length: '64' },
-            { name: 'customerId', type: 'uuid' },
-            { name: 'jobId', type: 'uuid' },
+            { name: 'customerId', ...uuidCol },
+            { name: 'jobId', ...uuidCol },
             { name: 'expiresAt', type: ts },
             { name: 'revokedAt', type: ts, isNullable: true },
             { name: 'lastAccessedAt', type: ts, isNullable: true },
             { name: 'accessCount', type: 'int', default: 0 },
-            { name: 'createdByUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'createdByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'createdAt', type: ts, default: 'now()' },
           ],
         }),
@@ -65,14 +71,18 @@ export class CreatePhase4PortalCommissionComms20260803_1700000002100 implements 
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'userId', type: 'uuid' },
-            { name: 'jobId', type: 'uuid', isNullable: true },
-            { name: 'projectId', type: 'uuid', isNullable: true },
+            { name: 'userId', ...uuidCol },
+            { name: 'jobId', ...uuidCol, isNullable: true },
+            {
+              name: 'projectId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'eventType', type: 'varchar', length: '30' },
             {
               name: 'status',
@@ -107,9 +117,17 @@ export class CreatePhase4PortalCommissionComms20260803_1700000002100 implements 
               length: '120',
               isNullable: true,
             },
-            { name: 'reversesEventId', type: 'uuid', isNullable: true },
+            {
+              name: 'reversesEventId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'approvedAt', type: ts, isNullable: true },
-            { name: 'approvedByUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'approvedByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'paidAt', type: ts, isNullable: true },
             {
               name: 'payoutReference',
@@ -124,7 +142,11 @@ export class CreatePhase4PortalCommissionComms20260803_1700000002100 implements 
               isNullable: true,
             },
             { name: 'notes', type: 'text', isNullable: true },
-            { name: 'createdByUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'createdByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'createdAt', type: ts, default: 'now()' },
             { name: 'updatedAt', type: ts, default: 'now()' },
           ],
@@ -153,13 +175,13 @@ export class CreatePhase4PortalCommissionComms20260803_1700000002100 implements 
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'customerId', type: 'uuid' },
-            { name: 'jobId', type: 'uuid', isNullable: true },
+            { name: 'customerId', ...uuidCol },
+            { name: 'jobId', ...uuidCol, isNullable: true },
             { name: 'channel', type: 'varchar', length: '20' },
             { name: 'direction', type: 'varchar', length: '10' },
             {
@@ -195,7 +217,11 @@ export class CreatePhase4PortalCommissionComms20260803_1700000002100 implements 
               isNullable: true,
             },
             { name: 'occurredAt', type: ts },
-            { name: 'staffUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'staffUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'createdAt', type: ts, default: 'now()' },
             { name: 'updatedAt', type: ts, default: 'now()' },
           ],

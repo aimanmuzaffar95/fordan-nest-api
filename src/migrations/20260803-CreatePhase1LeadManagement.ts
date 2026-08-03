@@ -5,6 +5,7 @@ import {
   TableColumn,
   TableIndex,
 } from 'typeorm';
+import { resolveUuidColumn } from '../common/migration-uuid.util';
 
 /**
  * PRD v2 Phase 1 — territories + routing audit, qualification fields, and
@@ -18,6 +19,7 @@ import {
 export class CreatePhase1LeadManagement20260803_1700000001800 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isPostgres = queryRunner.connection.options.type === 'postgres';
+    const uuidCol = await resolveUuidColumn(queryRunner);
     const ts = isPostgres ? 'timestamp' : 'datetime';
     const json = isPostgres ? 'jsonb' : 'json';
     const uuidDefault = isPostgres ? { default: 'uuid_generate_v4()' } : {};
@@ -30,7 +32,7 @@ export class CreatePhase1LeadManagement20260803_1700000001800 implements Migrati
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
@@ -45,7 +47,11 @@ export class CreatePhase1LeadManagement20260803_1700000001800 implements Migrati
               length: '30',
               default: "'round_robin'",
             },
-            { name: 'ownerUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'ownerUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'reassignAfterHours', type: 'int', isNullable: true },
             { name: 'rotationCursor', type: 'int', default: 0 },
             { name: 'active', type: 'boolean', default: true },
@@ -73,13 +79,13 @@ export class CreatePhase1LeadManagement20260803_1700000001800 implements Migrati
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'territoryId', type: 'uuid' },
-            { name: 'userId', type: 'uuid' },
+            { name: 'territoryId', ...uuidCol },
+            { name: 'userId', ...uuidCol },
             { name: 'weight', type: 'int', default: 1 },
             { name: 'active', type: 'boolean', default: true },
             { name: 'assignedCount', type: 'int', default: 0 },
@@ -128,14 +134,18 @@ export class CreatePhase1LeadManagement20260803_1700000001800 implements Migrati
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'customerId', type: 'uuid' },
-            { name: 'jobId', type: 'uuid', isNullable: true },
-            { name: 'territoryId', type: 'uuid', isNullable: true },
+            { name: 'customerId', ...uuidCol },
+            { name: 'jobId', ...uuidCol, isNullable: true },
+            {
+              name: 'territoryId',
+              ...uuidCol,
+              isNullable: true,
+            },
             {
               name: 'territoryName',
               type: 'varchar',
@@ -149,8 +159,16 @@ export class CreatePhase1LeadManagement20260803_1700000001800 implements Migrati
               length: '30',
               isNullable: true,
             },
-            { name: 'assignedUserId', type: 'uuid', isNullable: true },
-            { name: 'previousUserId', type: 'uuid', isNullable: true },
+            {
+              name: 'assignedUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
+            {
+              name: 'previousUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             { name: 'reason', type: 'text', isNullable: true },
             { name: 'createdAt', type: ts, default: 'now()' },
           ],
@@ -180,14 +198,18 @@ export class CreatePhase1LeadManagement20260803_1700000001800 implements Migrati
           columns: [
             {
               name: 'id',
-              type: 'uuid',
+              ...uuidCol,
               isPrimary: true,
               generationStrategy: 'uuid',
               ...uuidDefault,
             },
-            { name: 'survivorCustomerId', type: 'uuid' },
-            { name: 'mergedCustomerId', type: 'uuid' },
-            { name: 'performedByUserId', type: 'uuid', isNullable: true },
+            { name: 'survivorCustomerId', ...uuidCol },
+            { name: 'mergedCustomerId', ...uuidCol },
+            {
+              name: 'performedByUserId',
+              ...uuidCol,
+              isNullable: true,
+            },
             {
               name: 'reason',
               type: 'varchar',
@@ -262,7 +284,7 @@ export class CreatePhase1LeadManagement20260803_1700000001800 implements Migrati
       new TableColumn({ name: 'qualifiedAt', type: ts, isNullable: true }),
       new TableColumn({
         name: 'qualifiedByUserId',
-        type: 'uuid',
+        ...uuidCol,
         isNullable: true,
       }),
       new TableColumn({ name: 'nurtureUntil', type: ts, isNullable: true }),
@@ -274,7 +296,7 @@ export class CreatePhase1LeadManagement20260803_1700000001800 implements Migrati
       }),
       new TableColumn({
         name: 'mergedIntoCustomerId',
-        type: 'uuid',
+        ...uuidCol,
         isNullable: true,
       }),
       new TableColumn({ name: 'mergedAt', type: ts, isNullable: true }),
