@@ -559,7 +559,7 @@ export class MailSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   buildImapClient(box: LinkedMailbox): ImapFlow {
-    return new ImapFlow({
+    const client = new ImapFlow({
       host: box.imapHost,
       port: box.imapPort,
       secure: box.imapSecure,
@@ -572,6 +572,22 @@ export class MailSyncService implements OnModuleInit, OnModuleDestroy {
       greetingTimeout: IMAP_TIMEOUT_MS,
       socketTimeout: IMAP_TIMEOUT_MS * 3,
     });
+
+    // ImapFlow is an EventEmitter. A socket timeout or a server dropping the
+    // connection emits 'error', and an EventEmitter with no 'error' listener
+    // throws an uncaught exception that takes the whole API process down —
+    // this was crash-looping production. The awaited calls still surface their
+    // own failures to the caller; this listener only stops an asynchronous
+    // socket error from becoming a fatal one.
+    client.on('error', (err: unknown) => {
+      this.logger.warn(
+        `IMAP connection error for ${box.username}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    });
+
+    return client;
   }
 
   private structureHasAttachments(node: unknown): boolean {
