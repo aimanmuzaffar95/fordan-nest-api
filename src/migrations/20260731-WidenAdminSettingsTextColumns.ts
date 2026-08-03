@@ -48,7 +48,12 @@ export class WidenAdminSettingsTextColumns20260731_1700000001200 implements Migr
           await queryRunner.changeColumn(
             table,
             name,
-            new TableColumn({ name, type: 'varchar', length: '512', isNullable: true }),
+            new TableColumn({
+              name,
+              type: 'varchar',
+              length: '512',
+              isNullable: true,
+            }),
           );
         }
       }

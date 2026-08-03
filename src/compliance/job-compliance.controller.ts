@@ -78,7 +78,9 @@ export class JobComplianceController {
 
   @Put('checklist-ticks/:itemId')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
-  @ApiOperation({ summary: 'Set a manual CEC checklist tick (idempotent upsert)' })
+  @ApiOperation({
+    summary: 'Set a manual CEC checklist tick (idempotent upsert)',
+  })
   setChecklistTick(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Param('itemId') itemId: string,

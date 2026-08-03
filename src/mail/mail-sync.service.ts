@@ -78,7 +78,16 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   allowedAttributes: {
     // Preserve visual styling: inline style, class (for <style> blocks),
     // and the common presentational table/cell attributes email uses.
-    '*': ['style', 'class', 'align', 'valign', 'bgcolor', 'width', 'height', 'dir'],
+    '*': [
+      'style',
+      'class',
+      'align',
+      'valign',
+      'bgcolor',
+      'width',
+      'height',
+      'dir',
+    ],
     a: ['href', 'title', 'target'],
     img: ['src', 'alt', 'width', 'height'],
     td: ['colspan', 'rowspan', 'background'],
@@ -140,7 +149,16 @@ const SIGNATURE_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     'small',
   ],
   allowedAttributes: {
-    '*': ['style', 'class', 'align', 'valign', 'bgcolor', 'width', 'height', 'dir'],
+    '*': [
+      'style',
+      'class',
+      'align',
+      'valign',
+      'bgcolor',
+      'width',
+      'height',
+      'dir',
+    ],
     a: ['href', 'title', 'target'],
     img: ['src', 'alt', 'width', 'height'],
     td: ['colspan', 'rowspan', 'background'],
@@ -163,7 +181,10 @@ const SIGNATURE_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
 function withStyleTag(opts: sanitizeHtml.IOptions): sanitizeHtml.IOptions {
   return {
     ...opts,
-    allowedTags: [...(Array.isArray(opts.allowedTags) ? opts.allowedTags : []), 'style'],
+    allowedTags: [
+      ...(Array.isArray(opts.allowedTags) ? opts.allowedTags : []),
+      'style',
+    ],
     allowVulnerableTags: true,
   };
 }
@@ -207,7 +228,9 @@ function stripDangerousCss(html: string): string {
 
 export function sanitizeSignatureHtml(html: string): string {
   return sanitizeCssBlocks(
-    stripDangerousCss(sanitizeHtml(html, withStyleTag(SIGNATURE_SANITIZE_OPTIONS))),
+    stripDangerousCss(
+      sanitizeHtml(html, withStyleTag(SIGNATURE_SANITIZE_OPTIONS)),
+    ),
   );
 }
 

@@ -86,7 +86,8 @@ export class AttendanceSessionController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({
     summary: 'List team attendance sessions (admin/manager)',
-    description: 'Optional from/to date range and userId filter; newest first, capped at 500.',
+    description:
+      'Optional from/to date range and userId filter; newest first, capped at 500.',
   })
   async listTeamSessions(
     @Query() query: TeamSessionsQueryDto,
@@ -103,7 +104,9 @@ export class AttendanceSessionController {
 
   @Patch('sessions/:id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  @ApiOperation({ summary: 'Correct a team attendance session (adds a correction note)' })
+  @ApiOperation({
+    summary: 'Correct a team attendance session (adds a correction note)',
+  })
   async patchSession(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PatchSessionDto,

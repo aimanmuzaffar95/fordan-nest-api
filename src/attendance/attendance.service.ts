@@ -259,47 +259,47 @@ export class AttendanceService {
     let created: AttendanceRecord;
     try {
       created = await this.dataSource.transaction(async (manager) => {
-      const attendanceRepository = manager.getRepository(AttendanceRecord);
-      const timelineRepository = manager.getRepository(TimelineEvent);
-      const now = this.resolveEventTime(dto.capturedAt);
-      // BE-ATTEND-02: lat/lng/accuracy/locationStatus are client-reported and
-      // cannot be server-verified. They are already bounds-checked in the DTO
-      // (lat -90..90, lng -180..180) and are persisted verbatim as advisory
-      // data; the geofence outcome is derived server-side, not trusted from the
-      // client.
-      const record = attendanceRepository.create({
-        jobId,
-        staffId: actor.userId,
-        clockInAt: now,
-        clockInLat: this.toCoordinateValue(dto.latitude),
-        clockInLng: this.toCoordinateValue(dto.longitude),
-        clockInAccuracyM: dto.accuracyM ?? null,
-        clockOutAt: null,
-        clockOutLat: null,
-        clockOutLng: null,
-        clockOutAccuracyM: null,
-        locationStatus: dto.locationStatus,
-        photoUrl: null,
-        correctedBy: null,
-        correctionNote: null,
-        correctedAt: null,
-      });
-      const saved = await attendanceRepository.save(record);
-
-      await timelineRepository.save(
-        timelineRepository.create({
+        const attendanceRepository = manager.getRepository(AttendanceRecord);
+        const timelineRepository = manager.getRepository(TimelineEvent);
+        const now = this.resolveEventTime(dto.capturedAt);
+        // BE-ATTEND-02: lat/lng/accuracy/locationStatus are client-reported and
+        // cannot be server-verified. They are already bounds-checked in the DTO
+        // (lat -90..90, lng -180..180) and are persisted verbatim as advisory
+        // data; the geofence outcome is derived server-side, not trusted from the
+        // client.
+        const record = attendanceRepository.create({
           jobId,
-          type: 'attendance_clock_in',
-          payload: {
-            attendanceId: saved.id,
-            staffUserId: actor.userId,
-            locationStatus: saved.locationStatus,
-          } as unknown,
-          createdByUserId: actor.userId,
-        }),
-      );
+          staffId: actor.userId,
+          clockInAt: now,
+          clockInLat: this.toCoordinateValue(dto.latitude),
+          clockInLng: this.toCoordinateValue(dto.longitude),
+          clockInAccuracyM: dto.accuracyM ?? null,
+          clockOutAt: null,
+          clockOutLat: null,
+          clockOutLng: null,
+          clockOutAccuracyM: null,
+          locationStatus: dto.locationStatus,
+          photoUrl: null,
+          correctedBy: null,
+          correctionNote: null,
+          correctedAt: null,
+        });
+        const saved = await attendanceRepository.save(record);
 
-      return saved;
+        await timelineRepository.save(
+          timelineRepository.create({
+            jobId,
+            type: 'attendance_clock_in',
+            payload: {
+              attendanceId: saved.id,
+              staffUserId: actor.userId,
+              locationStatus: saved.locationStatus,
+            } as unknown,
+            createdByUserId: actor.userId,
+          }),
+        );
+
+        return saved;
       });
     } catch (error) {
       // BE-ATTEND-03: a concurrent clock-in that wins the race commits first;
@@ -335,10 +335,7 @@ export class AttendanceService {
   private async buildAlreadyClockedInError(
     openRecord: AttendanceRecord,
   ): Promise<ConflictException> {
-    const jobLabel = await this.buildJobLabel(
-      openRecord.jobId,
-      openRecord.job,
-    );
+    const jobLabel = await this.buildJobLabel(openRecord.jobId, openRecord.job);
     return new ConflictException({
       message: `You're already clocked in to ${jobLabel}. Please clock out first.`,
       code: 'CONFLICT',

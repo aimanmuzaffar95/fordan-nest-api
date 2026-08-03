@@ -130,8 +130,8 @@ export class MailService {
   ): string {
     const isSent = sentPath !== null && row.folder === sentPath;
     const addr = isSent
-      ? (row.toJson ?? [])[0] ?? ''
-      : row.fromAddress ?? '';
+      ? ((row.toJson ?? [])[0] ?? '')
+      : (row.fromAddress ?? '');
     return addr.toLowerCase();
   }
 
@@ -748,7 +748,9 @@ export class MailService {
       });
     }
 
-    const folderPath = row?.folder ?? (requested === MailService.ALL_FOLDER ? 'INBOX' : requested);
+    const folderPath =
+      row?.folder ??
+      (requested === MailService.ALL_FOLDER ? 'INBOX' : requested);
     if (row && !row.seen) {
       row.seen = true;
       await this.messages.save(row);
@@ -1006,7 +1008,9 @@ export class MailService {
     // Permanent: an SMTP 5xx reply (bad recipient / policy / mailbox) or an
     // explicit authentication failure (nodemailer code 'EAUTH', 535 login).
     const permanent =
-      (responseCode !== undefined && responseCode >= 500 && responseCode < 600) ||
+      (responseCode !== undefined &&
+        responseCode >= 500 &&
+        responseCode < 600) ||
       code === 'EAUTH';
     return { permanent, detail };
   }
@@ -1038,8 +1042,7 @@ export class MailService {
     const items = rows
       .filter(
         (r) =>
-          r.status !== 'sent' ||
-          (r.sentAt !== null && r.sentAt >= fiveMinAgo),
+          r.status !== 'sent' || (r.sentAt !== null && r.sentAt >= fiveMinAgo),
       )
       .map((r) => this.outboxView(r));
     return { items };

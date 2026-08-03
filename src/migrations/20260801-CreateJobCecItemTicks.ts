@@ -11,7 +11,13 @@ export class CreateJobCecItemTicks20260801_1700000001500 implements MigrationInt
       new Table({
         name: 'job_cec_item_ticks',
         columns: [
-          { name: 'id', type: 'uuid', isPrimary: true, generationStrategy: 'uuid', default: 'uuid_generate_v4()' },
+          {
+            name: 'id',
+            type: 'uuid',
+            isPrimary: true,
+            generationStrategy: 'uuid',
+            default: 'uuid_generate_v4()',
+          },
           { name: 'jobId', type: 'uuid' },
           { name: 'itemId', type: 'varchar', length: '64' },
           { name: 'done', type: 'boolean', default: false },
@@ -20,7 +26,12 @@ export class CreateJobCecItemTicks20260801_1700000001500 implements MigrationInt
           { name: 'createdAt', type: 'timestamp', default: 'now()' },
           { name: 'updatedAt', type: 'timestamp', default: 'now()' },
         ],
-        uniques: [{ name: 'UQ_job_cec_tick_job_item', columnNames: ['jobId', 'itemId'] }],
+        uniques: [
+          {
+            name: 'UQ_job_cec_tick_job_item',
+            columnNames: ['jobId', 'itemId'],
+          },
+        ],
         foreignKeys: [
           {
             columnNames: ['jobId'],

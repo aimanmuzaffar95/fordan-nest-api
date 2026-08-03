@@ -5,9 +5,7 @@ import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
  * one immediate delivery; a background worker retries transient failures with
  * exponential backoff so mail survives flaky shared-host SMTP and app closure.
  */
-export class CreateMailOutbox20260801_1700000001700
-  implements MigrationInterface
-{
+export class CreateMailOutbox20260801_1700000001700 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isMysql = ['mysql', 'mariadb'].includes(
       queryRunner.connection.options.type,
@@ -33,10 +31,20 @@ export class CreateMailOutbox20260801_1700000001700
           { name: 'bodyHtml', type: isMysql ? 'longtext' : 'text' },
           { name: 'appendSignature', type: 'boolean', default: true },
           { name: 'inReplyToUid', type: 'int', isNullable: true },
-          { name: 'status', type: 'varchar', length: '16', default: "'queued'" },
+          {
+            name: 'status',
+            type: 'varchar',
+            length: '16',
+            default: "'queued'",
+          },
           { name: 'attempts', type: 'int', default: 0 },
           { name: 'maxAttempts', type: 'int', default: 6 },
-          { name: 'lastError', type: 'varchar', length: '500', isNullable: true },
+          {
+            name: 'lastError',
+            type: 'varchar',
+            length: '500',
+            isNullable: true,
+          },
           { name: 'nextAttemptAt', type: 'timestamp', isNullable: true },
           { name: 'sentAt', type: 'timestamp', isNullable: true },
           {

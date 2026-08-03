@@ -305,9 +305,7 @@ export class InstallerReportsService {
       kwInstalled: Math.round(bucket?.kwInstalled ?? 0),
       onTimePercent:
         bucket && bucket.dueAssignments > 0
-          ? Math.round(
-              (bucket.onTimeAssignments / bucket.dueAssignments) * 100,
-            )
+          ? Math.round((bucket.onTimeAssignments / bucket.dueAssignments) * 100)
           : 0,
     };
   }
@@ -360,9 +358,7 @@ export class InstallerReportsService {
       return { from: normalizedFrom, to: normalizedTo };
     }
     const end = new Date(now.getTime() + 86400000);
-    const start = new Date(
-      now.getTime() - (DEFAULT_RANGE_DAYS - 1) * 86400000,
-    );
+    const start = new Date(now.getTime() - (DEFAULT_RANGE_DAYS - 1) * 86400000);
     return { from: this.dateOnly(start), to: this.dateOnly(end) };
   }
 

@@ -51,7 +51,9 @@ export type AuthProfile = {
 };
 
 /** Consecutive failed logins before an account is temporarily locked. */
-const MAX_FAILED_LOGIN_ATTEMPTS = Number(process.env.AUTH_MAX_FAILED_ATTEMPTS ?? 5);
+const MAX_FAILED_LOGIN_ATTEMPTS = Number(
+  process.env.AUTH_MAX_FAILED_ATTEMPTS ?? 5,
+);
 /** How long the lock lasts, in minutes. */
 const LOGIN_LOCKOUT_MINUTES = Number(process.env.AUTH_LOCKOUT_MINUTES ?? 15);
 
@@ -129,7 +131,10 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (credential.lockedUntil && credential.lockedUntil.getTime() > Date.now()) {
+    if (
+      credential.lockedUntil &&
+      credential.lockedUntil.getTime() > Date.now()
+    ) {
       if (!skipAudit) {
         await this.systemAudit.record({
           action: SYSTEM_AUDIT_ACTION.AUTH_LOGIN_FAILURE,
@@ -156,7 +161,7 @@ export class AuthService implements OnModuleInit {
         failedLoginAttempts: shouldLock ? 0 : attempts,
         lockedUntil: shouldLock
           ? new Date(Date.now() + LOGIN_LOCKOUT_MINUTES * 60_000)
-          : credential.lockedUntil ?? null,
+          : (credential.lockedUntil ?? null),
       });
       if (!skipAudit) {
         await this.systemAudit.record({
@@ -164,7 +169,10 @@ export class AuthService implements OnModuleInit {
           actorUserId: credential.user.id,
           resourceType: 'auth',
           resourceId: credential.user.id,
-          metadata: { reason: shouldLock ? 'invalid_password_locked' : 'invalid_password', attempts },
+          metadata: {
+            reason: shouldLock ? 'invalid_password_locked' : 'invalid_password',
+            attempts,
+          },
         });
       }
       // On the attempt that trips the lock, tell the user immediately (with the

@@ -12,16 +12,20 @@ import {
  * refreshes it — the shared mail host no longer sees one IMAP connection per
  * page view.
  */
-export class CreateMailMessagesAndSyncColumns20260801_1700000001600
-  implements MigrationInterface
-{
+export class CreateMailMessagesAndSyncColumns20260801_1700000001600 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    const isMysql = ['mysql', 'mariadb'].includes(queryRunner.connection.options.type);
+    const isMysql = ['mysql', 'mariadb'].includes(
+      queryRunner.connection.options.type,
+    );
 
     if (!(await queryRunner.hasColumn('linked_mailboxes', 'lastSyncedAt'))) {
       await queryRunner.addColumn(
         'linked_mailboxes',
-        new TableColumn({ name: 'lastSyncedAt', type: 'timestamp', isNullable: true }),
+        new TableColumn({
+          name: 'lastSyncedAt',
+          type: 'timestamp',
+          isNullable: true,
+        }),
       );
     }
     if (!(await queryRunner.hasColumn('linked_mailboxes', 'lastSyncError'))) {
@@ -38,7 +42,11 @@ export class CreateMailMessagesAndSyncColumns20260801_1700000001600
     if (!(await queryRunner.hasColumn('linked_mailboxes', 'foldersJson'))) {
       await queryRunner.addColumn(
         'linked_mailboxes',
-        new TableColumn({ name: 'foldersJson', type: 'json', isNullable: true }),
+        new TableColumn({
+          name: 'foldersJson',
+          type: 'json',
+          isNullable: true,
+        }),
       );
     }
 
@@ -59,14 +67,23 @@ export class CreateMailMessagesAndSyncColumns20260801_1700000001600
           { name: 'uid', type: 'int' },
           { name: 'subject', type: 'text' },
           { name: 'fromName', type: 'varchar', length: '255', default: "''" },
-          { name: 'fromAddress', type: 'varchar', length: '320', default: "''" },
+          {
+            name: 'fromAddress',
+            type: 'varchar',
+            length: '320',
+            default: "''",
+          },
           { name: 'toJson', type: 'json', isNullable: true },
           { name: 'ccJson', type: 'json', isNullable: true },
           { name: 'date', type: 'timestamp', isNullable: true },
           { name: 'seen', type: 'boolean', default: false },
           { name: 'hasAttachments', type: 'boolean', default: false },
           { name: 'snippet', type: 'varchar', length: '500', default: "''" },
-          { name: 'bodyHtml', type: isMysql ? 'longtext' : 'text', isNullable: true },
+          {
+            name: 'bodyHtml',
+            type: isMysql ? 'longtext' : 'text',
+            isNullable: true,
+          },
           { name: 'bodyText', type: 'text', isNullable: true },
           { name: 'attachmentsJson', type: 'json', isNullable: true },
           { name: 'syncedAt', type: 'timestamp' },
