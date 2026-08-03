@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { resolveLongTextColumnType } from '../common/timestamp-column-type.util';
 
 export type MailOutboxStatus = 'queued' | 'sending' | 'sent' | 'failed';
 
@@ -36,8 +37,9 @@ export class MailOutbox {
   @Column({ type: 'text' })
   subject: string;
 
-  // longtext under MySQL/MariaDB (see migration) — bodies can be large.
-  @Column({ type: 'longtext' })
+  // longtext under MySQL/MariaDB, text on Postgres (see migration) — bodies
+  // can be large.
+  @Column({ type: resolveLongTextColumnType() })
   bodyHtml: string;
 
   @Column({ type: 'boolean', default: true })

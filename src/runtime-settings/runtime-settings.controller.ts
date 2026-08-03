@@ -39,6 +39,7 @@ import {
 import { FilesService } from '../files/files.service';
 import { uploadFileFilter } from '../files/upload-file-filter';
 import { UploadedBinaryFile } from '../files/uploaded-binary-file.type';
+import { FEATURE_FLAG_CATALOG } from '../feature-flags/feature-flags.config';
 import { RuntimeSettingsService } from './runtime-settings.service';
 import { UpdateAdminSettingsDto } from './dto/update-admin-settings.dto';
 
@@ -98,6 +99,28 @@ export class RuntimeSettingsController {
       throw new Error('Missing authenticated user context');
     }
     return this.settings.updateSettings(dto, userId);
+  }
+
+  @Get('feature-flags')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.MANAGER,
+    UserRole.INSTALLER,
+    UserRole.EMPLOYEE,
+  )
+  @ApiOperation({
+    summary: 'Resolve feature flags for the caller',
+    description:
+      'Returns a flat `{ flagKey: boolean }` map already resolved against the caller’s role, plus the admin-facing catalog. Any authenticated user may read it — clients gate UI on this instead of hardcoding rollout state.',
+  })
+  async getFeatureFlags(
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const role = req.user?.role;
+    return {
+      flags: await this.settings.getFeatureFlagsForRole(role),
+      catalog: FEATURE_FLAG_CATALOG,
+    };
   }
 
   @Get('audit-log')

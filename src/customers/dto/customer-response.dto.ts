@@ -1,4 +1,4 @@
-import { Customer } from '../entities/customer.entity';
+import { Customer, type LeadOwnershipEntry } from '../entities/customer.entity';
 
 export class CustomerResponseDto {
   id: string;
@@ -12,6 +12,15 @@ export class CustomerResponseDto {
   email: string;
   acquisitionSource: string | null;
   acquisitionSourceOther: string | null;
+  leadSource: string | null;
+  leadMedium: string | null;
+  leadCampaign: string | null;
+  leadFormSlug: string | null;
+  leadPageReferrer: string | null;
+  leadSelfReportedSource: string | null;
+  leadCapturedAt: Date | null;
+  leadOwnerUserId: string | null;
+  leadOwnershipHistory: LeadOwnershipEntry[];
   createdAt: Date;
   updatedAt: Date;
 
@@ -45,6 +54,15 @@ export class CustomerResponseDto {
       email: entity.email,
       acquisitionSource: entity.acquisitionSource,
       acquisitionSourceOther: entity.acquisitionSourceOther,
+      leadSource: entity.leadSource ?? null,
+      leadMedium: entity.leadMedium ?? null,
+      leadCampaign: entity.leadCampaign ?? null,
+      leadFormSlug: entity.leadFormSlug ?? null,
+      leadPageReferrer: entity.leadPageReferrer ?? null,
+      leadSelfReportedSource: entity.leadSelfReportedSource ?? null,
+      leadCapturedAt: entity.leadCapturedAt ?? null,
+      leadOwnerUserId: entity.leadOwnerUserId ?? null,
+      leadOwnershipHistory: entity.leadOwnershipHistory ?? [],
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
     };

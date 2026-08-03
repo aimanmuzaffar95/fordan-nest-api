@@ -61,6 +61,8 @@ import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants'
 import { DocumentNumberingService } from '../document-numbering/document-numbering.service';
 import { EmailService } from '../email/email.service';
 import { CustomerMessagingRendererService } from '../email/customer-messaging-renderer.service';
+import { TasksService } from '../tasks/tasks.service';
+import { ProjectsService } from '../projects/projects.service';
 
 export type JobListViewer = {
   userId: string;
@@ -112,6 +114,8 @@ export class JobsService {
     private readonly docNumbers: DocumentNumberingService,
     private readonly email: EmailService,
     private readonly customerMessaging: CustomerMessagingRendererService,
+    private readonly tasks: TasksService,
+    private readonly projects: ProjectsService,
   ) {}
 
   async list(query: FindJobsQueryDto, viewer?: JobListViewer) {
@@ -266,6 +270,8 @@ export class JobsService {
     let managerAssignmentNotificationOrderNumber: string | null = null;
     let managerAssignmentNotificationCustomerName: string | null = null;
     let managerAssignmentNotificationAssignedByUserId: string | null = null;
+    /** Job id to spin a delivery Project up for, set when the contract is signed. */
+    let contractJustSignedJobId: string | null = null;
 
     await this.dataSource.transaction(async (manager) => {
       const jobsRepo = manager.getRepository(Job);
@@ -401,6 +407,9 @@ export class JobsService {
       }
 
       if (previousContractSigned !== nextContractSigned) {
+        if (!previousContractSigned && nextContractSigned) {
+          contractJustSignedJobId = job.id;
+        }
         await this.jobAuditLogs.logWithManager(manager, {
           jobId: job.id,
           performedById: viewer.userId,
@@ -475,6 +484,16 @@ export class JobsService {
         managerAssignmentNotificationAssignedByUserId = viewer.userId;
       }
     });
+
+    // The strangler split: signing the contract creates the delivery Project.
+    // Post-commit and self-guarding — a project problem must never fail the
+    // signing itself.
+    if (contractJustSignedJobId) {
+      await this.projects.createFromSignedJob(
+        contractJustSignedJobId,
+        viewer.userId,
+      );
+    }
 
     if (
       managerAssignmentNotificationManagerId &&
@@ -2267,6 +2286,13 @@ export class JobsService {
 
     await this.notifyNeedsAssignmentIfApplicable(updated);
 
+    // Materialise the stage's task templates. Post-commit and self-guarding:
+    // the move is already persisted, so a template problem must never surface
+    // as a failed stage change.
+    if (fromStage !== targetStage) {
+      await this.tasks.materialiseStageTasks(jobId, targetStage, userId);
+    }
+
     const customerEmail =
       updated.customer?.email && updated.customer.email.trim()
         ? updated.customer.email.trim()
@@ -2437,6 +2463,13 @@ export class JobsService {
     }
 
     await this.notifyNeedsAssignmentIfApplicable(createdJob);
+
+    // A new job enters its starting stage, so that stage's templates apply.
+    await this.tasks.materialiseStageTasks(
+      createdJob.id,
+      createdJob.pipelineStage,
+      userId,
+    );
 
     return createdJob;
   }

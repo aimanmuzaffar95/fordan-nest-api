@@ -132,6 +132,17 @@ describe('CustomersService', () => {
       email: 'jane@example.com',
       acquisitionSource: 'social_media',
       acquisitionSourceOther: null,
+      // Lead attribution defaults: source mirrors the acquisition source and
+      // capture time defaults to now when the caller doesn't supply one.
+      leadSource: 'social_media',
+      leadMedium: null,
+      leadCampaign: null,
+      leadFormSlug: null,
+      leadPageReferrer: null,
+      leadSelfReportedSource: null,
+      leadCapturedAt: expect.any(Date) as unknown as Date,
+      leadOwnerUserId: null,
+      leadOwnershipHistory: [],
     });
     expect(result).toMatchObject({
       id: saved.id,

@@ -16,9 +16,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *    built; without this, CREATE UNIQUE INDEX would fail on legacy data.
  *  - CREATE UNIQUE INDEX IF NOT EXISTS makes re-runs safe.
  */
-export class AddAttendanceOpenSessionUniqueIndex20260728_1700000001000
-  implements MigrationInterface
-{
+export class AddAttendanceOpenSessionUniqueIndex20260728_1700000001000 implements MigrationInterface {
   private readonly indexName = 'uq_attendance_open_session_per_staff';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

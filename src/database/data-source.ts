@@ -33,6 +33,24 @@ import { EmailTracking } from '../email/email-tracking.entity';
 import { PermissionRoleGrant } from '../permissions/entities/permission-role-grant.entity';
 import { PermissionRoleProfile } from '../permissions/entities/permission-role-profile.entity';
 import { PermissionRoleScope } from '../permissions/entities/permission-role-scope.entity';
+import { Task } from '../tasks/entities/task.entity';
+import { Territory } from '../territories/entities/territory.entity';
+import { TerritoryMember } from '../territories/entities/territory-member.entity';
+import { LeadRoutingEvent } from '../territories/entities/lead-routing-event.entity';
+import { CustomerMergeLog } from '../households/entities/customer-merge-log.entity';
+import { SiteSurvey } from '../surveys/entities/site-survey.entity';
+import { ProposalVersion } from '../proposals/entities/proposal-version.entity';
+import { FinancingApplication } from '../financing/entities/financing-application.entity';
+import { Project } from '../projects/entities/project.entity';
+import { Permit } from '../projects/entities/permit.entity';
+import { ProjectMilestone } from '../projects/entities/project-milestone.entity';
+import {
+  InstallDefect,
+  InstallVisit,
+} from '../projects/entities/install-visit.entity';
+import { CommissionEvent } from '../commission/entities/commission-event.entity';
+import { PortalAccessToken } from '../customer-portal/entities/portal-access-token.entity';
+import { CommunicationLog } from '../communications/entities/communication-log.entity';
 
 const envBool = (v: string | undefined, fallback = false): boolean => {
   if (v === undefined) return fallback;
@@ -136,6 +154,22 @@ export const AppDataSource = new DataSource({
     PermissionRoleProfile,
     PermissionRoleGrant,
     PermissionRoleScope,
+    Task,
+    Territory,
+    TerritoryMember,
+    LeadRoutingEvent,
+    CustomerMergeLog,
+    SiteSurvey,
+    ProposalVersion,
+    FinancingApplication,
+    Project,
+    Permit,
+    ProjectMilestone,
+    InstallVisit,
+    InstallDefect,
+    CommissionEvent,
+    PortalAccessToken,
+    CommunicationLog,
   ],
   migrations: isMigrationCli
     ? ['src/migrations/*.ts']

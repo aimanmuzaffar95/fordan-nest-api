@@ -93,6 +93,26 @@ export class CustomersService {
       email: dto.email,
       acquisitionSource,
       acquisitionSourceOther,
+      leadSource: dto.leadSource ?? acquisitionSource ?? null,
+      leadMedium: dto.leadMedium ?? null,
+      leadCampaign: dto.leadCampaign ?? null,
+      leadFormSlug: dto.leadFormSlug ?? null,
+      leadPageReferrer: dto.leadPageReferrer ?? null,
+      leadSelfReportedSource: dto.leadSelfReportedSource ?? null,
+      leadCapturedAt: dto.leadCapturedAt
+        ? new Date(dto.leadCapturedAt)
+        : new Date(),
+      leadOwnerUserId: dto.leadOwnerUserId ?? null,
+      leadOwnershipHistory: dto.leadOwnerUserId
+        ? [
+            {
+              userId: dto.leadOwnerUserId,
+              assignedAt: new Date().toISOString(),
+              assignedByUserId: null,
+              reason: 'initial_owner',
+            },
+          ]
+        : [],
     });
 
     const saved = await this.customersRepository.save(customer);
@@ -304,6 +324,52 @@ export class CustomersService {
     );
     customer.acquisitionSource = normalizedAcquisitionSource;
     customer.acquisitionSourceOther = normalizedAcquisitionSourceOther;
+
+    // ─── Lead attribution ───────────────────────────────────────────────
+    if (typeof dto.leadSource !== 'undefined') {
+      customer.leadSource = dto.leadSource;
+    }
+    if (typeof dto.leadMedium !== 'undefined') {
+      customer.leadMedium = dto.leadMedium;
+    }
+    if (typeof dto.leadCampaign !== 'undefined') {
+      customer.leadCampaign = dto.leadCampaign;
+    }
+    if (typeof dto.leadFormSlug !== 'undefined') {
+      customer.leadFormSlug = dto.leadFormSlug;
+    }
+    if (typeof dto.leadPageReferrer !== 'undefined') {
+      customer.leadPageReferrer = dto.leadPageReferrer;
+    }
+    if (typeof dto.leadSelfReportedSource !== 'undefined') {
+      customer.leadSelfReportedSource = dto.leadSelfReportedSource;
+    }
+    if (typeof dto.leadCapturedAt !== 'undefined') {
+      customer.leadCapturedAt = dto.leadCapturedAt
+        ? new Date(dto.leadCapturedAt)
+        : null;
+    }
+    if (
+      typeof dto.leadOwnerUserId !== 'undefined' &&
+      dto.leadOwnerUserId !== customer.leadOwnerUserId
+    ) {
+      customer.leadOwnerUserId = dto.leadOwnerUserId;
+      if (dto.leadOwnerUserId) {
+        // Append-only: reassignment history is the audit trail the PRD's
+        // routing/SLA reporting reads in Phase 1.
+        customer.leadOwnershipHistory = [
+          ...(customer.leadOwnershipHistory ?? []),
+          {
+            userId: dto.leadOwnerUserId,
+            assignedAt: new Date().toISOString(),
+            assignedByUserId: viewer?.userId ?? null,
+            ...(dto.leadOwnerChangeReason
+              ? { reason: dto.leadOwnerChangeReason }
+              : {}),
+          },
+        ];
+      }
+    }
 
     try {
       const updated = await this.customersRepository.save(customer);

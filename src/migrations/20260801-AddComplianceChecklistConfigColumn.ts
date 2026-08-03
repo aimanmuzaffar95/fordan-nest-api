@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddComplianceChecklistConfigColumn20260801_1700000001400
-  implements MigrationInterface
-{
+export class AddComplianceChecklistConfigColumn20260801_1700000001400 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable('admin_settings'))) {
       return;

@@ -50,6 +50,28 @@ export class File {
   @Column({ type: 'uuid', nullable: true })
   uploadedByUserId: string | null;
 
+  // ─── Document taxonomy (PRD v2, Phase 2) ────────────────────────────────
+  // `kind` stays the internal upload channel (job_file, meter_doc, …); these
+  // describe the document to a human and to the required-by-stage rules.
+
+  /** `documentTaxonomy.categories[].id`. Null means uncategorised. */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  categoryId: string | null;
+
+  @Column({ type: 'json', nullable: true })
+  tags: string[] | null;
+
+  /** 1-based within `(ownerId, categoryId)` for versioned categories. */
+  @Column({ type: 'int', nullable: true })
+  versionNumber: number | null;
+
+  /**
+   * False once a newer version of the same category supersedes this file. The
+   * old file is kept — superseding is not deleting.
+   */
+  @Column({ type: 'boolean', default: true })
+  isCurrentVersion: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }

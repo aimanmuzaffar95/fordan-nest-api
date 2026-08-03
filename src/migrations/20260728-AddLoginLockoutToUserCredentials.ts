@@ -7,7 +7,9 @@ import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
  */
 export class AddLoginLockoutToUserCredentials20260728_1700000000800 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    if (!(await queryRunner.hasColumn('user_credentials', 'failedLoginAttempts'))) {
+    if (
+      !(await queryRunner.hasColumn('user_credentials', 'failedLoginAttempts'))
+    ) {
       await queryRunner.addColumn(
         'user_credentials',
         new TableColumn({
@@ -34,7 +36,9 @@ export class AddLoginLockoutToUserCredentials20260728_1700000000800 implements M
     if (await queryRunner.hasColumn('user_credentials', 'lockedUntil')) {
       await queryRunner.dropColumn('user_credentials', 'lockedUntil');
     }
-    if (await queryRunner.hasColumn('user_credentials', 'failedLoginAttempts')) {
+    if (
+      await queryRunner.hasColumn('user_credentials', 'failedLoginAttempts')
+    ) {
       await queryRunner.dropColumn('user_credentials', 'failedLoginAttempts');
     }
   }

@@ -1,0 +1,272 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import { Request } from 'express';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { UserRole } from '../users/entities/user-role.enum';
+import {
+  UpsertDefectDto,
+  UpsertInstallVisitDto,
+} from './dto/install-execution.dto';
+import { UpsertMilestoneDto } from './dto/milestone.dto';
+import { CreatePermitDto, UpdatePermitDto } from './dto/permit.dto';
+import { UpdateProjectDto } from './dto/project.dto';
+import { InstallExecutionService } from './install-execution.service';
+import { MilestonesService } from './milestones.service';
+import { PermitsService } from './permits.service';
+import { INSTALL_READINESS_ITEMS, ProjectsService } from './projects.service';
+
+type AuthRequest = Request & { user?: { sub?: string; role?: UserRole } };
+
+function viewerOf(req: AuthRequest): { userId: string; role: UserRole } {
+  const userId = req.user?.sub;
+  const role = req.user?.role;
+  if (!userId || !role) throw new Error('Missing authenticated user context');
+  return { userId, role };
+}
+
+@ApiTags('Projects')
+@ApiBearerAuth('JWT')
+@ApiUnauthorizedResponse({
+  description: 'Missing or invalid `Authorization: Bearer` JWT.',
+})
+@Controller()
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class ProjectsController {
+  constructor(
+    private readonly projects: ProjectsService,
+    private readonly permits: PermitsService,
+    private readonly milestones: MilestonesService,
+    private readonly execution: InstallExecutionService,
+  ) {}
+
+  // ─── Projects ─────────────────────────────────────────────────────────────
+
+  @Get('projects')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'List projects',
+    description: 'Admins see all; managers see the projects they manage.',
+  })
+  list(@Req() req: AuthRequest) {
+    return this.projects.list(viewerOf(req));
+  }
+
+  @Get('projects/readiness-checklist')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'The install-readiness checklist definition',
+    description: 'Every item must be ticked before a project can be scheduled.',
+  })
+  readinessChecklist() {
+    return { items: INSTALL_READINESS_ITEMS };
+  }
+
+  @Get('jobs/:jobId/project')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'The project created from a job',
+    description: 'Null until the job’s contract is signed.',
+  })
+  @ApiParam({ name: 'jobId', description: 'Job UUID' })
+  byJob(@Param('jobId', ParseUUIDPipe) jobId: string, @Req() req: AuthRequest) {
+    return this.projects.findByJob(jobId, viewerOf(req));
+  }
+
+  @Get('projects/:id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Get a project' })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  findOne(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
+    return this.projects.findOne(id, viewerOf(req));
+  }
+
+  @Patch('projects/:id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Update a project',
+    description:
+      'Stage moves are gated — scheduling requires a complete readiness checklist.',
+  })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProjectDto,
+    @Req() req: AuthRequest,
+  ) {
+    return this.projects.update(id, dto, viewerOf(req));
+  }
+
+  @Get('projects/:id/readiness')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Readiness checklist state for a project' })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  readiness(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
+    return this.projects.readiness(id, viewerOf(req));
+  }
+
+  // ─── Permits ──────────────────────────────────────────────────────────────
+
+  @Get('projects/:id/permits')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Permits on a project' })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  listPermits(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
+    return this.permits.listForProject(id, viewerOf(req));
+  }
+
+  @Post('projects/:id/permits')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Add a permit to a project' })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  createPermit(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreatePermitDto,
+    @Req() req: AuthRequest,
+  ) {
+    return this.permits.create(id, dto, viewerOf(req));
+  }
+
+  @Patch('permits/:permitId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Update a permit' })
+  @ApiParam({ name: 'permitId', description: 'Permit UUID' })
+  updatePermit(
+    @Param('permitId', ParseUUIDPipe) permitId: string,
+    @Body() dto: UpdatePermitDto,
+    @Req() req: AuthRequest,
+  ) {
+    return this.permits.update(permitId, dto, viewerOf(req));
+  }
+
+  @Delete('permits/:permitId')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Delete a permit (admin)' })
+  @ApiParam({ name: 'permitId', description: 'Permit UUID' })
+  removePermit(
+    @Param('permitId', ParseUUIDPipe) permitId: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.permits.remove(permitId, viewerOf(req));
+  }
+
+  @Post('permits/sweep-stalled')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Flag permits stalled with an authority (admin)',
+    description: 'Runs automatically on the SLA sweep.',
+  })
+  sweepStalledPermits() {
+    return this.permits.sweepStalled();
+  }
+
+  // ─── Inspection / interconnection / PTO ───────────────────────────────────
+
+  @Get('projects/:id/milestones')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Inspection, interconnection and PTO attempts' })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  listMilestones(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.milestones.listForProject(id, viewerOf(req));
+  }
+
+  @Post('projects/:id/milestones')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Create or advance a milestone',
+    description:
+      'A failed attempt is kept and a new attempt opened, so correction history survives. Passing a milestone advances the project stage; passing PTO completes it.',
+  })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  upsertMilestone(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpsertMilestoneDto,
+    @Req() req: AuthRequest,
+  ) {
+    return this.milestones.upsert(id, dto, viewerOf(req));
+  }
+
+  // ─── Install execution ────────────────────────────────────────────────────
+
+  @Get('projects/:id/visits')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Install visits on a project' })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  listVisits(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
+    return this.execution.listVisits(id, viewerOf(req));
+  }
+
+  @Post('projects/:id/visits')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Create or update an install visit',
+    description:
+      'Partial completion requires a description of the outstanding work, and raises a follow-up task.',
+  })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  upsertVisit(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpsertInstallVisitDto,
+    @Req() req: AuthRequest,
+  ) {
+    return this.execution.upsertVisit(id, dto, viewerOf(req));
+  }
+
+  @Get('projects/:id/defects')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({ summary: 'Defects logged on a project' })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  listDefects(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
+    return this.execution.listDefects(id, viewerOf(req));
+  }
+
+  @Post('projects/:id/defects')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Log or update a defect',
+    description:
+      'Waiving requires a reason and is refused for critical (safety) defects.',
+  })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  upsertDefect(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpsertDefectDto,
+    @Req() req: AuthRequest,
+  ) {
+    return this.execution.upsertDefect(id, dto, viewerOf(req));
+  }
+
+  @Get('projects/:id/blocking-defects')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Unresolved major/critical defects blocking handover',
+  })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  blockingDefects(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.execution.blockingDefects(id, viewerOf(req));
+  }
+}

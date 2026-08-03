@@ -65,6 +65,34 @@ import {
   validateComplianceChecklistConfig,
 } from '../compliance-checklist/compliance-checklist.config';
 import type { ComplianceChecklistConfig } from '../compliance-checklist/compliance-checklist.config';
+import {
+  mergeFeatureFlags,
+  mergeFeatureFlagsPatch,
+  resolveFeatureFlagsForRole,
+  validateFeatureFlags,
+} from '../feature-flags/feature-flags.config';
+import type {
+  FeatureFlagKey,
+  FeatureFlags,
+} from '../feature-flags/feature-flags.config';
+import {
+  mergePipelineStageConfig,
+  mergePipelineStagePatch,
+  validatePipelineStageConfig,
+} from '../pipeline-stages/pipeline-stage.config';
+import type { PipelineStageConfig } from '../pipeline-stages/pipeline-stage.config';
+import {
+  mergeQualificationConfig,
+  mergeQualificationPatch,
+  validateQualificationConfig,
+} from '../qualification/qualification.config';
+import type { QualificationConfig } from '../qualification/qualification.config';
+import {
+  mergeDocumentTaxonomy,
+  mergeDocumentTaxonomyPatch,
+  validateDocumentTaxonomy,
+} from '../document-taxonomy/document-taxonomy.config';
+import type { DocumentTaxonomyConfig } from '../document-taxonomy/document-taxonomy.config';
 
 export type AdminSettingsPayload = {
   overridePreMeter: boolean;
@@ -92,6 +120,10 @@ export type AdminSettingsPayload = {
   billingSettings: BillingSettings;
   documentNumberingSettings: DocumentNumberingSettings;
   complianceChecklistConfig: ComplianceChecklistConfig;
+  featureFlags: FeatureFlags;
+  pipelineStageConfig: PipelineStageConfig;
+  qualificationConfig: QualificationConfig;
+  documentTaxonomy: DocumentTaxonomyConfig;
 };
 
 @Injectable()
@@ -136,6 +168,14 @@ export class RuntimeSettingsService {
     delete patch['documentNumberingSettings'];
     const checklistRaw = patch['complianceChecklistConfig'];
     delete patch['complianceChecklistConfig'];
+    const featureFlagsRaw = patch['featureFlags'];
+    delete patch['featureFlags'];
+    const pipelineStagesRaw = patch['pipelineStageConfig'];
+    delete patch['pipelineStageConfig'];
+    const qualificationRaw = patch['qualificationConfig'];
+    delete patch['qualificationConfig'];
+    const documentTaxonomyRaw = patch['documentTaxonomy'];
+    delete patch['documentTaxonomy'];
     const cleaned = Object.fromEntries(
       Object.entries(patch).filter(([, v]) => v !== undefined),
     );
@@ -204,6 +244,30 @@ export class RuntimeSettingsService {
       const next = mergeComplianceChecklistPatch(current, checklistRaw);
       validateComplianceChecklistConfig(next);
       settings.complianceChecklistConfig = next;
+    }
+    if (featureFlagsRaw !== undefined) {
+      const current = mergeFeatureFlags(settings.featureFlags);
+      const next = mergeFeatureFlagsPatch(current, featureFlagsRaw);
+      validateFeatureFlags(next);
+      settings.featureFlags = next;
+    }
+    if (pipelineStagesRaw !== undefined) {
+      const current = mergePipelineStageConfig(settings.pipelineStageConfig);
+      const next = mergePipelineStagePatch(current, pipelineStagesRaw);
+      validatePipelineStageConfig(next);
+      settings.pipelineStageConfig = next;
+    }
+    if (qualificationRaw !== undefined) {
+      const current = mergeQualificationConfig(settings.qualificationConfig);
+      const next = mergeQualificationPatch(current, qualificationRaw);
+      validateQualificationConfig(next);
+      settings.qualificationConfig = next;
+    }
+    if (documentTaxonomyRaw !== undefined) {
+      const current = mergeDocumentTaxonomy(settings.documentTaxonomy);
+      const next = mergeDocumentTaxonomyPatch(current, documentTaxonomyRaw);
+      validateDocumentTaxonomy(next);
+      settings.documentTaxonomy = next;
     }
 
     const changedFields = Object.keys(updates as Record<string, unknown>)
@@ -313,6 +377,34 @@ export class RuntimeSettingsService {
     return settings.calendarScopeEnforced;
   }
 
+  /** Raw flag states (with role allow-lists) for server-side gating. */
+  async getFeatureFlags(): Promise<FeatureFlags> {
+    const settings = await this.getOrCreateSettingsEntity();
+    return mergeFeatureFlags(settings.featureFlags);
+  }
+
+  /** Flat `{key: boolean}` view a client of `role` should act on. */
+  async getFeatureFlagsForRole(
+    role?: UserRole,
+  ): Promise<Record<FeatureFlagKey, boolean>> {
+    return resolveFeatureFlagsForRole(await this.getFeatureFlags(), role);
+  }
+
+  async getPipelineStageConfig(): Promise<PipelineStageConfig> {
+    const settings = await this.getOrCreateSettingsEntity();
+    return mergePipelineStageConfig(settings.pipelineStageConfig);
+  }
+
+  async getQualificationConfig(): Promise<QualificationConfig> {
+    const settings = await this.getOrCreateSettingsEntity();
+    return mergeQualificationConfig(settings.qualificationConfig);
+  }
+
+  async getDocumentTaxonomy(): Promise<DocumentTaxonomyConfig> {
+    const settings = await this.getOrCreateSettingsEntity();
+    return mergeDocumentTaxonomy(settings.documentTaxonomy);
+  }
+
   /** Safe, unauthenticated read for login and other pre-auth surfaces. */
   async getPublicCrmAppearance(): Promise<CrmAppearanceSettings> {
     const settings = await this.getOrCreateSettingsEntity();
@@ -400,6 +492,14 @@ export class RuntimeSettingsService {
       complianceChecklistConfig: mergeComplianceChecklistConfig(
         settings.complianceChecklistConfig,
       ),
+      featureFlags: mergeFeatureFlags(settings.featureFlags),
+      pipelineStageConfig: mergePipelineStageConfig(
+        settings.pipelineStageConfig,
+      ),
+      qualificationConfig: mergeQualificationConfig(
+        settings.qualificationConfig,
+      ),
+      documentTaxonomy: mergeDocumentTaxonomy(settings.documentTaxonomy),
     };
   }
 

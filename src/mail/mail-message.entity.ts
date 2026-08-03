@@ -7,6 +7,7 @@ import {
   PrimaryGeneratedColumn,
   Unique,
 } from 'typeorm';
+import { resolveLongTextColumnType } from '../common/timestamp-column-type.util';
 import { LinkedMailbox } from './linked-mailbox.entity';
 
 /**
@@ -63,7 +64,7 @@ export class MailMessage {
   snippet: string;
 
   // Sanitized at ingest (sanitize-html conservative allowlist).
-  @Column({ type: 'longtext', nullable: true })
+  @Column({ type: resolveLongTextColumnType(), nullable: true })
   bodyHtml: string | null;
 
   @Column({ type: 'text', nullable: true })

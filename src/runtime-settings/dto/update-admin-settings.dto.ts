@@ -186,4 +186,20 @@ export class UpdateAdminSettingsDto {
   @IsOptional()
   @IsObject()
   complianceChecklistConfig?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  featureFlags?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  pipelineStageConfig?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  qualificationConfig?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  documentTaxonomy?: Record<string, unknown>;
 }

@@ -80,6 +80,36 @@ import { MailModule } from './mail/mail.module';
 import { LinkedMailbox } from './mail/linked-mailbox.entity';
 import { MailMessage } from './mail/mail-message.entity';
 import { MailOutbox } from './mail/mail-outbox.entity';
+import { TasksModule } from './tasks/tasks.module';
+import { TerritoriesModule } from './territories/territories.module';
+import { Territory } from './territories/entities/territory.entity';
+import { TerritoryMember } from './territories/entities/territory-member.entity';
+import { LeadRoutingEvent } from './territories/entities/lead-routing-event.entity';
+import { HouseholdsModule } from './households/households.module';
+import { CustomerMergeLog } from './households/entities/customer-merge-log.entity';
+import { QualificationModule } from './qualification/qualification.module';
+import { SurveysModule } from './surveys/surveys.module';
+import { SiteSurvey } from './surveys/entities/site-survey.entity';
+import { ProposalsModule } from './proposals/proposals.module';
+import { ProposalVersion } from './proposals/entities/proposal-version.entity';
+import { FinancingModule } from './financing/financing.module';
+import { FinancingApplication } from './financing/entities/financing-application.entity';
+import { DocumentTaxonomyModule } from './document-taxonomy/document-taxonomy.module';
+import { ProjectsModule } from './projects/projects.module';
+import { CommissionModule } from './commission/commission.module';
+import { CommissionEvent } from './commission/entities/commission-event.entity';
+import { CustomerPortalModule } from './customer-portal/customer-portal.module';
+import { PortalAccessToken } from './customer-portal/entities/portal-access-token.entity';
+import { CommunicationsModule } from './communications/communications.module';
+import { CommunicationLog } from './communications/entities/communication-log.entity';
+import { Project } from './projects/entities/project.entity';
+import { Permit } from './projects/entities/permit.entity';
+import { ProjectMilestone } from './projects/entities/project-milestone.entity';
+import {
+  InstallDefect,
+  InstallVisit,
+} from './projects/entities/install-visit.entity';
+import { Task } from './tasks/entities/task.entity';
 import { loadEnvFile } from './common/load-env.util';
 import { getSettingsEncryptionKey } from './common/crypto.util';
 
@@ -216,6 +246,22 @@ getSettingsEncryptionKey();
         LinkedMailbox,
         MailMessage,
         MailOutbox,
+        Task,
+        Territory,
+        TerritoryMember,
+        LeadRoutingEvent,
+        CustomerMergeLog,
+        SiteSurvey,
+        ProposalVersion,
+        FinancingApplication,
+        Project,
+        Permit,
+        ProjectMilestone,
+        InstallVisit,
+        InstallDefect,
+        CommissionEvent,
+        PortalAccessToken,
+        CommunicationLog,
       ],
       migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,
@@ -258,6 +304,18 @@ getSettingsEncryptionKey();
     DevicesModule,
     DocumentsModule,
     MailModule,
+    TasksModule,
+    TerritoriesModule,
+    HouseholdsModule,
+    QualificationModule,
+    SurveysModule,
+    ProposalsModule,
+    FinancingModule,
+    DocumentTaxonomyModule,
+    ProjectsModule,
+    CommissionModule,
+    CustomerPortalModule,
+    CommunicationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

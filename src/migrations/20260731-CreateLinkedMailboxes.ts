@@ -10,7 +10,8 @@ import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
 export class CreateLinkedMailboxes20260731_1700000001300 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const dialect = queryRunner.connection.options.type;
-    const uuidDefault = dialect === 'postgres' ? 'uuid_generate_v4()' : 'UUID()';
+    const uuidDefault =
+      dialect === 'postgres' ? 'uuid_generate_v4()' : 'UUID()';
     const ts = dialect === 'postgres' ? 'timestamptz' : 'datetime';
     if (dialect === 'postgres') {
       await queryRunner.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";');

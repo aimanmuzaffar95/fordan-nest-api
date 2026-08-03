@@ -7,8 +7,11 @@ import { User } from '../users/entities/user.entity';
 import { PublicLeadsController } from './public-leads.controller';
 import { PublicLeadsService } from './public-leads.service';
 
+import { TerritoriesModule } from '../territories/territories.module';
+
 @Module({
   imports: [
+    TerritoriesModule,
     TypeOrmModule.forFeature([User]),
     CustomersModule,
     JobsModule,

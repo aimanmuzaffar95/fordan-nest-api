@@ -14,6 +14,10 @@ import type { CompanyProfileSettings } from '../company-profile/company-profile.
 import type { BillingSettings } from '../billing/billing-settings.types';
 import type { DocumentNumberingSettings } from '../document-numbering/document-numbering.types';
 import type { ComplianceChecklistConfig } from '../compliance-checklist/compliance-checklist.config';
+import type { FeatureFlags } from '../feature-flags/feature-flags.config';
+import type { PipelineStageConfig } from '../pipeline-stages/pipeline-stage.config';
+import type { QualificationConfig } from '../qualification/qualification.config';
+import type { DocumentTaxonomyConfig } from '../document-taxonomy/document-taxonomy.config';
 
 export const ADMIN_SETTINGS_SINGLETON_ID = 'global';
 
@@ -98,6 +102,18 @@ export class AdminSettings {
 
   @Column({ type: 'json', nullable: true })
   complianceChecklistConfig: ComplianceChecklistConfig | null;
+
+  @Column({ type: 'json', nullable: true })
+  featureFlags: FeatureFlags | null;
+
+  @Column({ type: 'json', nullable: true })
+  pipelineStageConfig: PipelineStageConfig | null;
+
+  @Column({ type: 'json', nullable: true })
+  qualificationConfig: QualificationConfig | null;
+
+  @Column({ type: 'json', nullable: true })
+  documentTaxonomy: DocumentTaxonomyConfig | null;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })

@@ -8,9 +8,7 @@ import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
  * MariaDB equivalent:
  *   ALTER TABLE mail_outbox ADD COLUMN attachmentsJson LONGTEXT NULL;
  */
-export class AddOutboxAttachments20260802_1700000001710
-  implements MigrationInterface
-{
+export class AddOutboxAttachments20260802_1700000001710 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const isMysql = ['mysql', 'mariadb'].includes(
       queryRunner.connection.options.type,

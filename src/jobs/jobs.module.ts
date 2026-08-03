@@ -38,6 +38,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { EmailModule } from '../email/email.module';
 import { RuntimeSettingsModule } from '../runtime-settings/runtime-settings.module';
 import { PermissionsModule } from '../permissions/permissions.module';
+import { TasksModule } from '../tasks/tasks.module';
+import { ProjectsModule } from '../projects/projects.module';
 
 @Module({
   imports: [
@@ -49,6 +51,8 @@ import { PermissionsModule } from '../permissions/permissions.module';
     RuntimeSettingsModule,
     NotificationsModule,
     PermissionsModule,
+    TasksModule,
+    ProjectsModule,
     TypeOrmModule.forFeature([
       Job,
       JobSignatureRequest,

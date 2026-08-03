@@ -18,6 +18,7 @@ import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { envBool } from '../common/env.util';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
+import { LeadRoutingService } from '../territories/lead-routing.service';
 
 @Injectable()
 export class PublicLeadsService {
@@ -26,6 +27,7 @@ export class PublicLeadsService {
     private readonly jobs: JobsService,
     private readonly email: EmailService,
     private readonly runtimeSettings: RuntimeSettingsService,
+    private readonly leadRouting: LeadRoutingService,
     @InjectRepository(User)
     private readonly users: Repository<User>,
   ) {}
@@ -83,6 +85,9 @@ export class PublicLeadsService {
     const address =
       addressParts.length > 0 ? addressParts.join(' ') : undefined;
 
+    const t = dto.tracking;
+    const formSlug = t?.formSlug?.trim() || 'default';
+
     let customer: CustomerResponseDto;
     try {
       customer = await this.customers.create({
@@ -92,6 +97,15 @@ export class PublicLeadsService {
         phone: dto.phone,
         email: dto.email,
         acquisitionSource: 'website_form',
+        // First-class attribution (PRD v2, Phase 0). The note blob below is
+        // kept for now as the human-readable summary; these columns are what
+        // reporting and routing read.
+        leadSource: t?.utmSource?.trim() || 'website_form',
+        leadMedium: t?.utmMedium?.trim() || undefined,
+        leadCampaign: t?.utmCampaign?.trim() || undefined,
+        leadFormSlug: formSlug,
+        leadPageReferrer: t?.pageReferrer?.trim()?.slice(0, 500) || undefined,
+        leadSelfReportedSource: t?.selfReportedSource?.trim() || undefined,
       });
     } catch (err) {
       if (!(err instanceof ConflictException)) {
@@ -116,8 +130,6 @@ export class PublicLeadsService {
         ? undefined
         : settings.quickLeadDefaultBatterySizeKwh;
 
-    const t = dto.tracking;
-    const formSlug = t?.formSlug?.trim() || 'default';
     const leadMeta = {
       v: 1 as const,
       formSlug,
@@ -203,6 +215,15 @@ export class PublicLeadsService {
         context: { firstName: dto.firstName },
       });
     }
+
+    // Route the lead to a territory owner. Self-guarding and post-commit: a
+    // routing failure must never reject a captured lead.
+    await this.leadRouting.routeLead({
+      customerId: customer.id,
+      jobId: job.id,
+      address,
+      postcode: dto.postcode,
+    });
 
     return { customerId: customer.id, jobId: job.id };
   }

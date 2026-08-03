@@ -1,17 +1,25 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
+  IsDateString,
   IsEmail,
   IsIn,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Max,
   Min,
   MinLength,
 } from 'class-validator';
 import { CUSTOMER_ACQUISITION_SOURCE_VALUES } from '../constants/customer-acquisition-source.constants';
+
+const trimOrUndefined = ({ value }: { value: unknown }): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+};
 
 export class CreateCustomerDto {
   @ApiProperty({ example: 'Jane' })
@@ -105,4 +113,60 @@ export class CreateCustomerDto {
   @MinLength(1)
   @MaxLength(100)
   acquisitionSourceOther?: string;
+
+  // ─── Lead attribution (PRD v2, Phase 0) ─────────────────────────────────
+  // Normally set by the public lead form; exposed here so imports and manual
+  // lead entry can record the same provenance.
+
+  @ApiPropertyOptional({ example: 'website_form' })
+  @Transform(trimOrUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  leadSource?: string;
+
+  @ApiPropertyOptional({ example: 'cpc' })
+  @Transform(trimOrUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  leadMedium?: string;
+
+  @ApiPropertyOptional({ example: 'spring-solar-2026' })
+  @Transform(trimOrUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  leadCampaign?: string;
+
+  @ApiPropertyOptional({ example: 'default' })
+  @Transform(trimOrUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  leadFormSlug?: string;
+
+  @ApiPropertyOptional({ example: 'https://example.com/solar' })
+  @Transform(trimOrUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  leadPageReferrer?: string;
+
+  @ApiPropertyOptional({ example: 'Saw your van in the street' })
+  @Transform(trimOrUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  leadSelfReportedSource?: string;
+
+  @ApiPropertyOptional({ description: 'ISO 8601; defaults to now.' })
+  @IsOptional()
+  @IsDateString()
+  leadCapturedAt?: string;
+
+  @ApiPropertyOptional({ description: 'Owning sales rep.' })
+  @IsOptional()
+  @IsUUID()
+  leadOwnerUserId?: string;
 }

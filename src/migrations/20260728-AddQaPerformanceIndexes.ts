@@ -11,9 +11,7 @@ import { MigrationInterface, QueryRunner, TableIndex } from 'typeorm';
  * Each index is created only when its table exists and the index is not
  * already present, so re-running the migration is safe.
  */
-export class AddQaPerformanceIndexes20260728_1700000000900
-  implements MigrationInterface
-{
+export class AddQaPerformanceIndexes20260728_1700000000900 implements MigrationInterface {
   private readonly indexes: Array<{
     table: string;
     name: string;
