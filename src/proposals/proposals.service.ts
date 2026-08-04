@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Not, Repository } from 'typeorm';
+import { DataSource, In, Not, Repository } from 'typeorm';
 import { Job } from '../jobs/entities/job.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
@@ -217,50 +217,79 @@ export class ProposalsService {
     id: string,
     viewer: { userId: string; role: UserRole },
   ): Promise<ProposalVersion> {
-    const version = await this.load(id, viewer);
-    if (TERMINAL_STATUSES.includes(version.status)) {
-      throw new BadRequestException(
-        `A ${version.status} proposal cannot be accepted`,
+    // Scope check first, outside the transaction — it does not need the lock.
+    const scoped = await this.load(id, viewer);
+
+    // Accepting is the money decision: it sets the job's contract price. Do it
+    // under a row lock so two concurrent callers cannot both read a non-terminal
+    // status and both proceed, and supersede every sibling in the same
+    // transaction so a job can only ever hold one accepted version.
+    return this.versionRepo.manager.transaction(async (tx) => {
+      const version = await tx.findOne(ProposalVersion, {
+        where: { id: scoped.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!version) {
+        throw new NotFoundException(`Proposal version ${id} not found`);
+      }
+
+      if (TERMINAL_STATUSES.includes(version.status)) {
+        throw new BadRequestException(
+          `A ${version.status} proposal cannot be accepted`,
+        );
+      }
+      if (version.expiresAt && version.expiresAt < new Date()) {
+        throw new BadRequestException(
+          'That proposal has expired — issue a new version',
+        );
+      }
+
+      const alreadyAccepted = await tx.count(ProposalVersion, {
+        where: {
+          jobId: version.jobId,
+          id: Not(version.id),
+          status: ProposalStatus.ACCEPTED,
+        },
+      });
+      if (alreadyAccepted > 0) {
+        throw new BadRequestException(
+          'Another version of this proposal has already been accepted — decline it first',
+        );
+      }
+
+      version.status = ProposalStatus.ACCEPTED;
+      version.acceptedAt = new Date();
+      const saved = await tx.save(version);
+
+      // The accepted version is the record of what was sold: push its price onto
+      // the job so downstream invoicing and reporting agree with the contract.
+      await tx.update(
+        Job,
+        { id: version.jobId },
+        {
+          projectPrice: version.totalPrice,
+          depositAmount: version.depositAmount,
+        },
       );
-    }
-    if (version.expiresAt && version.expiresAt < new Date()) {
-      throw new BadRequestException(
-        'That proposal has expired — issue a new version',
+
+      // Every other live version is now moot — drafts included. Leaving drafts
+      // alone previously left them independently acceptable.
+      await tx.update(
+        ProposalVersion,
+        {
+          jobId: version.jobId,
+          id: Not(version.id),
+          status: In([
+            ProposalStatus.DRAFT,
+            ProposalStatus.SENT,
+            ProposalStatus.VIEWED,
+          ]),
+        },
+        { status: ProposalStatus.SUPERSEDED },
       );
-    }
 
-    version.status = ProposalStatus.ACCEPTED;
-    version.acceptedAt = new Date();
-    const saved = await this.versionRepo.save(version);
-
-    // The accepted version is the record of what was sold: push its price onto
-    // the job so downstream invoicing and reporting agree with the contract.
-    await this.jobRepo.update(
-      { id: version.jobId },
-      {
-        projectPrice: version.totalPrice,
-        depositAmount: version.depositAmount,
-      },
-    );
-
-    await this.versionRepo.update(
-      {
-        jobId: version.jobId,
-        id: Not(version.id),
-        status: ProposalStatus.SENT,
-      },
-      { status: ProposalStatus.SUPERSEDED },
-    );
-    await this.versionRepo.update(
-      {
-        jobId: version.jobId,
-        id: Not(version.id),
-        status: ProposalStatus.VIEWED,
-      },
-      { status: ProposalStatus.SUPERSEDED },
-    );
-
-    return saved;
+      return saved;
+    });
   }
 
   async decline(

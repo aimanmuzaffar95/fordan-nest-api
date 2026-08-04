@@ -24,6 +24,7 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerAuditLog } from './entities/customer-audit-log.entity';
 import { Customer } from './entities/customer.entity';
 import { CustomerAcquisitionSource } from './constants/customer-acquisition-source.constants';
+import { LeadRoutingService } from '../territories/lead-routing.service';
 
 type TimelineEventDto = {
   event: string;
@@ -65,6 +66,7 @@ export class CustomersService {
     @InjectRepository(Customer)
     private readonly customersRepository: Repository<Customer>,
     private readonly dataSource: DataSource,
+    private readonly leadRouting: LeadRoutingService,
   ) {}
 
   async create(dto: CreateCustomerDto): Promise<CustomerResponseDto> {
@@ -116,6 +118,15 @@ export class CustomersService {
     });
 
     const saved = await this.customersRepository.save(customer);
+
+    // Territory routing for the new lead. Self-guarding: `routeLead` checks the
+    // `territoryRouting` flag itself and swallows its own errors, so a routing
+    // problem can never fail the customer creation.
+    await this.leadRouting.routeLead({
+      customerId: saved.id,
+      address: saved.address,
+    });
+
     return CustomerResponseDto.fromEntity(saved);
   }
 
@@ -546,6 +557,11 @@ export class CustomersService {
     qb: SelectQueryBuilder<Customer>,
     viewer?: CustomerViewer,
   ) {
+    // A customer merged into another is no longer its own record — it must not
+    // appear in lists, lookups or updates, or the duplicate reappears in every
+    // picker and count after a merge. `HouseholdsService` filters the same way.
+    qb.andWhere('customer.mergedIntoCustomerId IS NULL');
+
     if (viewer?.role !== UserRole.MANAGER || viewer.customerScope === 'all') {
       return qb;
     }

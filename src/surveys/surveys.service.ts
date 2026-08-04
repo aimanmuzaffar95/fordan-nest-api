@@ -156,7 +156,29 @@ export class SurveysService {
       survey.completedByUserId = viewer.userId;
     }
 
-    return this.surveyRepo.save(survey);
+    try {
+      return await this.surveyRepo.save(survey);
+    } catch (err: unknown) {
+      // Lost the race: a concurrent replay of the same `clientRequestId`
+      // inserted first and the unique index rejected this one. That is the
+      // constraint doing its job — adopt the winner's row and apply this
+      // payload to it, so every replay still converges on one survey.
+      if (!this.isUniqueViolation(err) || !dto.clientRequestId || survey.id) {
+        throw err;
+      }
+      const winner = await this.surveyRepo.findOne({
+        where: { jobId, clientRequestId: dto.clientRequestId },
+      });
+      if (!winner) throw err;
+      return this.upsert(jobId, { ...dto, id: winner.id }, viewer);
+    }
+  }
+
+  /** Postgres `23505` / MariaDB `ER_DUP_ENTRY` (1062). */
+  private isUniqueViolation(err: unknown): boolean {
+    const driver = (err as { driverError?: { code?: string; errno?: number } })
+      ?.driverError;
+    return driver?.code === '23505' || driver?.errno === 1062;
   }
 
   async findOne(

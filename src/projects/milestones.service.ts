@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { UserRole } from '../users/entities/user-role.enum';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
 import { isFeatureEnabled } from '../feature-flags/feature-flags.config';
@@ -16,6 +16,11 @@ import {
   ProjectMilestone,
 } from './entities/project-milestone.entity';
 import { Project, ProjectStage } from './entities/project.entity';
+import {
+  DefectSeverity,
+  DefectStatus,
+  InstallDefect,
+} from './entities/install-visit.entity';
 import { UpsertMilestoneDto } from './dto/milestone.dto';
 
 /** Which project stage each milestone type implies once it passes. */
@@ -40,9 +45,35 @@ export class MilestonesService {
     private readonly milestoneRepo: Repository<ProjectMilestone>,
     @InjectRepository(Project)
     private readonly projectRepo: Repository<Project>,
+    @InjectRepository(InstallDefect)
+    private readonly defectRepo: Repository<InstallDefect>,
     private readonly settings: RuntimeSettingsService,
     private readonly tasks: TasksService,
   ) {}
+
+  /**
+   * Unresolved major/critical defects block sign-off. `blockingDefects()` on
+   * `InstallExecutionService` exposes the same set for display; this is the
+   * enforcement, so a project cannot pass inspection or reach PTO with open
+   * defects against it.
+   */
+  private async assertNoBlockingDefects(projectId: string): Promise<void> {
+    const blocking = await this.defectRepo.find({
+      where: {
+        projectId,
+        severity: In([DefectSeverity.MAJOR, DefectSeverity.CRITICAL]),
+        status: In([DefectStatus.OPEN, DefectStatus.IN_PROGRESS]),
+      },
+    });
+    if (blocking.length === 0) return;
+
+    const summary = blocking
+      .map((d) => `${d.severity}: ${d.title}`)
+      .join('; ');
+    throw new BadRequestException(
+      `Resolve or waive the outstanding defects first — ${summary}`,
+    );
+  }
 
   private async assertEnabled(role: UserRole): Promise<void> {
     const flags = await this.settings.getFeatureFlags();
@@ -155,6 +186,9 @@ export class MilestonesService {
         throw new BadRequestException(
           'A correction list is required when recording a failure',
         );
+      }
+      if (dto.status === MilestoneStatus.PASSED) {
+        await this.assertNoBlockingDefects(projectId);
       }
       milestone.status = dto.status;
       if (

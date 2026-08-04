@@ -46,12 +46,39 @@ describe('ProposalsService', () => {
     }) as ProposalVersion;
 
   beforeEach(async () => {
+    // `accept` runs inside `manager.transaction` so it can lock the row it is
+    // about to accept. The mock manager delegates to the same jest fns the
+    // non-transactional assertions already inspect, and `count` reports no
+    // rival accepted version unless a test overrides it.
+    const txManager = {
+      findOne: jest.fn(
+        (): Promise<ProposalVersion | null> =>
+          (
+            versionRepo.findOne as unknown as jest.Mock<
+              Promise<ProposalVersion | null>
+            >
+          )(),
+      ),
+      count: jest.fn().mockResolvedValue(0),
+      save: jest.fn((v: unknown) => v),
+      update: jest.fn((entity: unknown, ...rest: unknown[]): void => {
+        const target =
+          entity === Job
+            ? (jobRepo.update as unknown as jest.Mock)
+            : (versionRepo.update as unknown as jest.Mock);
+        target(...rest);
+      }),
+    };
+
     versionRepo = {
       find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn().mockResolvedValue(version()),
       create: jest.fn((v: unknown) => v),
       save: jest.fn((v: unknown) => v),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
+      manager: {
+        transaction: jest.fn((cb: (m: unknown) => unknown) => cb(txManager)),
+      },
     } as unknown as Mocked<Repository<ProposalVersion>>;
 
     jobRepo = {
@@ -220,6 +247,48 @@ describe('ProposalsService', () => {
       expect(jobRepo.update).toHaveBeenCalledWith(
         { id: 'job-1' },
         { projectPrice: '15000.00', depositAmount: '1500.00' },
+      );
+    });
+
+    it('supersedes drafts too, so no sibling stays acceptable', async () => {
+      versionRepo.findOne.mockResolvedValue(
+        version({ status: ProposalStatus.SENT }),
+      );
+      await service.accept('pv-1', ADMIN);
+
+      const calls = (
+        versionRepo.update as unknown as jest.Mock<
+          unknown,
+          [{ status: { _value?: ProposalStatus[] } }]
+        >
+      ).mock.calls;
+      const where = calls[0][0];
+      expect(where.status._value).toEqual(
+        expect.arrayContaining([
+          ProposalStatus.DRAFT,
+          ProposalStatus.SENT,
+          ProposalStatus.VIEWED,
+        ]),
+      );
+    });
+
+    it('refuses a second accepted version on the same job', async () => {
+      const live = version({ status: ProposalStatus.SENT });
+      versionRepo.findOne.mockResolvedValue(live);
+      // A rival version on this job is already accepted.
+      (
+        versionRepo as unknown as { manager: { transaction: jest.Mock } }
+      ).manager.transaction = jest.fn((cb: (m: unknown) => unknown) =>
+        cb({
+          findOne: jest.fn().mockResolvedValue(live),
+          count: jest.fn().mockResolvedValue(1),
+          save: jest.fn((v: unknown) => v),
+          update: jest.fn(),
+        }),
+      );
+
+      await expect(service.accept('pv-1', ADMIN)).rejects.toBeInstanceOf(
+        BadRequestException,
       );
     });
 

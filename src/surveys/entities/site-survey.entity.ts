@@ -41,6 +41,13 @@ export enum SurveyOutcome {
 @Entity('site_surveys')
 @Index('idx_site_surveys_job', ['jobId'])
 @Index('idx_site_surveys_status', ['status'])
+// The offline queue replays the same capture with one `clientRequestId`, often
+// several at once when connectivity returns. The service check alone is
+// check-then-act; this constraint is what actually makes the replay idempotent.
+@Index('uq_site_surveys_job_client_request', ['jobId', 'clientRequestId'], {
+  unique: true,
+  where: '"clientRequestId" IS NOT NULL',
+})
 export class SiteSurvey {
   @PrimaryGeneratedColumn('uuid')
   id: string;

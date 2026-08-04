@@ -16,7 +16,7 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -89,6 +89,9 @@ export class CustomerPortalAdminController {
  */
 @ApiTags('Customer portal (public)')
 @Controller('public/portal')
+// There is no global APP_GUARD, so `@Throttle` alone is inert — every public
+// controller has to mount the guard itself (see public-leads, public-signature).
+@UseGuards(ThrottlerGuard)
 export class CustomerPortalPublicController {
   constructor(private readonly portal: CustomerPortalService) {}
 

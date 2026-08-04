@@ -8,11 +8,13 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { UserRole } from '../users/entities/user-role.enum';
+import { LeadRoutingService } from '../territories/lead-routing.service';
 import { Customer } from './entities/customer.entity';
 import { CustomersService } from './customers.service';
 
 type QueryBuilderMock = {
   where: jest.Mock;
+  andWhere: jest.Mock;
   clone: jest.Mock;
   orderBy: jest.Mock;
   addOrderBy: jest.Mock;
@@ -28,6 +30,7 @@ type QueryBuilderMock = {
 
 const createQueryBuilderMock = (): QueryBuilderMock => ({
   where: jest.fn().mockReturnThis(),
+  andWhere: jest.fn().mockReturnThis(),
   clone: jest.fn(),
   orderBy: jest.fn().mockReturnThis(),
   addOrderBy: jest.fn().mockReturnThis(),
@@ -77,6 +80,13 @@ describe('CustomersService', () => {
         {
           provide: DataSource,
           useValue: dataSource,
+        },
+        {
+          // `create` routes the new lead. The service checks the
+          // `territoryRouting` flag and swallows its own errors, so the stub
+          // only needs to resolve.
+          provide: LeadRoutingService,
+          useValue: { routeLead: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();
