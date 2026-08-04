@@ -13,6 +13,7 @@ import { isFeatureEnabled } from '../feature-flags/feature-flags.config';
 import { TasksService } from '../tasks/tasks.service';
 import {
   scoreQualification,
+  validateQualificationAnswers,
   type QualificationConfig,
 } from './qualification.config';
 
@@ -90,6 +91,13 @@ export class QualificationService {
     await this.assertEnabled(params.role);
     const customer = await this.load(params.customerId);
     const config = await this.settings.getQualificationConfig();
+
+    // Validate only what this call sends. Previously-stored answers are left
+    // alone so a later config change cannot make an existing record unsavable.
+    const invalid = validateQualificationAnswers(config, params.answers);
+    if (invalid.length > 0) {
+      throw new BadRequestException(invalid.join('; '));
+    }
 
     const merged = {
       ...(customer.qualificationAnswers ?? {}),

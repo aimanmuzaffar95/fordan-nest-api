@@ -357,3 +357,51 @@ export function scoreQualification(
 
   return { score: Math.round(score), missingRequired };
 }
+
+/**
+ * Answers that do not fit their criterion, as human-readable messages.
+ *
+ * `scoreQualification` deliberately ignores anything it cannot score, which
+ * silently stores junk from API and mobile clients and reports a 0 for that
+ * criterion as though it had been answered badly rather than invalidly.
+ * Callers validate at the boundary instead; scoring stays pure.
+ */
+export function validateQualificationAnswers(
+  config: QualificationConfig,
+  answers: Record<string, unknown>,
+): string[] {
+  const errors: string[] = [];
+  const byId = new Map(config.criteria.map((c) => [c.id, c]));
+
+  for (const [id, answer] of Object.entries(answers)) {
+    if (answer === undefined || answer === null || answer === '') continue;
+
+    const criterion = byId.get(id);
+    if (!criterion) {
+      errors.push(`Unknown qualification criterion "${id}"`);
+      continue;
+    }
+
+    switch (criterion.type) {
+      case 'boolean':
+        if (typeof answer !== 'boolean') {
+          errors.push(`"${id}" must be true or false`);
+        }
+        break;
+      case 'choice': {
+        const allowed = (criterion.choices ?? []).map((c) => c.value);
+        if (typeof answer !== 'string' || !allowed.includes(answer)) {
+          errors.push(`"${id}" must be one of: ${allowed.join(', ')}`);
+        }
+        break;
+      }
+      case 'number':
+        if (!Number.isFinite(Number(answer))) {
+          errors.push(`"${id}" must be a number`);
+        }
+        break;
+    }
+  }
+
+  return errors;
+}

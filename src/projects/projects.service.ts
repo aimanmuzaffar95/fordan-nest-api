@@ -127,15 +127,26 @@ export class ProjectsService {
     }
   }
 
-  async list(viewer: { userId: string; role: UserRole }): Promise<Project[]> {
+  /**
+   * `limit`/`offset` are optional and default to the previous behaviour. They
+   * exist so a caller past the cap can page rather than silently receiving a
+   * truncated list with no indication it was cut.
+   */
+  async list(
+    viewer: { userId: string; role: UserRole },
+    page: { limit?: number; offset?: number } = {},
+  ): Promise<Project[]> {
     await this.assertEnabled(viewer.role);
-    if (viewer.role === UserRole.ADMIN) {
-      return this.projectRepo.find({ order: { createdAt: 'DESC' }, take: 500 });
-    }
+    const take = Math.min(page.limit ?? 500, 500);
+    const skip = page.offset ?? 0;
+
     return this.projectRepo.find({
-      where: { projectManagerUserId: viewer.userId },
-      order: { createdAt: 'DESC' },
-      take: 500,
+      ...(viewer.role === UserRole.ADMIN
+        ? {}
+        : { where: { projectManagerUserId: viewer.userId } }),
+      order: { createdAt: 'DESC', id: 'DESC' },
+      take,
+      skip,
     });
   }
 

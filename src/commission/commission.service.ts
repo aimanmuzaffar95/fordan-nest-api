@@ -76,7 +76,13 @@ export class CommissionService {
   }
 
   async list(
-    filters: { userId?: string; jobId?: string; status?: CommissionStatus },
+    filters: {
+      userId?: string;
+      jobId?: string;
+      status?: CommissionStatus;
+      limit?: number;
+      offset?: number;
+    },
     viewer: { userId: string; role: UserRole },
   ): Promise<CommissionEvent[]> {
     await this.assertEnabled(viewer.role);
@@ -92,8 +98,10 @@ export class CommissionService {
         ...(filters.jobId ? { jobId: filters.jobId } : {}),
         ...(filters.status ? { status: filters.status } : {}),
       },
-      order: { createdAt: 'DESC' },
-      take: 500,
+      order: { createdAt: 'DESC', id: 'DESC' },
+      // Optional paging so a caller past the cap is not silently truncated.
+      take: Math.min(filters.limit ?? 500, 500),
+      skip: filters.offset ?? 0,
     });
   }
 
@@ -339,16 +347,28 @@ export class CommissionService {
     if (viewer.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Only admins can export commission data');
     }
-    const events = await this.eventRepo.find({
-      where: {
-        ...(filters.status ? { status: filters.status } : {}),
-        ...(filters.payoutReference
-          ? { payoutReference: filters.payoutReference }
-          : {}),
-      },
-      order: { createdAt: 'ASC' },
-      take: 5000,
-    });
+    // An accounting export that silently stops at a row cap is worse than one
+    // that fails: the omission is invisible downstream. Page through instead,
+    // so the extract is always complete.
+    const where = {
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.payoutReference
+        ? { payoutReference: filters.payoutReference }
+        : {}),
+    };
+    const pageSize = 1000;
+    const events: CommissionEvent[] = [];
+    for (let skip = 0; ; skip += pageSize) {
+      const page = await this.eventRepo.find({
+        where,
+        order: { createdAt: 'ASC', id: 'ASC' },
+        skip,
+        take: pageSize,
+      });
+      events.push(...page);
+      if (page.length < pageSize) break;
+    }
+
     return events.map((e) => ({
       id: e.id,
       userId: e.userId,

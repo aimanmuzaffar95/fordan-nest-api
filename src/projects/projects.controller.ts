@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -28,7 +29,7 @@ import {
 } from './dto/install-execution.dto';
 import { UpsertMilestoneDto } from './dto/milestone.dto';
 import { CreatePermitDto, UpdatePermitDto } from './dto/permit.dto';
-import { UpdateProjectDto } from './dto/project.dto';
+import { ListProjectsQueryDto, UpdateProjectDto } from './dto/project.dto';
 import { InstallExecutionService } from './install-execution.service';
 import { MilestonesService } from './milestones.service';
 import { PermitsService } from './permits.service';
@@ -64,10 +65,14 @@ export class ProjectsController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({
     summary: 'List projects',
-    description: 'Admins see all; managers see the projects they manage.',
+    description:
+      'Admins see all; managers see the projects they manage. Returns at most 500 — pass `limit`/`offset` to page beyond that.',
   })
-  list(@Req() req: AuthRequest) {
-    return this.projects.list(viewerOf(req));
+  list(@Req() req: AuthRequest, @Query() query: ListProjectsQueryDto) {
+    return this.projects.list(viewerOf(req), {
+      limit: query.limit,
+      offset: query.offset,
+    });
   }
 
   @Get('projects/readiness-checklist')

@@ -23,6 +23,12 @@ export class PublicCrmBrandingController {
 
   @Get(':slot')
   @Header('Cache-Control', 'public, max-age=3600')
+  // helmet defaults every response to `same-origin`, which makes the browser
+  // refuse this image whenever the web app is on a different origin to the API
+  // — true in staging (:8081 vs :3001) and in production (app domain vs
+  // api.*). These assets are public and unauthenticated by design, so opting
+  // this route out is safe; relaxing helmet globally would not be.
+  @Header('Cross-Origin-Resource-Policy', 'cross-origin')
   @ApiOperation({
     summary: 'Public CRM logo or favicon binary',
     description:

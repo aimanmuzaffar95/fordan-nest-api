@@ -67,9 +67,7 @@ export class MilestonesService {
     });
     if (blocking.length === 0) return;
 
-    const summary = blocking
-      .map((d) => `${d.severity}: ${d.title}`)
-      .join('; ');
+    const summary = blocking.map((d) => `${d.severity}: ${d.title}`).join('; ');
     throw new BadRequestException(
       `Resolve or waive the outstanding defects first — ${summary}`,
     );
