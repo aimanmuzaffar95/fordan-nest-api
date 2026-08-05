@@ -303,9 +303,24 @@ export class StaffOnboardingService {
    */
   async resolveToken(token: string): Promise<StaffOnboardingInvite> {
     if (!token) throw new NotFoundException('Invite not found');
-    const invite = await this.inviteRepo.findOne({
-      where: { tokenHash: this.hash(token) },
-    });
+
+    let invite: StaffOnboardingInvite | null = null;
+    try {
+      invite = await this.inviteRepo.findOne({
+        where: { tokenHash: this.hash(token) },
+      });
+    } catch (err) {
+      // An environment that has the code but not the migration would otherwise
+      // answer this public endpoint with a 500, breaking the uniform-404
+      // property the whole design relies on. No invite can exist without the
+      // table, so "not found" is both true and safe.
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `Onboarding invite lookup failed — has the migration been applied? ${message}`,
+      );
+      throw new NotFoundException('Invite not found');
+    }
+
     if (!invite || this.statusOf(invite) !== 'pending') {
       throw new NotFoundException('Invite not found');
     }
