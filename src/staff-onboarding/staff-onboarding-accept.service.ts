@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 import { UserRole } from '../users/entities/user-role.enum';
 import { StaffService } from '../staff/staff.service';
 import { EmployeeFormsService } from '../employee-forms/employee-forms.service';
@@ -60,7 +61,13 @@ export class StaffOnboardingAcceptService {
         // the suffix break ties.
         ...(invite.intendedRole === UserRole.EMPLOYEE
           ? {}
-          : { username: await this.suggestUsername(invite.email) }),
+          : {
+              username: await this.suggestUsername(invite.email),
+              // Technical staff need credentials. The invitee never chooses
+              // one here — `createStaff` emails the generated password through
+              // the same welcome path used when an admin adds staff by hand.
+              password: randomBytes(12).toString('base64url'),
+            }),
       });
       userId = created.id;
       accountCreated = true;

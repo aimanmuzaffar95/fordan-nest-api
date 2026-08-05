@@ -173,9 +173,7 @@ export class StaffOnboardingService {
         );
       }
       if (role === UserRole.MANAGER && dto.staffRoleId) {
-        throw new BadRequestException(
-          'Managers cannot be given a staff role',
-        );
+        throw new BadRequestException('Managers cannot be given a staff role');
       }
       // A matching account already exists — invite that person instead of
       // creating a duplicate on submit.

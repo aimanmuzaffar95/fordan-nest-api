@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Logger,
   BadGatewayException,
   ConflictException,
   Injectable,
@@ -62,6 +63,8 @@ const NOMINATIM_USER_AGENT = 'FordanCRM/1.0 (ops@fordan.com)';
 
 @Injectable()
 export class CustomersService {
+  private readonly logger = new Logger(CustomersService.name);
+
   constructor(
     @InjectRepository(Customer)
     private readonly customersRepository: Repository<Customer>,
@@ -149,7 +152,7 @@ export class CustomersService {
     viewer?: CustomerViewer,
   ): Promise<PaginatedCustomers> {
     const qb = this.customersRepository.createQueryBuilder('customer');
-    this.applyViewerScope(qb, viewer);
+    this.applyViewerScope(qb, viewer, await this.hasMergedColumn());
 
     const [items, total] = await Promise.all([
       qb
@@ -207,7 +210,11 @@ export class CustomersService {
             );
         }),
       );
-    this.applyViewerScope(filteredQueryBuilder, viewer);
+    this.applyViewerScope(
+      filteredQueryBuilder,
+      viewer,
+      await this.hasMergedColumn(),
+    );
 
     const [items, total] = await Promise.all([
       filteredQueryBuilder
@@ -236,7 +243,7 @@ export class CustomersService {
     const qb = this.customersRepository
       .createQueryBuilder('customer')
       .where('customer.id = :id', { id });
-    this.applyViewerScope(qb, viewer);
+    this.applyViewerScope(qb, viewer, await this.hasMergedColumn());
     const customer = await qb.getOne();
 
     if (!customer) {
@@ -254,7 +261,7 @@ export class CustomersService {
     const qb = this.customersRepository
       .createQueryBuilder('customer')
       .where('customer.id = :id', { id });
-    this.applyViewerScope(qb, viewer);
+    this.applyViewerScope(qb, viewer, await this.hasMergedColumn());
     const customer = await qb.getOne();
 
     if (!customer) {
@@ -421,7 +428,7 @@ export class CustomersService {
     const qb = this.customersRepository
       .createQueryBuilder('customer')
       .where('customer.id = :customerId', { customerId });
-    this.applyViewerScope(qb, viewer);
+    this.applyViewerScope(qb, viewer, await this.hasMergedColumn());
     const customer = await qb.getOne();
     if (!customer) throw new NotFoundException('Customer not found');
 
@@ -553,14 +560,48 @@ export class CustomersService {
     return { lat, lng };
   }
 
+  /**
+   * Whether `customers.mergedIntoCustomerId` exists, resolved once and cached.
+   *
+   * The column arrived with the household-merge migration. This service is on
+   * the hot path for every customer read, so referencing a column that a given
+   * environment has not migrated yet would take out the entire customer area
+   * rather than degrade. Checking once keeps the deploy safe regardless of
+   * migration order; once every environment is migrated this can be dropped
+   * and the filter applied unconditionally.
+   */
+  private mergedColumnPresent: boolean | null = null;
+
+  private async hasMergedColumn(): Promise<boolean> {
+    if (this.mergedColumnPresent !== null) return this.mergedColumnPresent;
+    try {
+      const table = await this.dataSource
+        .createQueryRunner()
+        .getTable('customers');
+      this.mergedColumnPresent =
+        table?.columns.some((c) => c.name === 'mergedIntoCustomerId') ?? false;
+    } catch {
+      this.mergedColumnPresent = false;
+    }
+    if (!this.mergedColumnPresent) {
+      this.logger.warn(
+        'customers.mergedIntoCustomerId is missing — merged customers will stay visible until the household migration is applied.',
+      );
+    }
+    return this.mergedColumnPresent;
+  }
+
   private applyViewerScope(
     qb: SelectQueryBuilder<Customer>,
     viewer?: CustomerViewer,
+    hasMergedColumn = true,
   ) {
     // A customer merged into another is no longer its own record — it must not
     // appear in lists, lookups or updates, or the duplicate reappears in every
     // picker and count after a merge. `HouseholdsService` filters the same way.
-    qb.andWhere('customer.mergedIntoCustomerId IS NULL');
+    if (hasMergedColumn) {
+      qb.andWhere('customer.mergedIntoCustomerId IS NULL');
+    }
 
     if (viewer?.role !== UserRole.MANAGER || viewer.customerScope === 'all') {
       return qb;

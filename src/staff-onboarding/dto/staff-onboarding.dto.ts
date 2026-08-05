@@ -64,7 +64,8 @@ export class CreateOnboardingInviteDto {
   employeeRoleId?: string;
 
   @ApiPropertyOptional({
-    description: 'Required when inviting a new installer; managers must not have one.',
+    description:
+      'Required when inviting a new installer; managers must not have one.',
   })
   @IsOptional()
   @IsUUID()
