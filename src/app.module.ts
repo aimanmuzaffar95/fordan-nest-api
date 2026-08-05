@@ -39,6 +39,7 @@ import { McpAccessKey } from './mcp-access/entities/mcp-access-key.entity';
 import { PublicLeadsModule } from './public-leads/public-leads.module';
 import { EmailModule } from './email/email.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { StaffOnboardingModule } from './staff-onboarding/staff-onboarding.module';
 import { EmployeeFormsModule } from './employee-forms/employee-forms.module';
 import { EmployeeForm } from './employee-forms/entities/employee-form.entity';
 import { SolarPanelsModule } from './solar-panels/solar-panels.module';
@@ -53,6 +54,7 @@ import { ComplianceModule } from './compliance/compliance.module';
 import { ComplianceFormTemplate } from './compliance/entities/compliance-form-template.entity';
 import { JobComplianceSubmission } from './compliance/entities/job-compliance-submission.entity';
 import { JobCecItemTick } from './compliance/entities/job-cec-item-tick.entity';
+import { StaffOnboardingInvite } from './staff-onboarding/entities/staff-onboarding-invite.entity';
 import { AlertsModule } from './alerts/alerts.module';
 import { Notification } from './notifications/entities/notification.entity';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -231,6 +233,7 @@ getSettingsEncryptionKey();
         ComplianceFormTemplate,
         JobComplianceSubmission,
         JobCecItemTick,
+        StaffOnboardingInvite,
         OrganizationProfile,
         SystemAuditLog,
         PermissionRoleProfile,
@@ -280,6 +283,7 @@ getSettingsEncryptionKey();
     McpAccessModule,
     OrganizationProfileModule,
     EmployeeFormsModule,
+    StaffOnboardingModule,
     SolarPanelsModule,
     InvertersModule,
     BatteriesModule,

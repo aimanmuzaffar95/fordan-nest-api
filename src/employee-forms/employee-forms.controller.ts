@@ -9,7 +9,12 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -29,7 +34,7 @@ export class EmployeeFormsController {
   constructor(private readonly employeeFormsService: EmployeeFormsService) {}
 
   @Get('me')
-  @Roles(UserRole.INSTALLER)
+  @Roles(UserRole.MANAGER, UserRole.INSTALLER, UserRole.EMPLOYEE)
   @ApiOperation({ summary: 'Get current installer employee form' })
   getMine(
     @Req() req: Request & { user?: { sub?: string } },
@@ -38,7 +43,7 @@ export class EmployeeFormsController {
   }
 
   @Put('me')
-  @Roles(UserRole.INSTALLER)
+  @Roles(UserRole.MANAGER, UserRole.INSTALLER, UserRole.EMPLOYEE)
   @ApiOperation({ summary: 'Create current installer employee form' })
   upsertMine(
     @Req() req: Request & { user?: { sub?: string } },
@@ -52,6 +57,22 @@ export class EmployeeFormsController {
   @ApiOperation({ summary: 'List submitted employee forms' })
   list(): Promise<EmployeeFormResponse[]> {
     return this.employeeFormsService.list();
+  }
+
+  @Put('user/:userId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary:
+      'Create or replace a staff member’s onboarding form (admin/manager)',
+    description:
+      'For filling the form on someone’s behalf — over the phone, or from paper. Works whether or not they have submitted one already; `PATCH :id` only edits an existing submission.',
+  })
+  @ApiParam({ name: 'userId', description: 'Staff member user UUID' })
+  upsertForUser(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() dto: UpsertEmployeeFormDto,
+  ) {
+    return this.employeeFormsService.upsertForUser(userId, dto);
   }
 
   @Patch(':id')

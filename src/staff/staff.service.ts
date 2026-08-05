@@ -569,6 +569,14 @@ export class StaffService {
     }
   }
 
+  /** Whether a username is already in use — for callers that generate one. */
+  async isUsernameTaken(username: string): Promise<boolean> {
+    const credential = await this.credentialsRepository.findOne({
+      where: { username },
+    });
+    return credential !== null;
+  }
+
   private async ensureUsernameAvailable(
     username: string,
     excludeUserId?: string,

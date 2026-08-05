@@ -88,9 +88,13 @@ export class EmployeeFormsService {
       throw new NotFoundException('User not found');
     }
 
-    if (user.role !== UserRole.INSTALLER) {
+    // Every staff role onboards, not just installers. Admins are the exception —
+    // they are not onboarded staff. Restricting this to INSTALLER previously
+    // left managers and non-technical employees unable to submit their own form
+    // at all, and blocked onboarding invites for those roles.
+    if (user.role === UserRole.ADMIN) {
       throw new BadRequestException(
-        'Only installer users can submit employee forms',
+        'Admin users do not complete an employee onboarding form',
       );
     }
 
