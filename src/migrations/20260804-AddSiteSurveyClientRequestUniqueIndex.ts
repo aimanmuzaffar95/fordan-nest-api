@@ -11,9 +11,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * but they allow repeated `NULL`s in a unique index, which gives the same
  * behaviour from a plain one.
  */
-export class AddSiteSurveyClientRequestUniqueIndex20260804_1700000001800
-  implements MigrationInterface
-{
+export class AddSiteSurveyClientRequestUniqueIndex20260804_1700000001800 implements MigrationInterface {
   private readonly index = 'uq_site_surveys_job_client_request';
   private readonly table = 'site_surveys';
 

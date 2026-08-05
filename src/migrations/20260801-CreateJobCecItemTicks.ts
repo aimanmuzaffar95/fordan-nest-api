@@ -7,6 +7,14 @@ import { MigrationInterface, QueryRunner, Table } from 'typeorm';
 export class CreateJobCecItemTicks20260801_1700000001500 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable('job_cec_item_ticks')) return;
+
+    // `uuid_generate_v4()` is a Postgres extension function; MariaDB rejects it
+    // in a DEFAULT clause and needs `UUID()`.
+    const uuidDefault =
+      queryRunner.connection.options.type === 'postgres'
+        ? 'uuid_generate_v4()'
+        : 'UUID()';
+
     await queryRunner.createTable(
       new Table({
         name: 'job_cec_item_ticks',
@@ -16,7 +24,7 @@ export class CreateJobCecItemTicks20260801_1700000001500 implements MigrationInt
             type: 'uuid',
             isPrimary: true,
             generationStrategy: 'uuid',
-            default: 'uuid_generate_v4()',
+            default: uuidDefault,
           },
           { name: 'jobId', type: 'uuid' },
           { name: 'itemId', type: 'varchar', length: '64' },

@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddSmtpSettingsToAdminSettings1776048000000 implements MigrationInterface {
+export class AddSmtpSettingsToAdminSettings20260413_1700000000901 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const hasTable = await queryRunner.hasTable('admin_settings');
     if (!hasTable) return;

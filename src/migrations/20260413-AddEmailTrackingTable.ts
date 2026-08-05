@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
 
-export class AddEmailTrackingTable2026041315000000000 implements MigrationInterface {
+export class AddEmailTrackingTable20260413_1700000000904 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const tableName = 'email_tracking';
     const indexName = 'IDX_email_tracking_messageId_unique';

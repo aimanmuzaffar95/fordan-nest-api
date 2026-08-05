@@ -6,7 +6,7 @@ import {
   TableIndex,
 } from 'typeorm';
 
-export class CreatePermissionRoleProfiles1779400000000 implements MigrationInterface {
+export class CreatePermissionRoleProfiles20260522_1700000000900 implements MigrationInterface {
   private getDefaults(queryRunner: QueryRunner) {
     const dialect = queryRunner.connection.options.type;
     return {

@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddLatLngToCustomers1775960000000 implements MigrationInterface {
+export class AddLatLngToCustomers20260412_1700000000901 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const hasTable = await queryRunner.hasTable('customers');
     if (!hasTable) return;

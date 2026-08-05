@@ -6,18 +6,30 @@ import {
   TableIndex,
 } from 'typeorm';
 
-export class AddEmployeeRolesAndNonTechnicalStaff1776000000000 implements MigrationInterface {
+export class AddEmployeeRolesAndNonTechnicalStaff20260413_1700000000900 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // 1. Create employee_roles table
-    await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS employee_roles (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        name varchar(100) NOT NULL UNIQUE,
-        description varchar(500) NOT NULL,
-        "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
-        "updatedAt" TIMESTAMP NOT NULL DEFAULT now()
-      );
-    `);
+    // 1. Create employee_roles table.
+    // `gen_random_uuid()` and `"`-quoted identifiers are Postgres-only;
+    // MariaDB needs `UUID()` and backticks.
+    const isPostgres = queryRunner.connection.options.type === 'postgres';
+    await queryRunner.query(
+      isPostgres
+        ? `CREATE TABLE IF NOT EXISTS employee_roles (
+             id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+             name varchar(100) NOT NULL UNIQUE,
+             description varchar(500) NOT NULL,
+             "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+             "updatedAt" TIMESTAMP NOT NULL DEFAULT now()
+           )`
+        : `CREATE TABLE IF NOT EXISTS \`employee_roles\` (
+             \`id\` uuid NOT NULL PRIMARY KEY DEFAULT UUID(),
+             \`name\` varchar(100) NOT NULL UNIQUE,
+             \`description\` varchar(500) NOT NULL,
+             \`createdAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+             \`updatedAt\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                 ON UPDATE CURRENT_TIMESTAMP
+           ) ENGINE=InnoDB`,
+    );
 
     // 2. Add employeeRoleId column to users table
     const hasEmployeeRoleId = await queryRunner.hasColumn(

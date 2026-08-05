@@ -9,6 +9,13 @@ import {
 
 export class AddStaffRolesAndStaffProfileFields20260320_1700000000008 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // `uuid_generate_v4()` is a Postgres extension function; MariaDB rejects it
+    // in a DEFAULT clause and needs `UUID()`.
+    const uuidDefault =
+      queryRunner.connection.options.type === 'postgres'
+        ? 'uuid_generate_v4()'
+        : 'UUID()';
+
     const hasStaffRolesTable = await queryRunner.hasTable('staff_roles');
     if (!hasStaffRolesTable) {
       await queryRunner.createTable(
@@ -20,7 +27,7 @@ export class AddStaffRolesAndStaffProfileFields20260320_1700000000008 implements
               type: 'uuid',
               isPrimary: true,
               isNullable: false,
-              default: 'uuid_generate_v4()',
+              default: uuidDefault,
             },
             {
               name: 'name',

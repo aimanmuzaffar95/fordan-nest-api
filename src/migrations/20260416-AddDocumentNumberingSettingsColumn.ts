@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddDocumentNumberingSettingsColumn2026041614300000000 implements MigrationInterface {
+export class AddDocumentNumberingSettingsColumn20260416_1700000000903 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable('admin_settings'))) {
       return;

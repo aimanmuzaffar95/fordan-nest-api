@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddCustomerMessagingTemplatesColumn2026041512000000000 implements MigrationInterface {
+export class AddCustomerMessagingTemplatesColumn20260415_1700000000900 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable('admin_settings'))) {
       return;

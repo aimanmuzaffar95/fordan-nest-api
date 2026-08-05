@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddAcquisitionSourceToCustomers1775962000000 implements MigrationInterface {
+export class AddAcquisitionSourceToCustomers20260412_1700000000902 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const hasTable = await queryRunner.hasTable('customers');
     if (!hasTable) return;

@@ -96,19 +96,27 @@ export class CreateAdminSettingsTable20260327_1700000000014 implements Migration
     // Seed only the columns introduced by this migration. Using TypeORM's
     // insert builder against the registered entity can pull in fields added by
     // later migrations, which breaks fresh bootstraps.
+    // Postgres quotes identifiers with `"`, MariaDB with backticks, and their
+    // parameter placeholders differ too.
+    const isPostgres = queryRunner.connection.options.type === 'postgres';
+    const q = (name: string) => (isPostgres ? `"${name}"` : `\`${name}\``);
+    const columns = [
+      'id',
+      'overridePreMeter',
+      'calendarScopeEnforced',
+      'invoiceOverdueDays',
+      'preMeterPendingDays',
+      'installWarningDays',
+      'postMeterDeadlineDays',
+      'maxJobsPerTeamPerDay',
+    ];
+    const placeholders = columns
+      .map((_, i) => (isPostgres ? `$${i + 1}` : '?'))
+      .join(', ');
+
     await queryRunner.query(
-      `
-        INSERT INTO "admin_settings" (
-          "id",
-          "overridePreMeter",
-          "calendarScopeEnforced",
-          "invoiceOverdueDays",
-          "preMeterPendingDays",
-          "installWarningDays",
-          "postMeterDeadlineDays",
-          "maxJobsPerTeamPerDay"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `,
+      `INSERT INTO ${q('admin_settings')} (${columns.map(q).join(', ')})
+         VALUES (${placeholders})`,
       ['global', false, true, 14, 7, 3, 2, 2],
     );
   }
