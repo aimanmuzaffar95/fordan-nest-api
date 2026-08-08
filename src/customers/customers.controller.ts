@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -20,7 +21,9 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Request } from 'express';
+import { CustomerNotesService } from './customer-notes.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { CreateCustomerNoteDto } from './dto/customer-note.dto';
 import { FindCustomersQueryDto } from './dto/find-customers-query.dto';
 import { SearchCustomersQueryDto } from './dto/search-customers-query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -47,6 +50,7 @@ export class CustomersController {
     private readonly customersService: CustomersService,
     private readonly jobs: JobsService,
     private readonly permissions: PermissionsService,
+    private readonly notes: CustomerNotesService,
   ) {}
 
   private async authorizeCustomerAction(
@@ -239,5 +243,56 @@ export class CustomersController {
     this.permissions.assertPermission(effective, 'job:create');
     await this.customersService.findOne(customerId, viewer);
     return this.jobs.createJob(customerId, dto, viewer.role, viewer.userId);
+  }
+
+  // ─── Notes ────────────────────────────────────────────────────────────────
+
+  @Get(':id/notes')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Notes on a customer',
+    description:
+      '**Roles:** `admin`, `manager` only — matches customer detail read access. Pinned notes sort first, then newest-first.',
+  })
+  async listNotes(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeCustomerAction(req, 'customer:view');
+    return this.notes.listForCustomer(id, viewer);
+  }
+
+  @Post(':id/notes')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Add a note to a customer',
+    description:
+      '**Roles:** `admin`, `manager` only. Author is always the authenticated principal.',
+  })
+  @ApiCreatedResponse({ description: 'Note created.' })
+  async createNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateCustomerNoteDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeCustomerAction(req, 'customer:update');
+    return this.notes.create(id, dto, viewer);
+  }
+
+  @Delete('notes/:noteId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Delete a customer note',
+    description: '**Roles:** `admin` only (enforced in service).',
+  })
+  @ApiForbiddenResponse({
+    description: '**403** — only admins may delete customer notes.',
+  })
+  async removeNote(
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeCustomerAction(req, 'customer:update');
+    return this.notes.remove(noteId, viewer);
   }
 }

@@ -4,6 +4,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { JobsService } from '../jobs/jobs.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
+import { CustomerNotesService } from './customer-notes.service';
 import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
 
@@ -28,6 +29,11 @@ describe('CustomersController', () => {
     assertPermission: jest.fn(),
     hasPermission: jest.fn().mockReturnValue(false),
   };
+  const customerNotesService = {
+    listForCustomer: jest.fn(),
+    create: jest.fn(),
+    remove: jest.fn(),
+  };
   const jwtAuthGuard = { canActivate: jest.fn().mockReturnValue(true) };
   const rolesGuard = { canActivate: jest.fn().mockReturnValue(true) };
 
@@ -46,6 +52,10 @@ describe('CustomersController', () => {
         {
           provide: PermissionsService,
           useValue: permissionsService,
+        },
+        {
+          provide: CustomerNotesService,
+          useValue: customerNotesService,
         },
       ],
     })
