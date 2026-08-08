@@ -36,6 +36,13 @@ export type JobDetailJobDto = {
   invoiceDate: string | null;
   invoiceDueDate: string | null;
   paidDate: string | null;
+  /**
+   * True when the requesting viewer holds `job:financials:view`. When false,
+   * `projectPrice`/`depositAmount`/`depositPaid`/etc above have been redacted
+   * to null/false — clients must not infer redaction from those values and
+   * must omit financial fields from write payloads when this is false.
+   */
+  canViewJobFinancials: boolean;
   lostAt: Date | null;
   lostReason: string | null;
   lostByUserId: string | null;

@@ -1157,6 +1157,7 @@ export class JobsService {
           ? derivedInvoiceFields.invoiceDueDate
           : null,
         paidDate: canViewFinancials ? derivedInvoiceFields.paidDate : null,
+        canViewJobFinancials: canViewFinancials,
         lostAt: job.lostAt,
         lostReason: job.lostReason,
         lostByUserId: job.lostByUserId,
@@ -1787,9 +1788,11 @@ export class JobsService {
   private applyJobFinancialVisibility<T extends Record<string, unknown>>(
     item: T,
     viewer?: JobListViewer,
-  ): T {
-    if (viewer?.canViewJobFinancials ?? true) {
-      return item;
+  ): T & { canViewJobFinancials: boolean } {
+    const canViewJobFinancials = viewer?.canViewJobFinancials ?? true;
+
+    if (canViewJobFinancials) {
+      return { ...item, canViewJobFinancials };
     }
 
     return {
@@ -1802,6 +1805,7 @@ export class JobsService {
       invoiceDate: null,
       invoiceDueDate: null,
       paidDate: null,
+      canViewJobFinancials,
     };
   }
 
