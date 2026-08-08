@@ -146,8 +146,18 @@ export class InstallExecutionService {
         dto.status === InstallVisitStatus.PARTIAL
       ) {
         visit.completedAt = visit.completedAt ?? new Date();
+      } else {
+        // A visit that moves back to scheduled/aborted is no longer
+        // "completed as of" its old timestamp — clear it so the timeline
+        // doesn't stamp e.g. "Aborted" at a stale completion instant.
+        visit.completedAt = null;
+      }
+      if (dto.status === InstallVisitStatus.SCHEDULED) {
+        // Reverting to scheduled means the work-in-progress clock resets too.
+        visit.startedAt = null;
       }
       visit.status = dto.status;
+      visit.updatedByUserId = viewer.userId;
     }
 
     if (dto.scheduledDate !== undefined)
@@ -303,6 +313,7 @@ export class InstallExecutionService {
         defect.resolvedByUserId = viewer.userId;
       }
       defect.status = dto.status;
+      defect.updatedByUserId = viewer.userId;
     }
     if (dto.waiverReason !== undefined) defect.waiverReason = dto.waiverReason;
 

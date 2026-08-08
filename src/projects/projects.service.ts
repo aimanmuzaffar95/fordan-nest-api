@@ -100,6 +100,9 @@ export class ProjectsService {
           projectManagerUserId: job.managerId,
           targetInstallDate: job.installDate,
           readinessChecklist: {},
+          // The user whose action (signing the contract) triggered the
+          // conversion, when there is one; null for system-triggered creation.
+          createdByUserId: actorUserId,
         }),
       );
 
@@ -184,6 +187,7 @@ export class ProjectsService {
     if (dto.stage !== undefined && dto.stage !== project.stage) {
       this.assertStageMoveAllowed(project, dto.stage);
       project.stage = dto.stage;
+      project.updatedByUserId = viewer.userId;
       if (dto.stage === ProjectStage.COMPLETED) {
         project.completedAt = new Date();
       }

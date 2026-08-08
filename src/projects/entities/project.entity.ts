@@ -149,6 +149,19 @@ export class Project {
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 
+  /**
+   * The signed-contract path (`createFromSignedJob`) sets this from the
+   * authenticated user whose action triggered the conversion. Nullable for
+   * projects created before this column existed, or by a system-triggered
+   * path with no principal.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  createdByUserId: string | null;
+
+  /** Who last changed `stage` — the authenticated principal, never client input. */
+  @Column({ type: 'uuid', nullable: true })
+  updatedByUserId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

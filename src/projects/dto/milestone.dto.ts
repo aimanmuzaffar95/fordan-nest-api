@@ -13,6 +13,7 @@ import {
   MilestoneStatus,
   MilestoneType,
 } from '../entities/project-milestone.entity';
+import { IsNotFutureDate } from '../validators/is-not-future-date';
 
 const trimOrNull = ({
   value,
@@ -75,10 +76,14 @@ export class UpsertMilestoneDto {
   @IsDateString()
   scheduledAt?: string | null;
 
-  @ApiPropertyOptional({ description: 'YYYY-MM-DD.' })
+  @ApiPropertyOptional({
+    description:
+      'YYYY-MM-DD. When the gate actually passed/failed — cannot be in the future.',
+  })
   @IsOptional()
   @ValidateIf((_, v) => v != null)
   @IsDateString()
+  @IsNotFutureDate()
   completedDate?: string | null;
 
   @ApiPropertyOptional({ description: 'Required when recording a failure.' })

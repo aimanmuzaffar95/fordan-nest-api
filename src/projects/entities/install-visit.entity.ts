@@ -84,6 +84,10 @@ export class InstallVisit {
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 
+  /** Who last changed `status` — the authenticated principal, never client input. */
+  @Column({ type: 'uuid', nullable: true })
+  updatedByUserId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -156,6 +160,14 @@ export class InstallDefect {
 
   @Column({ type: 'json', nullable: true })
   photoFileIds: string[] | null;
+
+  /**
+   * Who last changed `status`. Distinct from `resolvedByUserId`, which only
+   * fires on the resolved transition — this covers every status change
+   * (including in-progress and waived), which is what the timeline audits.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  updatedByUserId: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

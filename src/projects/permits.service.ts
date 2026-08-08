@@ -162,6 +162,7 @@ export class PermitsService implements OnModuleInit, OnModuleDestroy {
         permit.rejectionReason = reason;
       }
       permit.status = dto.status;
+      permit.updatedByUserId = viewer.userId;
     }
 
     if (dto.permitType !== undefined) permit.permitType = dto.permitType;

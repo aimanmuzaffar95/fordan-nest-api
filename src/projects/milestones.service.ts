@@ -189,6 +189,7 @@ export class MilestonesService {
         await this.assertNoBlockingDefects(projectId);
       }
       milestone.status = dto.status;
+      milestone.updatedByUserId = viewer.userId;
       if (
         dto.status === MilestoneStatus.PASSED ||
         dto.status === MilestoneStatus.FAILED

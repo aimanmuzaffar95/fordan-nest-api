@@ -99,6 +99,10 @@ export class Permit {
   @Column({ type: 'uuid', nullable: true })
   createdByUserId: string | null;
 
+  /** Who last changed `status` — the authenticated principal, never client input. */
+  @Column({ type: 'uuid', nullable: true })
+  updatedByUserId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

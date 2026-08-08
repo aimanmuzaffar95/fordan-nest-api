@@ -29,10 +29,12 @@ import {
 } from './dto/install-execution.dto';
 import { UpsertMilestoneDto } from './dto/milestone.dto';
 import { CreatePermitDto, UpdatePermitDto } from './dto/permit.dto';
+import { CreateProjectNoteDto } from './dto/project-note.dto';
 import { ListProjectsQueryDto, UpdateProjectDto } from './dto/project.dto';
 import { InstallExecutionService } from './install-execution.service';
 import { MilestonesService } from './milestones.service';
 import { PermitsService } from './permits.service';
+import { ProjectNotesService } from './project-notes.service';
 import { INSTALL_READINESS_ITEMS, ProjectsService } from './projects.service';
 
 type AuthRequest = Request & { user?: { sub?: string; role?: UserRole } };
@@ -57,6 +59,7 @@ export class ProjectsController {
     private readonly permits: PermitsService,
     private readonly milestones: MilestonesService,
     private readonly execution: InstallExecutionService,
+    private readonly notes: ProjectNotesService,
   ) {}
 
   // ─── Projects ─────────────────────────────────────────────────────────────
@@ -260,6 +263,47 @@ export class ProjectsController {
     @Req() req: AuthRequest,
   ) {
     return this.execution.upsertDefect(id, dto, viewerOf(req));
+  }
+
+  // ─── Notes ────────────────────────────────────────────────────────────────
+
+  @Get('projects/:id/notes')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Timeline notes on a project',
+    description:
+      'Newest first. Each note carries the resolved author (never client-supplied text). Installers may read only when assigned to the underlying job (primary or via `assignments`); write and delete stay Admin/Manager.',
+  })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  listNotes(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
+    return this.notes.listForProject(id, viewerOf(req));
+  }
+
+  @Post('projects/:id/notes')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Add a note to a project',
+    description:
+      'A dedicated append-only store — the author is always the authenticated caller, never a request field.',
+  })
+  @ApiParam({ name: 'id', description: 'Project UUID' })
+  createNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateProjectNoteDto,
+    @Req() req: AuthRequest,
+  ) {
+    return this.notes.create(id, dto, viewerOf(req));
+  }
+
+  @Delete('project-notes/:noteId')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Delete a project note (admin)' })
+  @ApiParam({ name: 'noteId', description: 'Project note UUID' })
+  removeNote(
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.notes.remove(noteId, viewerOf(req));
   }
 
   @Get('projects/:id/blocking-defects')
