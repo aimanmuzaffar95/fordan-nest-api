@@ -19,6 +19,21 @@ const toInt = ({ value }: { value: unknown }): number | undefined => {
   return Number.isFinite(n) ? Math.trunc(n) : undefined;
 };
 
+/**
+ * Whitelisted, strictly validated — never interpolated into raw SQL. Keep in
+ * sync with the `switch` in `TasksService`'s sort builder.
+ */
+export const TASK_SORT_FIELDS = [
+  'slaDueAt',
+  'jobOrderNumber',
+  'assignee',
+  'createdAt',
+  'priority',
+  'status',
+] as const;
+
+export type TaskSortField = (typeof TASK_SORT_FIELDS)[number];
+
 export class TasksQueryDto {
   @ApiPropertyOptional({
     enum: ['mine', 'all'],
@@ -85,4 +100,18 @@ export class TasksQueryDto {
   @IsInt()
   @Min(0)
   offset?: number;
+
+  @ApiPropertyOptional({
+    enum: TASK_SORT_FIELDS,
+    description:
+      'Column to sort by. Defaults to the SLA queue order (`slaDueAt` ASC, `createdAt` DESC) when omitted.',
+  })
+  @IsOptional()
+  @IsIn(TASK_SORT_FIELDS)
+  sortBy?: TaskSortField;
+
+  @ApiPropertyOptional({ enum: ['ASC', 'DESC'], default: 'ASC' })
+  @IsOptional()
+  @IsIn(['ASC', 'DESC'])
+  sortDir?: 'ASC' | 'DESC';
 }

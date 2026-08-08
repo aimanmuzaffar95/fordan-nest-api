@@ -16,6 +16,7 @@ import {
   Not,
   Repository,
   type FindOptionsWhere,
+  type SelectQueryBuilder,
 } from 'typeorm';
 import { Job } from '../jobs/entities/job.entity';
 import { User } from '../users/entities/user.entity';
@@ -33,7 +34,7 @@ import {
 } from '../pipeline-stages/pipeline-stage.config';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
-import { TasksQueryDto } from './dto/tasks-query.dto';
+import { TasksQueryDto, type TaskSortField } from './dto/tasks-query.dto';
 import { TaskResponseDto, TasksListResponseDto } from './dto/task-response.dto';
 import { Task } from './entities/task.entity';
 import {
@@ -280,19 +281,35 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       return { items: [], total: 0, breachedCount: 0 };
     }
 
-    const [rows, total] = await this.taskRepo.findAndCount({
-      where,
-      relations: { job: { customer: true }, assigneeUser: true },
-      order: {
-        // Breached and soonest-due first. No `nulls: 'LAST'` — TypeORM emits
-        // `NULLS LAST`, which prod MariaDB rejects; clients sort the handful of
-        // SLA-less tasks themselves.
-        slaDueAt: 'ASC',
-        createdAt: 'DESC',
-      },
-      take: limit,
-      skip: offset,
-    });
+    let rows: Task[];
+    let total: number;
+    if (!filters.sortBy) {
+      // Unchanged default path — same call shape existing callers rely on.
+      [rows, total] = await this.taskRepo.findAndCount({
+        where,
+        relations: { job: { customer: true }, assigneeUser: true },
+        order: {
+          // Breached and soonest-due first. No `nulls: 'LAST'` — TypeORM emits
+          // `NULLS LAST`, which prod MariaDB rejects; clients sort the handful of
+          // SLA-less tasks themselves.
+          slaDueAt: 'ASC',
+          createdAt: 'DESC',
+        },
+        take: limit,
+        skip: offset,
+      });
+    } else {
+      const qb = this.taskRepo
+        .createQueryBuilder('task')
+        .leftJoinAndSelect('task.job', 'job')
+        .leftJoinAndSelect('job.customer', 'customer')
+        .leftJoinAndSelect('task.assigneeUser', 'assigneeUser')
+        .where(where)
+        .take(limit)
+        .skip(offset);
+      this.applySort(qb, filters.sortBy, filters.sortDir ?? 'ASC');
+      [rows, total] = await qb.getManyAndCount();
+    }
 
     const breachedCount = await this.taskRepo.count({
       where: Array.isArray(where)
@@ -620,6 +637,73 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       { ...base, job: { managerId: viewer.userId } },
       { ...base, assigneeUserId: viewer.userId },
     ];
+  }
+
+  /**
+   * Apply a whitelisted sort to the tasks list query builder. `sortBy` is
+   * validated by `TasksQueryDto` against `TASK_SORT_FIELDS`; nothing here is
+   * ever built from a raw client string, so there's no SQL injection surface.
+   *
+   * Nullable sort keys (SLA-less tasks, job-less tasks, unassigned tasks)
+   * always sink to the end regardless of `sortDir` — a `CASE WHEN ... IS
+   * NULL` flag ordered before the real column, rather than `NULLS LAST`,
+   * which prod MariaDB rejects. A `task.id` tiebreaker keeps pagination
+   * stable when the primary/secondary keys collide.
+   */
+  private applySort(
+    qb: SelectQueryBuilder<Task>,
+    sortBy: TaskSortField,
+    sortDir: 'ASC' | 'DESC',
+  ): void {
+    switch (sortBy) {
+      case 'slaDueAt':
+        qb.addSelect(
+          'CASE WHEN task.slaDueAt IS NULL THEN 1 ELSE 0 END',
+          'sla_null_last',
+        )
+          .addOrderBy('sla_null_last', 'ASC')
+          .addOrderBy('task.slaDueAt', sortDir)
+          .addOrderBy('task.createdAt', 'DESC');
+        break;
+      case 'jobOrderNumber':
+        qb.addSelect(
+          'CASE WHEN job.orderNumber IS NULL THEN 1 ELSE 0 END',
+          'job_order_null_last',
+        )
+          .addOrderBy('job_order_null_last', 'ASC')
+          .addOrderBy('job.orderNumber', sortDir)
+          .addOrderBy('task.createdAt', 'DESC');
+        break;
+      case 'assignee':
+        qb.addSelect(
+          'CASE WHEN task.assigneeUserId IS NULL THEN 1 ELSE 0 END',
+          'assignee_null_last',
+        )
+          .addOrderBy('assignee_null_last', 'ASC')
+          .addOrderBy('assigneeUser.firstName', sortDir)
+          .addOrderBy('assigneeUser.lastName', sortDir)
+          .addOrderBy('task.createdAt', 'DESC');
+        break;
+      case 'priority':
+        qb.addOrderBy('task.priority', sortDir).addOrderBy(
+          'task.createdAt',
+          'DESC',
+        );
+        break;
+      case 'status':
+        qb.addOrderBy('task.status', sortDir).addOrderBy(
+          'task.createdAt',
+          'DESC',
+        );
+        break;
+      case 'createdAt':
+      default:
+        qb.addOrderBy('task.createdAt', sortDir);
+        break;
+    }
+    // Stable tiebreaker so identical sort keys can't duplicate or drop rows
+    // across pages.
+    qb.addOrderBy('task.id', 'ASC');
   }
 
   private async loadVisibleTask(id: string, viewer: Viewer): Promise<Task> {
