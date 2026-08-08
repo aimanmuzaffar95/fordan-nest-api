@@ -7,6 +7,7 @@ import { UserCredential } from './auth/entities/user-credential.entity';
 import { CustomersModule } from './customers/customers.module';
 import { Customer } from './customers/entities/customer.entity';
 import { CustomerAuditLog } from './customers/entities/customer-audit-log.entity';
+import { CustomerNote } from './customers/entities/customer-note.entity';
 import { User } from './users/entities/user.entity';
 import { InstallerModule } from './installer/installer.module';
 import { JobAuditLog } from './jobs/entities/job-audit-log.entity';
@@ -107,6 +108,7 @@ import { CommunicationLog } from './communications/entities/communication-log.en
 import { Project } from './projects/entities/project.entity';
 import { Permit } from './projects/entities/permit.entity';
 import { ProjectMilestone } from './projects/entities/project-milestone.entity';
+import { ProjectNote } from './projects/entities/project-note.entity';
 import {
   InstallDefect,
   InstallVisit,
@@ -260,6 +262,8 @@ getSettingsEncryptionKey();
         Project,
         Permit,
         ProjectMilestone,
+        ProjectNote,
+        CustomerNote,
         InstallVisit,
         InstallDefect,
         CommissionEvent,

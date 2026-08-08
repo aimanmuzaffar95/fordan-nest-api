@@ -4,6 +4,7 @@ import { User } from '../users/entities/user.entity';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { Customer } from '../customers/entities/customer.entity';
 import { CustomerAuditLog } from '../customers/entities/customer-audit-log.entity';
+import { CustomerNote } from '../customers/entities/customer-note.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
 import { InvoiceActivity } from '../invoices/entities/invoice-activity.entity';
 import { InvoiceItem } from '../invoices/entities/invoice-item.entity';
@@ -44,6 +45,7 @@ import { FinancingApplication } from '../financing/entities/financing-applicatio
 import { Project } from '../projects/entities/project.entity';
 import { Permit } from '../projects/entities/permit.entity';
 import { ProjectMilestone } from '../projects/entities/project-milestone.entity';
+import { ProjectNote } from '../projects/entities/project-note.entity';
 import {
   InstallDefect,
   InstallVisit,
@@ -165,6 +167,8 @@ export const AppDataSource = new DataSource({
     Project,
     Permit,
     ProjectMilestone,
+    ProjectNote,
+    CustomerNote,
     InstallVisit,
     InstallDefect,
     CommissionEvent,

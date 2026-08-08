@@ -144,7 +144,42 @@ export class InvoicesService {
     const pageSize = query.pageSize ?? 20;
     qb.skip((page - 1) * pageSize).take(pageSize);
 
+    // Note: no one-to-many joins (items/payments/activities) on this
+    // query, so getManyAndCount's COUNT is accurate and pagination is
+    // unaffected by include=full below.
     const [items, total] = await qb.getManyAndCount();
+
+    if (query.include === 'full' && items.length > 0) {
+      // Second, single query: hydrate the page's rows with their
+      // items/payments/activities via one IN(...) query with joins —
+      // not a per-row lookup — then reorder to match the page order
+      // established above (issueDate DESC), since the join fan-out
+      // makes ORDER BY on the detail query unreliable for row order.
+      const ids = items.map((i) => i.id);
+      const detailQb = this.invoicesRepo
+        .createQueryBuilder('invoice')
+        .leftJoinAndSelect('invoice.customer', 'customer')
+        .leftJoinAndSelect('invoice.items', 'items')
+        .leftJoinAndSelect('invoice.payments', 'payments')
+        .leftJoinAndSelect('invoice.activities', 'activities')
+        .leftJoinAndSelect('activities.createdByUser', 'activityActor')
+        .where('invoice.id IN (:...ids)', { ids })
+        .orderBy('items.position', 'ASC')
+        .addOrderBy('activities.createdAt', 'DESC')
+        .addOrderBy('payments.createdAt', 'DESC');
+      const detailed = await detailQb.getMany();
+      const byId = new Map(detailed.map((inv) => [inv.id, inv] as const));
+      const ordered = items
+        .map((i) => byId.get(i.id))
+        .filter((i): i is Invoice => Boolean(i));
+
+      return {
+        items: ordered,
+        total,
+        page,
+        pageSize,
+      };
+    }
 
     return {
       items,

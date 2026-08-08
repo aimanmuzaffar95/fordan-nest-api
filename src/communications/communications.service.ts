@@ -148,6 +148,29 @@ export class CommunicationsService {
     return saved;
   }
 
+  /**
+   * Hard delete, matching the precedent set by project notes and customer
+   * notes: a logged communication is a mistake-correction target (wrong
+   * customer, test data, mis-logged call), not something that needs a
+   * soft-delete audit trail of its own — the timeline mirror already
+   * preserves context for anything that mattered. Restricted to admins,
+   * same as the notes stores, since removing someone else's record is a
+   * bigger action than creating one.
+   */
+  async remove(
+    id: string,
+    viewer: { userId: string; role: UserRole },
+  ): Promise<{ deleted: true }> {
+    await this.assertEnabled(viewer.role);
+    if (viewer.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Only admins can delete communications');
+    }
+    const log = await this.logRepo.findOne({ where: { id } });
+    if (!log) throw new NotFoundException(`Communication ${id} not found`);
+    await this.logRepo.delete({ id });
+    return { deleted: true };
+  }
+
   async updateStatus(
     id: string,
     status: CommunicationStatus,

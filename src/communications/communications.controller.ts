@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -11,6 +12,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiForbiddenResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
@@ -88,5 +90,20 @@ export class CommunicationsController {
       dto.failureReason ?? null,
       viewerOf(req),
     );
+  }
+
+  @Delete('communications/:id')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Delete a logged communication (admin)',
+    description:
+      'Hard delete — for mis-logged calls, test data, or entries logged against the wrong customer. **Roles:** `admin` only.',
+  })
+  @ApiParam({ name: 'id', description: 'Communication UUID' })
+  @ApiForbiddenResponse({
+    description: '**403** — only admins may delete communications.',
+  })
+  remove(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
+    return this.communications.remove(id, viewerOf(req));
   }
 }
