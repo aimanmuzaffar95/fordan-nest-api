@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -48,9 +49,10 @@ export class StaffController {
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
   async listStaff(
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+    @Query('includeAdmins') includeAdmins?: string,
   ): Promise<StaffListItem[]> {
     await this.assertStaffPermission(req, 'staff:view');
-    return this.staffService.listStaff();
+    return this.staffService.listStaff(includeAdmins === 'true');
   }
 
   @Post()

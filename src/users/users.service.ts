@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { hash } from 'bcryptjs';
-import { DataSource, IsNull, Repository } from 'typeorm';
+import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { User } from './entities/user.entity';
 import { UserRole } from './entities/user-role.enum';
@@ -26,6 +26,23 @@ export type CreateUserWithCredentialInput = {
   password: string;
   role: UserRole;
 };
+
+/**
+ * Minimal display-only projection — deliberately excludes email, phone,
+ * credentials and any auth metadata. Used to resolve an actor id (which can
+ * be ANY role, including ADMIN — `/staff` structurally excludes admins) to a
+ * human-readable name for read-only UI surfaces like activity feeds.
+ */
+export type UserDirectoryEntry = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  role: UserRole;
+};
+
+/** Hard cap on a single batch lookup — guards against unbounded enumeration via a huge id list. */
+export const USER_DIRECTORY_BATCH_LIMIT = 200;
 
 @Injectable()
 export class UsersService {
@@ -185,5 +202,46 @@ export class UsersService {
         role: user.role,
       };
     });
+  }
+
+  /** Single-id directory lookup — resolves any active user's display name/role. */
+  async getDirectoryEntry(id: string): Promise<UserDirectoryEntry> {
+    const user = await this.usersRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    return this.toDirectoryEntry(user);
+  }
+
+  /**
+   * Batch directory lookup — the History-feed use case: many actor ids on
+   * one page, resolved in a single round trip instead of one request per row.
+   * Silently drops ids that don't resolve (soft-deleted/unknown) rather than
+   * erroring the whole batch.
+   */
+  async getDirectoryEntries(ids: string[]): Promise<UserDirectoryEntry[]> {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) return [];
+    if (uniqueIds.length > USER_DIRECTORY_BATCH_LIMIT) {
+      throw new BadRequestException(
+        `Cannot resolve more than ${USER_DIRECTORY_BATCH_LIMIT} ids in a single request`,
+      );
+    }
+
+    const users = await this.usersRepository.find({
+      where: { id: In(uniqueIds), deletedAt: IsNull() },
+    });
+
+    return users.map((user) => this.toDirectoryEntry(user));
+  }
+
+  private toDirectoryEntry(user: User): UserDirectoryEntry {
+    return {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      displayName: `${user.firstName} ${user.lastName}`.trim(),
+      role: user.role,
+    };
   }
 }

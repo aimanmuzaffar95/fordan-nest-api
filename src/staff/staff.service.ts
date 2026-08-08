@@ -46,7 +46,11 @@ export type StaffListItem = {
   phoneNumber: string;
   address: string;
   identificationNumber: string;
-  staffType: UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE;
+  staffType:
+    | UserRole.MANAGER
+    | UserRole.INSTALLER
+    | UserRole.EMPLOYEE
+    | UserRole.ADMIN;
   emailAddress: string;
   username: string;
   staffRole: StaffRoleSummary | null;
@@ -104,10 +108,26 @@ export class StaffService {
     };
   }
 
-  async listStaff(): Promise<StaffListItem[]> {
+  /**
+   * `includeAdmins` is additive: default behaviour (field roster only) is
+   * unchanged for every existing caller. Set it only for surfaces that need
+   * an "assignable users" picker spanning office + field staff (e.g. task
+   * reassignment) — never for anything that treats this as a public-facing
+   * staff directory.
+   */
+  async listStaff(includeAdmins = false): Promise<StaffListItem[]> {
+    const roles = includeAdmins
+      ? [
+          UserRole.MANAGER,
+          UserRole.INSTALLER,
+          UserRole.EMPLOYEE,
+          UserRole.ADMIN,
+        ]
+      : [UserRole.MANAGER, UserRole.INSTALLER, UserRole.EMPLOYEE];
+
     const users = await this.usersRepository.find({
       where: {
-        role: In([UserRole.MANAGER, UserRole.INSTALLER, UserRole.EMPLOYEE]),
+        role: In(roles),
         deletedAt: IsNull(),
       },
       relations: {
@@ -819,10 +839,15 @@ export class StaffService {
   }
 
   private toStaffTypeLabel(
-    staffType: UserRole.MANAGER | UserRole.INSTALLER | UserRole.EMPLOYEE,
+    staffType:
+      | UserRole.MANAGER
+      | UserRole.INSTALLER
+      | UserRole.EMPLOYEE
+      | UserRole.ADMIN,
   ): string {
     if (staffType === UserRole.MANAGER) return 'Manager';
     if (staffType === UserRole.INSTALLER) return 'Installer';
+    if (staffType === UserRole.ADMIN) return 'Admin';
     return 'Non-Technical Staff';
   }
 
