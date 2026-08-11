@@ -7,8 +7,10 @@ export type JobDetailCustomerDto = {
   id: string;
   firstName: string;
   lastName: string;
-  email: string;
-  phone: string;
+  // `email`/`phone` are scrubbed to `null` for viewers without
+  // `customer:pii:view` (see `jobs.service.ts`'s `buildJobDetailResponse`).
+  email: string | null;
+  phone: string | null;
   address: string | null;
 };
 
@@ -55,8 +57,13 @@ export type JobDetailPersonDto = {
   firstName: string;
   lastName: string;
   fullName: string;
-  email: string;
-  phone: string;
+  // `email`/`phone` are scrubbed to `null` for viewers without
+  // `staff:pii:view` — see JobsService#mapUserSummary. Additive/nullable
+  // rather than removed so existing consumers that already null-check stay
+  // correct; consumers that don't must add a null-check (contract change
+  // documented in docs/API_CONTRACT.md).
+  email: string | null;
+  phone: string | null;
   role: UserRole;
 };
 

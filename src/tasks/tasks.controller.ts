@@ -23,6 +23,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { TaskResponseDto, TasksListResponseDto } from './dto/task-response.dto';
@@ -54,12 +56,13 @@ function viewerOf(req: AuthRequest): { userId: string; role: UserRole } {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('tasks')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class TasksController {
   constructor(private readonly tasks: TasksService) {}
 
   @Get()
   @Roles(...ALL_ROLES)
+  @RequirePermission('task:view')
   @ApiOperation({
     summary: 'List tasks',
     description:
@@ -75,6 +78,7 @@ export class TasksController {
 
   @Post()
   @Roles(...ALL_ROLES)
+  @RequirePermission('task:manage')
   @ApiOperation({
     summary: 'Create a task',
     description:
@@ -90,6 +94,7 @@ export class TasksController {
 
   @Post('sweep-sla')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('task:manage')
   @ApiOperation({
     summary: 'Run the SLA sweep now (admin only)',
     description:
@@ -101,6 +106,7 @@ export class TasksController {
 
   @Get(':id')
   @Roles(...ALL_ROLES)
+  @RequirePermission('task:view')
   @ApiOperation({ summary: 'Get a task' })
   @ApiParam({ name: 'id', description: 'Task UUID' })
   @ApiResponse({ status: 200, type: TaskResponseDto })
@@ -113,6 +119,7 @@ export class TasksController {
 
   @Patch(':id')
   @Roles(...ALL_ROLES)
+  @RequirePermission('task:manage')
   @ApiOperation({
     summary: 'Update a task',
     description:
@@ -130,6 +137,7 @@ export class TasksController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('task:manage')
   @ApiOperation({ summary: 'Delete a task (admin/manager)' })
   @ApiParam({ name: 'id', description: 'Task UUID' })
   remove(

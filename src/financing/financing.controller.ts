@@ -20,6 +20,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import {
   CreateFinancingApplicationDto,
@@ -42,12 +44,13 @@ function viewerOf(req: AuthRequest): { userId: string; role: UserRole } {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class FinancingController {
   constructor(private readonly financing: FinancingService) {}
 
   @Get('jobs/:jobId/financing')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('financing:view')
   @ApiOperation({ summary: 'Financing applications for a job' })
   @ApiParam({ name: 'jobId', description: 'Job UUID' })
   list(@Param('jobId', ParseUUIDPipe) jobId: string, @Req() req: AuthRequest) {
@@ -56,6 +59,7 @@ export class FinancingController {
 
   @Post('jobs/:jobId/financing')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('financing:manage')
   @ApiOperation({
     summary: 'Start a financing application',
     description: 'Created in `intent`; move it along with PATCH.',
@@ -71,6 +75,7 @@ export class FinancingController {
 
   @Post('financing/sweep-expiries')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('financing:manage')
   @ApiOperation({
     summary: 'Warn on and expire lapsed approvals (admin)',
     description: 'Runs automatically on the SLA sweep.',
@@ -81,6 +86,7 @@ export class FinancingController {
 
   @Patch('financing/:id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('financing:manage')
   @ApiOperation({
     summary: 'Update a financing application',
     description:

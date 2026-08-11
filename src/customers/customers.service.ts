@@ -16,6 +16,7 @@ import {
   Repository,
   SelectQueryBuilder,
 } from 'typeorm';
+import { scrubFields } from '../common/field-scrub.util';
 import { Job } from '../jobs/entities/job.entity';
 import { Note } from '../notes/entities/note.entity';
 import { UserRole } from '../users/entities/user-role.enum';
@@ -50,6 +51,13 @@ type CustomerViewer = {
   userId: string;
   role: UserRole;
   customerScope?: 'all' | 'own';
+  /**
+   * Gates `phone`/`secondaryPhone`/`email` on the `customer:pii:view`
+   * permission (see `common/field-scrub.util.ts`). Defaults to `false`
+   * (fail closed) wherever a caller doesn't pass it explicitly — matching
+   * the fail-closed convention used for staff PII.
+   */
+  canViewPii?: boolean;
 };
 
 type GeocodeCoordinatesDto = {
@@ -146,6 +154,26 @@ export class CustomersService {
     return existing ? CustomerResponseDto.fromEntity(existing) : null;
   }
 
+  /**
+   * `customer:pii:view` field-level gate — scrubs `phone`, `secondaryPhone`,
+   * and `email` (the contact-PII fields the catalog entry documents) unless
+   * the viewer holds the key. Routed through the shared `scrubFields`
+   * helper so this is the same mechanism as every other field-level key,
+   * never mutates the input.
+   */
+  private toResponseDto(
+    entity: Customer,
+    viewer?: CustomerViewer,
+  ): CustomerResponseDto {
+    const dto = CustomerResponseDto.fromEntity(entity);
+    const canViewPii = viewer?.canViewPii === true;
+    return scrubFields(dto as unknown as Record<string, unknown>, {
+      phone: canViewPii,
+      secondaryPhone: canViewPii,
+      email: canViewPii,
+    }) as unknown as CustomerResponseDto;
+  }
+
   async findAll(
     page = 1,
     limit = 20,
@@ -165,7 +193,7 @@ export class CustomersService {
     ]);
 
     return {
-      items: items.map((item) => CustomerResponseDto.fromEntity(item)),
+      items: items.map((item) => this.toResponseDto(item, viewer)),
       page,
       limit,
       total,
@@ -229,7 +257,7 @@ export class CustomersService {
     ]);
 
     return {
-      items: items.map((item) => CustomerResponseDto.fromEntity(item)),
+      items: items.map((item) => this.toResponseDto(item, viewer)),
       page,
       limit,
       total,
@@ -250,7 +278,7 @@ export class CustomersService {
       throw new NotFoundException('Customer not found');
     }
 
-    return CustomerResponseDto.fromEntity(customer);
+    return this.toResponseDto(customer, viewer);
   }
 
   async update(
@@ -607,14 +635,26 @@ export class CustomersService {
       return qb;
     }
 
-    return qb
-      .innerJoin(
-        Job,
-        'job_scope',
-        'job_scope.customerId = customer.id AND job_scope.managerId = :managerUserId',
-        { managerUserId: viewer.userId },
-      )
-      .distinct(true);
+    // Deliberately an `IN (subquery)` rather than an `innerJoin(...).distinct(true)`.
+    // The join produced one row per matching job, so a customer with more
+    // than one job under this manager needed DISTINCT to collapse the
+    // duplicates — and DISTINCT requires an equality operator on every
+    // selected column, which `customers.leadOwnershipHistory` (a plain
+    // Postgres `json`, not `jsonb`) does not have, so every MANAGER-scoped
+    // list/detail call 500'd ("could not identify an equality operator for
+    // type json"). A membership subquery never produces duplicate outer
+    // rows in the first place, so no DISTINCT is needed and the json-column
+    // 500 cannot occur here regardless of what the entity later selects.
+    const managerScopeSubQuery = qb
+      .subQuery()
+      .select('job_scope.customerId')
+      .from(Job, 'job_scope')
+      .where('job_scope.managerId = :managerUserId')
+      .getQuery();
+
+    return qb.andWhere(`customer.id IN ${managerScopeSubQuery}`, {
+      managerUserId: viewer.userId,
+    });
   }
 
   private buildCustomerAuditChanges(

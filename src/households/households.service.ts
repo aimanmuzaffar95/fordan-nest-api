@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { Customer } from '../customers/entities/customer.entity';
+import { scrubFields } from '../common/field-scrub.util';
 import { UserRole } from '../users/entities/user-role.enum';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
 import { isFeatureEnabled } from '../feature-flags/feature-flags.config';
@@ -87,6 +88,7 @@ export class HouseholdsService {
   async findDuplicates(
     customerId: string,
     role: UserRole,
+    canViewCustomerPii = false,
   ): Promise<DuplicateCandidate[]> {
     await this.assertEnabled(role);
 
@@ -181,13 +183,29 @@ export class HouseholdsService {
       strong: 3,
       weak: 4,
     };
-    return candidates.sort((a, b) => order[a.strength] - order[b.strength]);
+    // `customer:pii:view` gate — this route was `household:view`/role-gated
+    // only (ADMIN/MANAGER), with no field-level check at all, so any
+    // manager holding `household:view` but not `customer:pii:view` still
+    // received full email/phone here even though `GET /customers/:id`
+    // correctly scrubs those same fields for them. Matching logic above
+    // uses the unscrubbed `other.email`/`other.phone` values; only the
+    // returned candidate is gated.
+    return candidates
+      .sort((a, b) => order[a.strength] - order[b.strength])
+      .map(
+        (candidate) =>
+          scrubFields(candidate as unknown as Record<string, unknown>, {
+            email: canViewCustomerPii,
+            phone: canViewCustomerPii,
+          }) as unknown as DuplicateCandidate,
+      );
   }
 
   /** Everyone at the same normalised address (the household view). */
   async householdMembers(
     customerId: string,
     role: UserRole,
+    canViewCustomerPii = false,
   ): Promise<DuplicateCandidate[]> {
     await this.assertEnabled(role);
     const subject = await this.customerRepo.findOne({
@@ -201,18 +219,26 @@ export class HouseholdsService {
     const members = await this.customerRepo.find({
       where: { householdKey: key, mergedIntoCustomerId: IsNull() },
     });
+    // `customer:pii:view` gate — see `findDuplicates` above for why this is
+    // needed even though the route is already ADMIN/MANAGER + `household:view`
+    // gated.
     return members
       .filter((m) => m.id !== customerId)
-      .map((m) => ({
-        customerId: m.id,
-        firstName: m.firstName,
-        lastName: m.lastName,
-        email: m.email,
-        phone: m.phone,
-        address: m.address,
-        strength: 'exact' as const,
-        reason: 'Same household address',
-      }));
+      .map((m) =>
+        scrubFields(
+          {
+            customerId: m.id,
+            firstName: m.firstName,
+            lastName: m.lastName,
+            email: m.email,
+            phone: m.phone,
+            address: m.address,
+            strength: 'exact' as const,
+            reason: 'Same household address',
+          } as unknown as Record<string, unknown>,
+          { email: canViewCustomerPii, phone: canViewCustomerPii },
+        ) as unknown as DuplicateCandidate,
+      );
   }
 
   /**

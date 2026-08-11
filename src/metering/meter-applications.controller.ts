@@ -35,6 +35,8 @@ import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { UpdateMeterApplicationDto } from './dto/update-meter-application.dto';
 import { MeterApplicationsService } from './meter-applications.service';
@@ -50,7 +52,7 @@ import { DEFAULT_MAX_UPLOAD_SIZE_BYTES } from '../files/upload.constants';
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('meter-applications')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class MeterApplicationsController {
   constructor(
     private readonly meters: MeterApplicationsService,
@@ -59,6 +61,7 @@ export class MeterApplicationsController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('meter:view')
   @ApiOperation({
     summary: 'List meter applications',
     description:
@@ -79,6 +82,7 @@ export class MeterApplicationsController {
 
   @Get(':id/files')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('meter:file:view')
   @ApiOperation({
     summary: 'List files for a meter application',
     description:
@@ -105,6 +109,7 @@ export class MeterApplicationsController {
   @Post(':id/files')
   @HttpCode(HttpStatus.CREATED)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('meter:file:upload')
   @UseInterceptors(
     FileInterceptor('file', {
       limits: {
@@ -167,6 +172,7 @@ export class MeterApplicationsController {
 
   @Get(':id/files/:fileId/download')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('meter:file:view')
   @ApiOperation({
     summary: 'Download a meter application file',
     description:
@@ -216,6 +222,7 @@ export class MeterApplicationsController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('meter:update')
   @ApiOperation({
     summary: 'Update meter application status',
     description:

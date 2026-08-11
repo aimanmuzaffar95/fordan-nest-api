@@ -19,6 +19,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import {
   EmployeeFormsService,
@@ -29,7 +31,7 @@ import { UpsertEmployeeFormDto } from './dto/upsert-employee-form.dto';
 @ApiTags('Employee Forms')
 @ApiBearerAuth('JWT')
 @Controller('employee-forms')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class EmployeeFormsController {
   constructor(private readonly employeeFormsService: EmployeeFormsService) {}
 
@@ -54,6 +56,7 @@ export class EmployeeFormsController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('staff:view')
   @ApiOperation({ summary: 'List submitted employee forms' })
   list(): Promise<EmployeeFormResponse[]> {
     return this.employeeFormsService.list();
@@ -61,6 +64,7 @@ export class EmployeeFormsController {
 
   @Put('user/:userId')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('staff:update')
   @ApiOperation({
     summary:
       'Create or replace a staff member’s onboarding form (admin/manager)',
@@ -71,12 +75,22 @@ export class EmployeeFormsController {
   upsertForUser(
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() dto: UpsertEmployeeFormDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
-    return this.employeeFormsService.upsertForUser(userId, dto);
+    const actorRole = req.user?.role;
+    const actorUserId = req.user?.sub;
+    if (!actorRole || !actorUserId) {
+      throw new Error('Missing authenticated user context');
+    }
+    return this.employeeFormsService.upsertForUser(userId, dto, {
+      userId: actorUserId,
+      role: actorRole,
+    });
   }
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('staff:update')
   @ApiOperation({ summary: 'Update a submitted employee form as admin' })
   updateByAdmin(
     @Param('id', ParseUUIDPipe) id: string,

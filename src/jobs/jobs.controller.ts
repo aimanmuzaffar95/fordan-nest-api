@@ -97,6 +97,18 @@ export class JobsController {
         effective,
         'job:financials:view',
       ),
+      canViewInternalComments: this.permissions.hasPermission(
+        effective,
+        'job:internal_comment:view',
+      ),
+      canViewStaffPii: this.permissions.hasPermission(
+        effective,
+        'staff:pii:view',
+      ),
+      canViewCustomerPii: this.permissions.hasPermission(
+        effective,
+        'customer:pii:view',
+      ),
     };
   }
 

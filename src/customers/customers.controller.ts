@@ -69,16 +69,17 @@ export class CustomersController {
       effective.scopes.customer === 'all' ? 'all' : 'own';
     const jobScope: 'all' | 'own' =
       effective.scopes.job === 'all' ? 'all' : 'own';
+    const canViewPii = this.permissions.hasPermission(
+      effective,
+      'customer:pii:view',
+    );
 
     return {
       userId,
       role,
       customerScope,
       jobScope,
-      canViewJobFinancials: this.permissions.hasPermission(
-        effective,
-        'job:financials:view',
-      ),
+      canViewPii,
     };
   }
 
@@ -117,7 +118,12 @@ export class CustomersController {
     const viewer = await this.authorizeCustomerAction(req, 'customer:view');
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    return this.customersService.findAll(page, limit, viewer);
+    return this.customersService.findAll(page, limit, {
+      userId: viewer.userId,
+      role: viewer.role,
+      customerScope: viewer.customerScope,
+      canViewPii: viewer.canViewPii,
+    });
   }
 
   @Get('search')
@@ -139,6 +145,7 @@ export class CustomersController {
       userId: viewer.userId,
       role: viewer.role,
       customerScope: viewer.customerScope,
+      canViewPii: viewer.canViewPii,
     });
   }
 
@@ -195,7 +202,12 @@ export class CustomersController {
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
     const viewer = await this.authorizeCustomerAction(req, 'customer:view');
-    return this.customersService.findOne(id, viewer);
+    return this.customersService.findOne(id, {
+      userId: viewer.userId,
+      role: viewer.role,
+      customerScope: viewer.customerScope,
+      canViewPii: viewer.canViewPii,
+    });
   }
 
   @Patch(':id')

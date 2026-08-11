@@ -22,6 +22,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import {
   UpsertDefectDto,
@@ -52,7 +54,7 @@ function viewerOf(req: AuthRequest): { userId: string; role: UserRole } {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class ProjectsController {
   constructor(
     private readonly projects: ProjectsService,
@@ -66,6 +68,7 @@ export class ProjectsController {
 
   @Get('projects')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:view')
   @ApiOperation({
     summary: 'List projects',
     description:
@@ -80,6 +83,7 @@ export class ProjectsController {
 
   @Get('projects/readiness-checklist')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:view')
   @ApiOperation({
     summary: 'The install-readiness checklist definition',
     description: 'Every item must be ticked before a project can be scheduled.',
@@ -90,6 +94,7 @@ export class ProjectsController {
 
   @Get('jobs/:jobId/project')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:view')
   @ApiOperation({
     summary: 'The project created from a job',
     description: 'Null until the job’s contract is signed.',
@@ -101,6 +106,7 @@ export class ProjectsController {
 
   @Get('projects/:id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:view')
   @ApiOperation({ summary: 'Get a project' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
   findOne(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
@@ -109,6 +115,7 @@ export class ProjectsController {
 
   @Patch('projects/:id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:manage')
   @ApiOperation({
     summary: 'Update a project',
     description:
@@ -125,6 +132,7 @@ export class ProjectsController {
 
   @Get('projects/:id/readiness')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:view')
   @ApiOperation({ summary: 'Readiness checklist state for a project' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
   readiness(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
@@ -135,6 +143,7 @@ export class ProjectsController {
 
   @Get('projects/:id/permits')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:view')
   @ApiOperation({ summary: 'Permits on a project' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
   listPermits(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
@@ -143,6 +152,7 @@ export class ProjectsController {
 
   @Post('projects/:id/permits')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:manage')
   @ApiOperation({ summary: 'Add a permit to a project' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
   createPermit(
@@ -155,6 +165,7 @@ export class ProjectsController {
 
   @Patch('permits/:permitId')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:manage')
   @ApiOperation({ summary: 'Update a permit' })
   @ApiParam({ name: 'permitId', description: 'Permit UUID' })
   updatePermit(
@@ -167,6 +178,7 @@ export class ProjectsController {
 
   @Delete('permits/:permitId')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('project:manage')
   @ApiOperation({ summary: 'Delete a permit (admin)' })
   @ApiParam({ name: 'permitId', description: 'Permit UUID' })
   removePermit(
@@ -178,6 +190,7 @@ export class ProjectsController {
 
   @Post('permits/sweep-stalled')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('project:manage')
   @ApiOperation({
     summary: 'Flag permits stalled with an authority (admin)',
     description: 'Runs automatically on the SLA sweep.',
@@ -190,6 +203,7 @@ export class ProjectsController {
 
   @Get('projects/:id/milestones')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:view')
   @ApiOperation({ summary: 'Inspection, interconnection and PTO attempts' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
   listMilestones(
@@ -201,6 +215,7 @@ export class ProjectsController {
 
   @Post('projects/:id/milestones')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:manage')
   @ApiOperation({
     summary: 'Create or advance a milestone',
     description:
@@ -219,6 +234,7 @@ export class ProjectsController {
 
   @Get('projects/:id/visits')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:view')
   @ApiOperation({ summary: 'Install visits on a project' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
   listVisits(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
@@ -227,6 +243,7 @@ export class ProjectsController {
 
   @Post('projects/:id/visits')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('project:manage')
   @ApiOperation({
     summary: 'Create or update an install visit',
     description:
@@ -243,6 +260,7 @@ export class ProjectsController {
 
   @Get('projects/:id/defects')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('project:view')
   @ApiOperation({ summary: 'Defects logged on a project' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
   listDefects(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
@@ -251,6 +269,7 @@ export class ProjectsController {
 
   @Post('projects/:id/defects')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('project:manage')
   @ApiOperation({
     summary: 'Log or update a defect',
     description:
@@ -269,6 +288,7 @@ export class ProjectsController {
 
   @Get('projects/:id/notes')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('project:view')
   @ApiOperation({
     summary: 'Timeline notes on a project',
     description:
@@ -281,6 +301,7 @@ export class ProjectsController {
 
   @Post('projects/:id/notes')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:manage')
   @ApiOperation({
     summary: 'Add a note to a project',
     description:
@@ -297,6 +318,7 @@ export class ProjectsController {
 
   @Delete('project-notes/:noteId')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('project:manage')
   @ApiOperation({ summary: 'Delete a project note (admin)' })
   @ApiParam({ name: 'noteId', description: 'Project note UUID' })
   removeNote(
@@ -308,6 +330,7 @@ export class ProjectsController {
 
   @Get('projects/:id/blocking-defects')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('project:view')
   @ApiOperation({
     summary: 'Unresolved major/critical defects blocking handover',
   })

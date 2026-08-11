@@ -82,10 +82,6 @@ export class AssignmentsLockController {
       userId,
       role,
       jobScope: effective.scopes.job === 'all' ? 'all' : 'own',
-      canViewJobFinancials: this.permissions.hasPermission(
-        effective,
-        'job:financials:view',
-      ),
     };
   }
 }

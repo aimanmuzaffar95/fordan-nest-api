@@ -28,6 +28,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { DocumentTaxonomyService } from './document-taxonomy.service';
 
@@ -64,12 +66,13 @@ export class ClassifyFileDto {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class DocumentTaxonomyController {
   constructor(private readonly taxonomy: DocumentTaxonomyService) {}
 
   @Get('document-taxonomy')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('job:file:view')
   @ApiOperation({
     summary: 'Get document categories and suggested tags',
     description:
@@ -81,6 +84,7 @@ export class DocumentTaxonomyController {
 
   @Patch('files/:id/classify')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('document_taxonomy:manage')
   @ApiOperation({
     summary: 'Assign a category and tags to a file',
     description:
@@ -104,6 +108,7 @@ export class DocumentTaxonomyController {
 
   @Get('jobs/:jobId/document-compliance')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('job:file:view')
   @ApiOperation({
     summary: 'Required documents still missing for a job’s stage',
     description:

@@ -21,6 +21,8 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { ComplianceService } from './compliance.service';
 import {
@@ -34,12 +36,13 @@ import {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('compliance/templates')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class ComplianceTemplatesController {
   constructor(private readonly compliance: ComplianceService) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('compliance:template:view')
   @ApiOperation({
     summary: 'List compliance form templates',
     description:
@@ -60,6 +63,7 @@ export class ComplianceTemplatesController {
 
   @Post()
   @Roles(UserRole.ADMIN)
+  @RequirePermission('compliance:template:manage')
   @ApiOperation({ summary: 'Create a compliance template (admin only)' })
   create(@Body() dto: CreateComplianceTemplateDto) {
     return this.compliance.createTemplate(dto);
@@ -67,6 +71,7 @@ export class ComplianceTemplatesController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('compliance:template:manage')
   @ApiOperation({ summary: 'Update a compliance template (admin only)' })
   update(
     @Param('id', ParseUUIDPipe) id: string,

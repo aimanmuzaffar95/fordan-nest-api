@@ -8,6 +8,8 @@ import {
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/entities/user-role.enum';
 import { OrganizationProfileService } from './organization-profile.service';
@@ -19,12 +21,13 @@ import { UpdateOrganizationProfileDto } from './dto/update-organization-profile.
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('organization-profile')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class OrganizationProfileController {
   constructor(private readonly organization: OrganizationProfileService) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('settings:view')
   @ApiOperation({
     summary: 'Get organization profile',
     description:
@@ -36,6 +39,7 @@ export class OrganizationProfileController {
 
   @Patch()
   @Roles(UserRole.ADMIN)
+  @RequirePermission('org_profile:manage')
   @ApiOperation({
     summary: 'Update organization profile',
     description:

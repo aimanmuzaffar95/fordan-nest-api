@@ -14,6 +14,7 @@ export const PERMISSION_KEYS = [
   'job:file:view',
   'job:file:upload',
   'job:note:create',
+  'job:internal_comment:view',
   'job:internal_comment:create',
   'customer:create',
   'customer:view',
@@ -55,6 +56,41 @@ export const PERMISSION_KEYS = [
   'attendance:self:view',
   'attendance:view',
   'attendance:photo:upload',
+  // --- field-level sensitive-data keys (separate from object access) ---
+  'customer:pii:view',
+  'staff:pii:view',
+  // --- own vs all, unified pattern for money/commission (matches reports:view_own/view_all) ---
+  'commission:view_own',
+  'commission:view_all',
+  'commission:manage',
+  // --- delegation: managing permissions is itself permissioned + audited ---
+  'staff:override:manage',
+  'permission_role:author',
+  // --- previously role-only modules, now catalog-governed ---
+  'equipment:view',
+  'equipment:manage',
+  'project:view',
+  'project:manage',
+  'territory:view',
+  'territory:manage',
+  'financing:view',
+  'financing:manage',
+  'household:view',
+  'household:manage',
+  'document_taxonomy:manage',
+  'task:view',
+  'task:manage',
+  'alert:view',
+  'alert:manage',
+  'survey:view',
+  'survey:manage',
+  'communication:view',
+  'communication:manage',
+  'qualification:view',
+  'qualification:manage',
+  'mcp_access:manage',
+  'mailbox:manage',
+  'org_profile:manage',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -71,16 +107,55 @@ export type PermissionGroup =
   | 'settings'
   | 'reports'
   | 'compliance'
-  | 'attendance';
+  | 'attendance'
+  | 'commission'
+  | 'equipment'
+  | 'projects'
+  | 'territories'
+  | 'financing'
+  | 'households'
+  | 'documents'
+  | 'tasks'
+  | 'alerts'
+  | 'surveys'
+  | 'communications'
+  | 'qualification'
+  | 'mcp'
+  | 'mail_admin'
+  | 'org';
 
-export type PermissionCatalogItem = {
+type PermissionCatalogEntryInput = {
   key: PermissionKey;
   group: PermissionGroup;
   label: string;
   description: string;
 };
 
-export const PERMISSION_CATALOG: PermissionCatalogItem[] = [
+/**
+ * Keys explicitly marked high-risk/sensitive — set membership, not a naming
+ * heuristic. Kept as a separate constant (rather than inline per entry) so
+ * the risk tier is reviewable as a single list.
+ */
+const SENSITIVE_PERMISSION_KEYS: PermissionKey[] = [
+  'job:financials:view',
+  'customer:pii:view',
+  'staff:pii:view',
+  'commission:view_own',
+  'commission:view_all',
+  'commission:manage',
+  'invoice:send',
+  'invoice:record_payment',
+  'invoice:cancel',
+  'invoice:remind_overdue',
+  'staff:password_reset',
+  'staff:delete',
+  'staff:override:manage',
+  'financing:view',
+  'financing:manage',
+  'job:internal_comment:view',
+];
+
+const PERMISSION_CATALOG_ENTRIES: PermissionCatalogEntryInput[] = [
   {
     key: 'job:view',
     group: 'jobs',
@@ -158,6 +233,13 @@ export const PERMISSION_CATALOG: PermissionCatalogItem[] = [
     group: 'jobs',
     label: 'Add job notes',
     description: 'Create customer-visible notes on visible jobs.',
+  },
+  {
+    key: 'job:internal_comment:view',
+    group: 'jobs',
+    label: 'View internal comments',
+    description:
+      'See staff-only internal comments on visible jobs. Installers do not hold this by default.',
   },
   {
     key: 'job:internal_comment:create',
@@ -405,7 +487,207 @@ export const PERMISSION_CATALOG: PermissionCatalogItem[] = [
     label: 'Upload attendance photos',
     description: 'Upload photos for own attendance rows.',
   },
+  {
+    key: 'customer:pii:view',
+    group: 'customers',
+    label: 'View customer contact PII',
+    description: 'View customer/location phone numbers and email addresses.',
+  },
+  {
+    key: 'staff:pii:view',
+    group: 'staff',
+    label: 'View staff contact PII',
+    description:
+      'View staff home address, ID number, phone number, and email address on the staff directory and on create/update/reset responses. Without this key, staff records are returned with those fields scrubbed.',
+  },
+  {
+    key: 'commission:view_own',
+    group: 'commission',
+    label: 'View own commission',
+    description: 'View your own commission and payout records.',
+  },
+  {
+    key: 'commission:view_all',
+    group: 'commission',
+    label: 'View all commission',
+    description: 'View commission and payout records for every staff member.',
+  },
+  {
+    key: 'commission:manage',
+    group: 'commission',
+    label: 'Manage commission',
+    description: 'Create commission records and trigger payouts.',
+  },
+  {
+    key: 'staff:override:manage',
+    group: 'staff',
+    label: 'Manage individual permission overrides',
+    description:
+      'Grant or revoke a single permission for one staff member, independent of their role profile. Every change is audited.',
+  },
+  {
+    key: 'permission_role:author',
+    group: 'staff',
+    label: 'Author custom permission roles',
+    description:
+      'Create, clone, rename, and delete custom permission roles (as opposed to editing the fixed set of built-in role profiles via staff_role:manage). Every action is audited.',
+  },
+  {
+    key: 'equipment:view',
+    group: 'equipment',
+    label: 'View equipment catalog',
+    description: 'View batteries, inverters and solar panel catalog items.',
+  },
+  {
+    key: 'equipment:manage',
+    group: 'equipment',
+    label: 'Manage equipment catalog',
+    description: 'Create and edit batteries, inverters and solar panel catalog items.',
+  },
+  {
+    key: 'project:view',
+    group: 'projects',
+    label: 'View projects',
+    description: 'View install projects, milestones, visits, defects and permits.',
+  },
+  {
+    key: 'project:manage',
+    group: 'projects',
+    label: 'Manage projects',
+    description: 'Edit projects, milestones, visits, defects and permits.',
+  },
+  {
+    key: 'territory:view',
+    group: 'territories',
+    label: 'View territories',
+    description: 'View sales territories and routing history.',
+  },
+  {
+    key: 'territory:manage',
+    group: 'territories',
+    label: 'Manage territories',
+    description: 'Create, edit and reassign sales territories.',
+  },
+  {
+    key: 'financing:view',
+    group: 'financing',
+    label: 'View financing applications',
+    description: 'View job financing applications.',
+  },
+  {
+    key: 'financing:manage',
+    group: 'financing',
+    label: 'Manage financing applications',
+    description: 'Create and update job financing applications.',
+  },
+  {
+    key: 'household:view',
+    group: 'households',
+    label: 'View households',
+    description: 'View customer household groupings and merge history.',
+  },
+  {
+    key: 'household:manage',
+    group: 'households',
+    label: 'Manage households',
+    description: 'Merge customers/locations and backfill household keys.',
+  },
+  {
+    key: 'document_taxonomy:manage',
+    group: 'documents',
+    label: 'Manage document classification',
+    description: 'Classify uploaded files and view document compliance status.',
+  },
+  {
+    key: 'task:view',
+    group: 'tasks',
+    label: 'View tasks',
+    description: 'View internal tasks and SLA state.',
+  },
+  {
+    key: 'task:manage',
+    group: 'tasks',
+    label: 'Manage tasks',
+    description: 'Create, edit and delete internal tasks.',
+  },
+  {
+    key: 'alert:view',
+    group: 'alerts',
+    label: 'View alerts',
+    description: 'View system alerts.',
+  },
+  {
+    key: 'alert:manage',
+    group: 'alerts',
+    label: 'Manage alerts',
+    description: 'Evaluate and resolve system alerts.',
+  },
+  {
+    key: 'survey:view',
+    group: 'surveys',
+    label: 'View surveys',
+    description: 'View job satisfaction surveys.',
+  },
+  {
+    key: 'survey:manage',
+    group: 'surveys',
+    label: 'Manage surveys',
+    description: 'Create job satisfaction surveys.',
+  },
+  {
+    key: 'communication:view',
+    group: 'communications',
+    label: 'View communications',
+    description: 'View customer communication history.',
+  },
+  {
+    key: 'communication:manage',
+    group: 'communications',
+    label: 'Manage communications',
+    description: 'Log and update customer communication records.',
+  },
+  {
+    key: 'qualification:view',
+    group: 'qualification',
+    label: 'View lead qualification',
+    description: 'View lead qualification and nurture status.',
+  },
+  {
+    key: 'qualification:manage',
+    group: 'qualification',
+    label: 'Manage lead qualification',
+    description: 'Update lead qualification records.',
+  },
+  {
+    key: 'mcp_access:manage',
+    group: 'mcp',
+    label: 'Manage MCP access keys',
+    description: 'Create and revoke MCP integration access keys.',
+  },
+  {
+    key: 'mailbox:manage',
+    group: 'mail_admin',
+    label: 'Manage mailboxes',
+    description: 'Configure and test shared mailboxes.',
+  },
+  {
+    key: 'org_profile:manage',
+    group: 'org',
+    label: 'Manage organization profile',
+    description: 'Edit organization/company profile settings.',
+  },
 ];
+
+export type PermissionCatalogItem = PermissionCatalogEntryInput & {
+  sensitive: boolean;
+};
+
+export const PERMISSION_CATALOG: PermissionCatalogItem[] = PERMISSION_CATALOG_ENTRIES.map(
+  (entry) => ({
+    ...entry,
+    sensitive: (SENSITIVE_PERMISSION_KEYS as readonly string[]).includes(entry.key),
+  }),
+);
 
 export type PermissionScopeResource =
   | 'job'
@@ -450,6 +732,7 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
     'job:file:view',
     'job:file:upload',
     'job:note:create',
+    'job:internal_comment:view',
     'job:internal_comment:create',
     'customer:create',
     'customer:view',
@@ -479,6 +762,29 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
     'meter:file:view',
     'meter:file:upload',
     'attendance:view',
+    'customer:pii:view',
+    'commission:view_own',
+    'commission:view_all',
+    'equipment:view',
+    'equipment:manage',
+    'project:view',
+    'project:manage',
+    'territory:view',
+    'financing:view',
+    'financing:manage',
+    'household:view',
+    'household:manage',
+    'document_taxonomy:manage',
+    'task:view',
+    'task:manage',
+    'alert:view',
+    'alert:manage',
+    'survey:view',
+    'survey:manage',
+    'communication:view',
+    'communication:manage',
+    'qualification:view',
+    'qualification:manage',
   ],
   [UserRole.INSTALLER]: [
     'job:view',
@@ -490,6 +796,9 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
     'customer:create',
     'assignment:view',
     'schedule:view',
+    // Name-resolution only (see /users/directory, /staff picker) — never
+    // grants the PII/mutation surface of staff:update/staff:delete/etc.
+    'staff:view',
     'compliance:template:view',
     'compliance:submission:view',
     'compliance:submission:create',
@@ -499,8 +808,27 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
     'attendance:self:clock',
     'attendance:self:view',
     'attendance:photo:upload',
+    'commission:view_own',
+    'equipment:view',
+    'project:view',
+    'project:manage',
+    'task:view',
+    'task:manage',
+    'alert:view',
+    'survey:view',
+    'survey:manage',
+    'qualification:view',
   ],
-  [UserRole.EMPLOYEE]: [],
+  [UserRole.EMPLOYEE]: [
+    // EMPLOYEE previously had zero catalog permissions even though
+    // @Roles(...ALL_ROLES) already let them hit /tasks and
+    // /settings/audit-log — RolesGuard allowed it, but any RequirePermission
+    // gate added on those routes would have 403'd every employee. Grant the
+    // minimum needed to keep existing employee-accessible routes reachable.
+    'task:view',
+    'task:manage',
+    'settings:view',
+  ],
 };
 
 export const DEFAULT_SCOPES_BY_ROLE: Record<

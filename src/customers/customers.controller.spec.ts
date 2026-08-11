@@ -79,8 +79,7 @@ describe('CustomersController', () => {
       userId: 'user-id',
       role: UserRole.ADMIN,
       customerScope: 'all',
-      jobScope: 'all',
-      canViewJobFinancials: false,
+      canViewPii: false,
     });
   });
 
@@ -93,8 +92,7 @@ describe('CustomersController', () => {
       userId: 'user-id',
       role: UserRole.MANAGER,
       customerScope: 'all',
-      jobScope: 'all',
-      canViewJobFinancials: false,
+      canViewPii: false,
     });
   });
 
@@ -107,6 +105,7 @@ describe('CustomersController', () => {
       userId: 'user-id',
       role: UserRole.ADMIN,
       customerScope: 'all',
+      canViewPii: false,
     });
   });
 

@@ -9,6 +9,7 @@ import { AlertsController } from './alerts.controller';
 import { AlertsService } from './alerts.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { AlertsQueryDto } from './dto/alerts-query.dto';
 
@@ -46,6 +47,8 @@ describe('AlertsController', () => {
       .overrideGuard(JwtAuthGuard)
       .useValue(mockGuard)
       .overrideGuard(RolesGuard)
+      .useValue(mockGuard)
+      .overrideGuard(PermissionsGuard)
       .useValue(mockGuard)
       .compile();
 

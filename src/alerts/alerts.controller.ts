@@ -20,6 +20,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { AlertsService } from './alerts.service';
 import {
@@ -36,12 +38,13 @@ type AuthRequest = Request & { user?: { sub?: string; role?: UserRole } };
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('alerts')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class AlertsController {
   constructor(private readonly alertsService: AlertsService) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('alert:view')
   @ApiOperation({
     summary: 'List alerts',
     description:
@@ -62,6 +65,7 @@ export class AlertsController {
 
   @Post('evaluate')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('alert:manage')
   @ApiOperation({
     summary: 'Trigger alert evaluation (admin only)',
     description: 'Manually triggers the alert rules engine evaluation.',
@@ -73,6 +77,7 @@ export class AlertsController {
 
   @Post('resolve-all')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('alert:manage')
   @ApiOperation({
     summary: 'Resolve all active alerts in scope',
     description:
@@ -90,6 +95,7 @@ export class AlertsController {
 
   @Post(':id/resolve')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('alert:manage')
   @ApiOperation({
     summary: 'Resolve a single alert',
     description:

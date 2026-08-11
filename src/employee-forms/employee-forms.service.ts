@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
+import { assertActorCanActOnTarget } from '../common/actor-target-hierarchy.util';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
@@ -79,6 +80,7 @@ export class EmployeeFormsService {
   async upsertForUser(
     userId: string,
     dto: UpsertEmployeeFormDto,
+    actor?: { userId: string; role: UserRole },
   ): Promise<EmployeeFormResponse> {
     const user = await this.usersRepository.findOne({
       where: { id: userId, deletedAt: IsNull() },
@@ -86,6 +88,17 @@ export class EmployeeFormsService {
 
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    // `actor` is only present on the admin/manager "on someone's behalf"
+    // route (PUT /employee-forms/user/:userId); the self-service `PUT
+    // /employee-forms/me` route always omits it, since acting on your own
+    // record needs no hierarchy check. Without this, any MANAGER holding
+    // only `staff:update` could overwrite another staff member's — including
+    // a peer manager's — onboarding PII with no ownership check at all, the
+    // same class of bug already fixed once in staff.service.ts.
+    if (actor) {
+      assertActorCanActOnTarget(actor.role, user.role);
     }
 
     // Every staff role onboards, not just installers. Admins are the exception —

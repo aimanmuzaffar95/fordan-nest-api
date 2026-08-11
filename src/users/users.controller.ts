@@ -14,6 +14,8 @@ import { AdminOnly } from '../auth/decorators/role-access.decorators';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { CreateUserByAdminDto } from './dto/create-user-by-admin.dto';
 import { UserRole } from './entities/user-role.enum';
 import { UserDirectoryEntry, UsersService } from './users.service';
@@ -21,12 +23,13 @@ import { UserDirectoryEntry, UsersService } from './users.service';
 @ApiTags('Users')
 @ApiBearerAuth('JWT')
 @Controller('users')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
   @AdminOnly()
+  @RequirePermission('staff:create')
   createUserByAdmin(
     @Body() dto: CreateUserByAdminDto,
   ): Promise<{ id: string; username: string; role: UserRole }> {
@@ -42,6 +45,7 @@ export class UsersController {
    */
   @Get('directory')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('staff:view')
   @ApiQuery({
     name: 'ids',
     required: true,
@@ -62,6 +66,7 @@ export class UsersController {
 
   @Get('directory/:id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('staff:view')
   async getDirectoryEntry(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<UserDirectoryEntry> {

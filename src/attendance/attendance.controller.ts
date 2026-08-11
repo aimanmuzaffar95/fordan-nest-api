@@ -174,10 +174,6 @@ export class AttendanceController {
       userId,
       role,
       jobScope: effective.scopes.job === 'all' ? 'all' : 'own',
-      canViewJobFinancials: this.permissions.hasPermission(
-        effective,
-        'job:financials:view',
-      ),
     };
   }
 }
@@ -268,10 +264,6 @@ export class AttendancePhotoController {
       userId,
       role,
       jobScope: effective.scopes.job === 'all' ? 'all' : 'own',
-      canViewJobFinancials: this.permissions.hasPermission(
-        effective,
-        'job:financials:view',
-      ),
     };
   }
 
@@ -311,10 +303,6 @@ export class AttendancePhotoController {
         userId,
         role,
         jobScope: effective.scopes.job === 'all' ? 'all' : 'own',
-        canViewJobFinancials: this.permissions.hasPermission(
-          effective,
-          'job:financials:view',
-        ),
       },
     );
 

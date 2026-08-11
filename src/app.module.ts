@@ -65,6 +65,7 @@ import { SystemAuditLog } from './system-audit/entities/system-audit-log.entity'
 import { OrganizationProfileModule } from './organization-profile/organization-profile.module';
 import { PermissionRoleGrant } from './permissions/entities/permission-role-grant.entity';
 import { PermissionRoleProfile } from './permissions/entities/permission-role-profile.entity';
+import { PermissionOverride } from './permissions/entities/permission-override.entity';
 import { PermissionRoleScope } from './permissions/entities/permission-role-scope.entity';
 import { PermissionsModule } from './permissions/permissions.module';
 import { AttendanceModule } from './attendance/attendance.module';
@@ -241,6 +242,7 @@ getSettingsEncryptionKey();
         PermissionRoleProfile,
         PermissionRoleGrant,
         PermissionRoleScope,
+        PermissionOverride,
         AttendanceRecord,
         StaffAvailability,
         EquipmentItem,

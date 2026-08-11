@@ -17,6 +17,7 @@ import {
   Repository,
 } from 'typeorm';
 import { Assignment } from '../assignments/entities/assignment.entity';
+import { scrubFields } from '../common/field-scrub.util';
 import { buildEquipmentCatalogName } from '../equipment-catalog/build-equipment-catalog-name';
 import { Battery } from '../batteries/entities/battery.entity';
 import { Inverter } from '../inverters/entities/inverter.entity';
@@ -69,6 +70,32 @@ export type JobListViewer = {
   role: UserRole;
   jobScope?: 'all' | 'own';
   canViewJobFinancials?: boolean;
+  /**
+   * Closest catalog key: `job:internal_comment:create` (there is no
+   * dedicated `:view` key yet — see PIECE-3 changelog gap note). Callers
+   * that already resolve the effective permission set should pass this
+   * explicitly; when omitted we fail closed to role (installers, who never
+   * hold the create grant by default, are excluded).
+   */
+  canViewInternalComments?: boolean;
+  /**
+   * `staff:pii:view` — gates phone/email on `manager`/`assignedStaffUser`/
+   * crew `installer` summaries in the job detail response. Job detail was
+   * previously returning every crew member's phone number to any viewer of
+   * the job (including installers reading co-workers' mobile numbers) with
+   * no gate at all. Defaults to `false` (fail closed) when omitted.
+   */
+  canViewStaffPii?: boolean;
+  /**
+   * `customer:pii:view` — gates `email`/`phone` on the embedded customer
+   * summary in both the job list and job detail responses. Previously
+   * unconditional (this method serialised `customer.email`/`customer.phone`
+   * to every viewer of the job regardless of permission) — the same defect
+   * shape already fixed on the crew-phone leak on this exact endpoint and
+   * on `customers.service.ts`'s list/detail scrub. Defaults to `false`
+   * (fail closed) when omitted.
+   */
+  canViewCustomerPii?: boolean;
 };
 
 type ProposalSummarySyncInput = {
@@ -204,14 +231,17 @@ export class JobsService {
 
     return {
       items: items.map((item) =>
-        this.applyJobFinancialVisibility(
-          {
-            ...item,
-            ...this.buildDerivedInvoiceFields(
-              item,
-              invoicesByJobId.get(item.id) ?? [],
-            ),
-          },
+        this.scrubJobCustomerPii(
+          this.applyJobFinancialVisibility(
+            {
+              ...item,
+              ...this.buildDerivedInvoiceFields(
+                item,
+                invoicesByJobId.get(item.id) ?? [],
+              ),
+            },
+            viewer,
+          ),
           viewer,
         ),
       ),
@@ -253,6 +283,9 @@ export class JobsService {
     return this.buildJobDetailResponse(
       job,
       viewer?.canViewJobFinancials ?? true,
+      viewer?.canViewInternalComments ?? viewer?.role !== UserRole.INSTALLER,
+      viewer?.canViewStaffPii ?? false,
+      viewer?.canViewCustomerPii ?? false,
     );
   }
 
@@ -985,6 +1018,9 @@ export class JobsService {
   private async buildJobDetailResponse(
     job: Job,
     canViewFinancials = true,
+    canViewInternalComments = true,
+    canViewStaffPii = false,
+    canViewCustomerPii = false,
   ): Promise<JobDetailResponseDto> {
     const [
       auditTimeline,
@@ -1169,13 +1205,17 @@ export class JobsService {
             id: job.customer.id,
             firstName: job.customer.firstName,
             lastName: job.customer.lastName,
-            email: job.customer.email,
-            phone: job.customer.phone,
+            // `customer:pii:view` gate — was unconditional, leaking the
+            // customer's contact PII to every job viewer regardless of
+            // permission (installers included). See
+            // `scrubJobCustomerPii` for the same gate applied to `list()`.
+            email: canViewCustomerPii ? job.customer.email : null,
+            phone: canViewCustomerPii ? job.customer.phone : null,
             address: job.customer.address,
           }
         : null,
-      manager: this.mapUserSummary(manager),
-      assignedStaffUser: this.mapUserSummary(assignedStaffUser),
+      manager: this.mapUserSummary(manager, canViewStaffPii),
+      assignedStaffUser: this.mapUserSummary(assignedStaffUser, canViewStaffPii),
       installerAssignments: installerRows.map((row) => ({
         id: row.id,
         scheduledDate: row.scheduledDate,
@@ -1183,7 +1223,7 @@ export class JobsService {
         locked: row.locked,
         lockedAt: row.lockedAt,
         lockReason: row.lockReason,
-        installer: this.mapUserSummary(row.staffUser),
+        installer: this.mapUserSummary(row.staffUser, canViewStaffPii),
       })),
       financials: canViewFinancials
         ? {
@@ -1195,9 +1235,9 @@ export class JobsService {
           }
         : null,
       notes: notes.map((entry) => this.mapTextEntry(entry)),
-      internalComments: internalComments.map((entry) =>
-        this.mapTextEntry(entry),
-      ),
+      internalComments: canViewInternalComments
+        ? internalComments.map((entry) => this.mapTextEntry(entry))
+        : [],
       timeline: combinedTimeline,
     };
   }
@@ -1206,7 +1246,10 @@ export class JobsService {
     return typeof value === 'string' ? value.trim() : '';
   }
 
-  private mapUserSummary(user: User | null | undefined) {
+  private mapUserSummary(
+    user: User | null | undefined,
+    canViewStaffPii = false,
+  ) {
     if (!user) return null;
 
     const firstName = this.safeTrim(user.firstName);
@@ -1217,8 +1260,8 @@ export class JobsService {
       firstName,
       lastName,
       fullName: `${firstName} ${lastName}`.trim(),
-      email: this.safeTrim(user.emailAddress),
-      phone: this.safeTrim(user.phoneNumber),
+      email: canViewStaffPii ? this.safeTrim(user.emailAddress) : null,
+      phone: canViewStaffPii ? this.safeTrim(user.phoneNumber) : null,
       role: user.role,
     };
   }
@@ -1806,6 +1849,36 @@ export class JobsService {
       invoiceDueDate: null,
       paidDate: null,
       canViewJobFinancials,
+    };
+  }
+
+  /**
+   * `customer:pii:view` field-level gate for the customer summary embedded
+   * in a job's list/detail response. Previously unconditional here — the
+   * whole `job.customer` relation (including `email`/`phone`/
+   * `secondaryPhone`) was serialised to every job viewer regardless of
+   * permission, the same defect shape already fixed for the crew-phone
+   * leak on this exact endpoint and for `customers.service.ts`'s list/
+   * detail scrub. Routed through the shared `scrubFields` helper so this
+   * is the same mechanism as every other field-level key.
+   */
+  private scrubJobCustomerPii<T extends Record<string, unknown>>(
+    item: T,
+    viewer?: JobListViewer,
+  ): T {
+    const canViewCustomerPii = viewer?.canViewCustomerPii ?? false;
+    const customer = (item as { customer?: Record<string, unknown> })
+      .customer;
+    if (!customer) {
+      return item;
+    }
+    return {
+      ...item,
+      customer: scrubFields(customer, {
+        email: canViewCustomerPii,
+        phone: canViewCustomerPii,
+        secondaryPhone: canViewCustomerPii,
+      }),
     };
   }
 

@@ -21,6 +21,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CommissionService } from './commission.service';
 import {
@@ -46,12 +48,13 @@ function viewerOf(req: AuthRequest): { userId: string; role: UserRole } {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('commission')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class CommissionController {
   constructor(private readonly commission: CommissionService) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('commission:view_own')
   @ApiOperation({
     summary: 'List commission records',
     description:
@@ -63,6 +66,7 @@ export class CommissionController {
 
   @Get('me')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('commission:view_own')
   @ApiOperation({ summary: 'Your own commission summary' })
   mySummary(@Req() req: AuthRequest) {
     const viewer = viewerOf(req);
@@ -71,6 +75,7 @@ export class CommissionController {
 
   @Get('export')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('commission:view_all')
   @ApiOperation({
     summary: 'Flat rows for an accounting export (admin)',
   })
@@ -87,6 +92,7 @@ export class CommissionController {
 
   @Post()
   @Roles(UserRole.ADMIN)
+  @RequirePermission('commission:manage')
   @ApiOperation({
     summary: 'Create a commission record (admin)',
     description:
@@ -98,6 +104,7 @@ export class CommissionController {
 
   @Post('payouts')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('commission:manage')
   @ApiOperation({
     summary: 'Record a payout run (admin)',
     description:
@@ -109,6 +116,7 @@ export class CommissionController {
 
   @Get('summary/:userId')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('commission:view_own')
   @ApiOperation({ summary: 'Commission summary for a user' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
   summary(
@@ -120,6 +128,7 @@ export class CommissionController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('commission:manage')
   @ApiOperation({
     summary: 'Update a commission record (admin)',
     description:

@@ -21,6 +21,9 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
+import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import { HouseholdsService } from './households.service';
 
@@ -53,12 +56,23 @@ export class MergeCustomersDto {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('customers')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class HouseholdsController {
-  constructor(private readonly households: HouseholdsService) {}
+  constructor(
+    private readonly households: HouseholdsService,
+    private readonly permissions: PermissionsService,
+  ) {}
+
+  private async canViewCustomerPii(req: AuthRequest): Promise<boolean> {
+    const userId = req.user?.sub;
+    if (!userId) return false;
+    const effective = await this.permissions.getEffectiveForUser(userId);
+    return this.permissions.hasPermission(effective, 'customer:pii:view');
+  }
 
   @Post('household-keys/backfill')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('household:manage')
   @ApiOperation({
     summary: 'Backfill household keys (admin)',
     description:
@@ -70,26 +84,43 @@ export class HouseholdsController {
 
   @Get(':id/duplicates')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('household:view')
   @ApiOperation({
     summary: 'Possible duplicates of a customer',
     description:
       'Matches on email, phone digits and a normalised household address key. Strongest signal first.',
   })
   @ApiParam({ name: 'id', description: 'Customer UUID' })
-  duplicates(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
-    return this.households.findDuplicates(id, viewerOf(req).role);
+  async duplicates(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.households.findDuplicates(
+      id,
+      viewerOf(req).role,
+      await this.canViewCustomerPii(req),
+    );
   }
 
   @Get(':id/household')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('household:view')
   @ApiOperation({ summary: 'Other customers at the same property' })
   @ApiParam({ name: 'id', description: 'Customer UUID' })
-  household(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
-    return this.households.householdMembers(id, viewerOf(req).role);
+  async household(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.households.householdMembers(
+      id,
+      viewerOf(req).role,
+      await this.canViewCustomerPii(req),
+    );
   }
 
   @Get(':id/merge-history')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('household:view')
   @ApiOperation({ summary: 'Merges involving this customer' })
   @ApiParam({ name: 'id', description: 'Customer UUID' })
   mergeHistory(
@@ -101,6 +132,7 @@ export class HouseholdsController {
 
   @Post(':id/merge')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('household:manage')
   @ApiOperation({
     summary: 'Merge another customer into this one (admin)',
     description:

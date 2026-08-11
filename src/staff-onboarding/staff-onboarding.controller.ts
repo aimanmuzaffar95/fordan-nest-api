@@ -20,6 +20,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { UpsertEmployeeFormDto } from '../employee-forms/dto/upsert-employee-form.dto';
 import { CreateOnboardingInviteDto } from './dto/staff-onboarding.dto';
@@ -40,12 +42,13 @@ function actorOf(req: AuthRequest): string {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('staff/onboarding-invites')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class StaffOnboardingController {
   constructor(private readonly onboarding: StaffOnboardingService) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('staff:view')
   @ApiOperation({ summary: 'List onboarding invites and their status' })
   list() {
     return this.onboarding.list();
@@ -53,6 +56,7 @@ export class StaffOnboardingController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('staff:create')
   @ApiOperation({
     summary: 'Invite someone to complete their onboarding form',
     description:
@@ -64,6 +68,7 @@ export class StaffOnboardingController {
 
   @Post(':id/resend')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('staff:create')
   @ApiOperation({
     summary: 'Resend an invite',
     description:
@@ -76,6 +81,7 @@ export class StaffOnboardingController {
 
   @Post(':id/revoke')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('staff:create')
   @ApiOperation({ summary: 'Revoke an invite so its link stops working' })
   @ApiParam({ name: 'id', description: 'Invite UUID' })
   revoke(@Param('id', ParseUUIDPipe) id: string) {

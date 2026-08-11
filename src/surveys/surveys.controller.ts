@@ -19,6 +19,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { UpsertSurveyDto } from './dto/upsert-survey.dto';
 import { SurveysService } from './surveys.service';
@@ -38,12 +40,13 @@ function viewerOf(req: AuthRequest): { userId: string; role: UserRole } {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class SurveysController {
   constructor(private readonly surveys: SurveysService) {}
 
   @Get('jobs/:jobId/surveys')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('survey:view')
   @ApiOperation({ summary: 'List site surveys for a job' })
   @ApiParam({ name: 'jobId', description: 'Job UUID' })
   list(@Param('jobId', ParseUUIDPipe) jobId: string, @Req() req: AuthRequest) {
@@ -52,6 +55,7 @@ export class SurveysController {
 
   @Post('jobs/:jobId/surveys')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('survey:manage')
   @ApiOperation({
     summary: 'Create or update a site survey',
     description:
@@ -68,6 +72,7 @@ export class SurveysController {
 
   @Get('surveys/:id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('survey:view')
   @ApiOperation({ summary: 'Get a site survey' })
   @ApiParam({ name: 'id', description: 'Survey UUID' })
   findOne(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {

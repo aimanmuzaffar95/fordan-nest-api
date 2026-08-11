@@ -22,6 +22,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CommunicationsService } from './communications.service';
 import {
@@ -44,12 +46,13 @@ function viewerOf(req: AuthRequest): { userId: string; role: UserRole } {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class CommunicationsController {
   constructor(private readonly communications: CommunicationsService) {}
 
   @Get('customers/:customerId/communications')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('communication:view')
   @ApiOperation({
     summary: 'SMS, calls and logged conversations for a customer',
   })
@@ -63,6 +66,7 @@ export class CommunicationsController {
 
   @Post('communications')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('communication:manage')
   @ApiOperation({
     summary: 'Log a communication',
     description:
@@ -74,6 +78,7 @@ export class CommunicationsController {
 
   @Patch('communications/:id/status')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('communication:manage')
   @ApiOperation({
     summary: 'Update delivery status',
     description: 'For provider webhooks and manual reconciliation.',
@@ -94,6 +99,7 @@ export class CommunicationsController {
 
   @Delete('communications/:id')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('communication:manage')
   @ApiOperation({
     summary: 'Delete a logged communication (admin)',
     description:

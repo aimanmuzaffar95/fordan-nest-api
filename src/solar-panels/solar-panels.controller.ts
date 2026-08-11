@@ -22,6 +22,8 @@ import {
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateSolarPanelDto } from './dto/create-solar-panel.dto';
 import { SolarPanelResponseDto } from './dto/solar-panel-response.dto';
@@ -34,12 +36,13 @@ import { SolarPanelsService } from './solar-panels.service';
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('equipment/panels')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class SolarPanelsController {
   constructor(private readonly solarPanels: SolarPanelsService) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('equipment:view')
   @ApiOperation({
     summary: 'List solar panel catalog items',
     description:
@@ -57,6 +60,7 @@ export class SolarPanelsController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('equipment:manage')
   @ApiOperation({
     summary: 'Create solar panel catalog item',
     description:
@@ -79,6 +83,7 @@ export class SolarPanelsController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('equipment:manage')
   @ApiOperation({
     summary: 'Update solar panel catalog item',
     description:

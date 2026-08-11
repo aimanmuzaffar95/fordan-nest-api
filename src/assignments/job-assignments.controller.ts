@@ -133,10 +133,6 @@ export class JobAssignmentsController {
       userId,
       role,
       jobScope: effective.scopes.job === 'all' ? 'all' : 'own',
-      canViewJobFinancials: this.permissions.hasPermission(
-        effective,
-        'job:financials:view',
-      ),
     };
   }
 }

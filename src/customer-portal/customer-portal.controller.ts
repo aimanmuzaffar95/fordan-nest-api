@@ -22,6 +22,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CustomerPortalService } from './customer-portal.service';
 
@@ -49,12 +51,13 @@ export class IssuePortalTokenDto {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('jobs')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class CustomerPortalAdminController {
   constructor(private readonly portal: CustomerPortalService) {}
 
   @Post(':jobId/portal-link')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('job:update')
   @ApiOperation({
     summary: 'Issue a customer portal link for a job',
     description:
@@ -71,6 +74,7 @@ export class CustomerPortalAdminController {
 
   @Post(':jobId/portal-link/revoke')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('job:update')
   @ApiOperation({ summary: 'Revoke every live portal link for a job' })
   @ApiParam({ name: 'jobId', description: 'Job UUID' })
   revoke(

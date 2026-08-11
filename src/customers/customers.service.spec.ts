@@ -26,6 +26,21 @@ type QueryBuilderMock = {
   getOne: jest.Mock;
   innerJoin: jest.Mock;
   distinct: jest.Mock;
+  subQuery: jest.Mock;
+};
+
+const createSubQueryBuilderMock = () => {
+  const subQb = {
+    select: jest.fn().mockReturnThis(),
+    from: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    getQuery: jest
+      .fn()
+      .mockReturnValue(
+        '(SELECT "job_scope"."customerId" FROM "jobs" "job_scope" WHERE job_scope.managerId = :managerUserId)',
+      ),
+  };
+  return subQb;
 };
 
 const createQueryBuilderMock = (): QueryBuilderMock => ({
@@ -42,6 +57,7 @@ const createQueryBuilderMock = (): QueryBuilderMock => ({
   getOne: jest.fn(),
   innerJoin: jest.fn().mockReturnThis(),
   distinct: jest.fn().mockReturnThis(),
+  subQuery: jest.fn().mockImplementation(() => createSubQueryBuilderMock()),
 });
 
 describe('CustomersService', () => {
@@ -205,6 +221,7 @@ describe('CustomersService', () => {
     const result = await service.findAll(1, 20, {
       userId: 'admin-id',
       role: UserRole.ADMIN,
+      canViewPii: true,
     });
 
     expect(result.page).toBe(1);
@@ -252,7 +269,11 @@ describe('CustomersService', () => {
       >,
     );
 
-    const result = await service.search('aiman', 1, 20);
+    const result = await service.search('aiman', 1, 20, {
+      userId: 'admin-id',
+      role: UserRole.ADMIN,
+      canViewPii: true,
+    });
 
     expect(repository.createQueryBuilder.mock.calls[0]?.[0]).toBe('customer');
     expect(itemsQb.orderBy).toHaveBeenCalled();
@@ -382,8 +403,17 @@ describe('CustomersService', () => {
       role: UserRole.MANAGER,
     });
 
-    expect(rootQb.innerJoin).toHaveBeenCalled();
-    expect(rootQb.distinct).toHaveBeenCalledWith(true);
+    // Manager scoping now uses an `IN (subquery)` rather than
+    // `innerJoin(...).distinct(true)` — the join+distinct approach required
+    // an equality operator on every selected column (including the plain
+    // `json` leadOwnershipHistory column, which has none), 500ing on
+    // Postgres for every MANAGER-scoped call. See customers.service.ts
+    // applyViewerScope for the full explanation.
+    expect(rootQb.subQuery).toHaveBeenCalled();
+    expect(rootQb.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('customer.id IN'),
+      { managerUserId: 'manager-id' },
+    );
   });
 
   it('returns coordinates for a geocoded address', async () => {

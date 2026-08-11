@@ -22,6 +22,8 @@ import {
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateInverterDto } from './dto/create-inverter.dto';
 import { InverterResponseDto } from './dto/inverter-response.dto';
@@ -34,12 +36,13 @@ import { InvertersService } from './inverters.service';
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('equipment/inverters')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class InvertersController {
   constructor(private readonly inverters: InvertersService) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('equipment:view')
   @ApiOperation({
     summary: 'List inverter catalog items',
     description:
@@ -57,6 +60,7 @@ export class InvertersController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('equipment:manage')
   @ApiOperation({
     summary: 'Create inverter catalog item',
     description:
@@ -79,6 +83,7 @@ export class InvertersController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('equipment:manage')
   @ApiOperation({
     summary: 'Update inverter catalog item',
     description:

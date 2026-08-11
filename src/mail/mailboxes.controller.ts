@@ -15,6 +15,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { MailService } from './mail.service';
 import { CreateMailboxDto, UpdateMailboxDto } from './dto/mailbox.dto';
@@ -23,8 +25,9 @@ import { CreateMailboxDto, UpdateMailboxDto } from './dto/mailbox.dto';
 @ApiTags('Settings')
 @ApiBearerAuth('JWT')
 @Controller('settings/mailboxes')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(UserRole.ADMIN)
+@RequirePermission('mailbox:manage')
 export class MailboxesController {
   constructor(private readonly mail: MailService) {}
 

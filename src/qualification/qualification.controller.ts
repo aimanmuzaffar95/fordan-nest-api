@@ -27,6 +27,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import {
   QUALIFICATION_STATUSES,
@@ -66,12 +68,13 @@ export class AssessQualificationDto {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class QualificationController {
   constructor(private readonly qualification: QualificationService) {}
 
   @Get('qualification/config')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @RequirePermission('qualification:view')
   @ApiOperation({
     summary: 'Get the qualification criteria and scoring rules',
     description:
@@ -83,6 +86,7 @@ export class QualificationController {
 
   @Get('qualification/nurture-due')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('qualification:view')
   @ApiOperation({ summary: 'Nurture leads whose follow-up date has arrived' })
   nurtureDue(@Req() req: AuthRequest) {
     return this.qualification.listDueNurture(viewerOf(req).role);
@@ -90,6 +94,7 @@ export class QualificationController {
 
   @Get('customers/:id/qualification')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('qualification:view')
   @ApiOperation({ summary: 'Get a customer’s qualification state' })
   @ApiParam({ name: 'id', description: 'Customer UUID' })
   get(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
@@ -98,6 +103,7 @@ export class QualificationController {
 
   @Post('customers/:id/qualification')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('qualification:manage')
   @ApiOperation({
     summary: 'Record a qualification assessment',
     description:

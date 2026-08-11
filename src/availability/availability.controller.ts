@@ -17,6 +17,8 @@ import type { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { AvailabilityService } from './availability.service';
 import { PutAvailabilityMeDto } from './dto/put-availability-me.dto';
@@ -29,7 +31,7 @@ type AuthRequest = Request & { user?: { sub?: string; role?: UserRole } };
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('availability')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class AvailabilityController {
   constructor(private readonly availabilityService: AvailabilityService) {}
 
@@ -59,6 +61,7 @@ export class AvailabilityController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('schedule:view')
   @ApiOperation({ summary: 'List team availability (manager/admin)' })
   listTeam(
     @Query('userId') userId: string | undefined,

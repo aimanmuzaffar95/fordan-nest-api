@@ -15,6 +15,16 @@ import { PermissionRoleScope } from './permission-role-scope.entity';
 
 export type PermissionRoleProfileKind = 'builtin' | 'staff_role';
 
+/**
+ * Which structural constraints a profile is held to
+ * (`PermissionsService#isInstallerFamily`). `'installer'`-family profiles
+ * are locked to `job=own`/`schedule=self` and cannot receive `invoice:*`
+ * keys; `'office'`-family profiles have no such ceiling. Only meaningful for
+ * `kind = 'staff_role'` — builtin profiles derive their family from
+ * `builtinRole` directly, without needing this column populated.
+ */
+export type PermissionRoleProfileFamily = 'installer' | 'office';
+
 @Entity('permission_role_profiles')
 export class PermissionRoleProfile {
   @PrimaryGeneratedColumn('uuid')
@@ -35,6 +45,12 @@ export class PermissionRoleProfile {
 
   @Column({ type: 'varchar', length: 120 })
   name: string;
+
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  family: PermissionRoleProfileFamily | null;
 
   @Column({ type: 'boolean', default: false })
   immutable: boolean;

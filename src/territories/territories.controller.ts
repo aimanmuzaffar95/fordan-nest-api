@@ -21,6 +21,8 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import {
   CreateTerritoryDto,
@@ -44,7 +46,7 @@ function roleOf(req: AuthRequest): UserRole {
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('territories')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class TerritoriesController {
   constructor(
     private readonly territories: TerritoriesService,
@@ -53,6 +55,7 @@ export class TerritoriesController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('territory:view')
   @ApiOperation({ summary: 'List territories with their members' })
   list(@Req() req: AuthRequest) {
     return this.territories.list(roleOf(req));
@@ -60,6 +63,7 @@ export class TerritoriesController {
 
   @Post()
   @Roles(UserRole.ADMIN)
+  @RequirePermission('territory:manage')
   @ApiOperation({ summary: 'Create a territory (admin)' })
   create(@Body() dto: CreateTerritoryDto, @Req() req: AuthRequest) {
     return this.territories.create(dto, roleOf(req));
@@ -67,6 +71,7 @@ export class TerritoriesController {
 
   @Post('preview')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('territory:manage')
   @ApiOperation({
     summary: 'Preview which territory an address would match',
     description:
@@ -92,6 +97,7 @@ export class TerritoriesController {
 
   @Post('reassign-stale')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('territory:manage')
   @ApiOperation({
     summary: 'Reassign leads past their territory SLA (admin)',
     description:
@@ -103,6 +109,7 @@ export class TerritoriesController {
 
   @Get('routing-history/:customerId')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('territory:view')
   @ApiOperation({ summary: 'Routing audit trail for a customer' })
   @ApiParam({ name: 'customerId', description: 'Customer UUID' })
   history(@Param('customerId', ParseUUIDPipe) customerId: string) {
@@ -111,6 +118,7 @@ export class TerritoriesController {
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('territory:view')
   @ApiOperation({ summary: 'Get a territory' })
   @ApiParam({ name: 'id', description: 'Territory UUID' })
   findOne(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
@@ -119,6 +127,7 @@ export class TerritoriesController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('territory:manage')
   @ApiOperation({
     summary: 'Update a territory (admin)',
     description:
@@ -135,6 +144,7 @@ export class TerritoriesController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @RequirePermission('territory:manage')
   @ApiOperation({
     summary: 'Retire a territory (admin)',
     description: 'Soft delete — routing history stays readable.',

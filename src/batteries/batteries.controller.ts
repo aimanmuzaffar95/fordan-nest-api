@@ -22,6 +22,8 @@ import {
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { BatteriesService } from './batteries.service';
 import { CreateBatteryDto } from './dto/create-battery.dto';
@@ -34,12 +36,13 @@ import { UpdateBatteryDto } from './dto/update-battery.dto';
   description: 'Missing or invalid `Authorization: Bearer` JWT.',
 })
 @Controller('equipment/batteries')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class BatteriesController {
   constructor(private readonly batteries: BatteriesService) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('equipment:view')
   @ApiOperation({
     summary: 'List battery catalog items',
     description:
@@ -57,6 +60,7 @@ export class BatteriesController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('equipment:manage')
   @ApiOperation({
     summary: 'Create battery catalog item',
     description:
@@ -79,6 +83,7 @@ export class BatteriesController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('equipment:manage')
   @ApiOperation({
     summary: 'Update battery catalog item',
     description:

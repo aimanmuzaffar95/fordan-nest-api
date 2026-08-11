@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -9,9 +10,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { hash } from 'bcryptjs';
 import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 import { UserCredential } from '../auth/entities/user-credential.entity';
+import { assertActorCanActOnTarget } from '../common/actor-target-hierarchy.util';
+import { scrubFields } from '../common/field-scrub.util';
 import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
+import { PermissionsService } from '../permissions/permissions.service';
+import { SystemAuditLogService } from '../system-audit/system-audit-log.service';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateEmployeeRoleDto } from './dto/create-employee-role.dto';
@@ -75,6 +80,8 @@ export class StaffService {
     private readonly dataSource: DataSource,
     private readonly email: EmailService,
     private readonly notificationsService: NotificationsService,
+    private readonly permissions: PermissionsService,
+    private readonly audit: SystemAuditLogService,
   ) {}
 
   async listRoles(): Promise<StaffRoleSummary[]> {
@@ -114,8 +121,18 @@ export class StaffService {
    * an "assignable users" picker spanning office + field staff (e.g. task
    * reassignment) — never for anything that treats this as a public-facing
    * staff directory.
+   *
+   * `viewerCanSeePii` defaults to `false` (fail closed) — a parameter that
+   * defaults to "show the PII" silently leaks it the moment a new call site
+   * forgets to pass it explicitly, which is exactly how the mutation
+   * responses (create/update) leaked full PII in an earlier revision. Every
+   * caller must resolve the viewer's `staff:pii:view` permission and pass it
+   * explicitly; see `StaffController#canViewStaffPii`.
    */
-  async listStaff(includeAdmins = false): Promise<StaffListItem[]> {
+  async listStaff(
+    includeAdmins = false,
+    viewerCanSeePii = false,
+  ): Promise<StaffListItem[]> {
     const roles = includeAdmins
       ? [
           UserRole.MANAGER,
@@ -141,41 +158,126 @@ export class StaffService {
       },
     });
 
-    return users.map((user) => this.toStaffListItem(user));
+    return users.map((user) => this.toStaffListItem(user, viewerCanSeePii));
   }
 
-  async createStaff(dto: CreateStaffDto): Promise<StaffListItem> {
+  /**
+   * Lean, PII-free staff directory for pickers (e.g. the mobile assign-crew
+   * sheet) that only need id/name/role to let a manager pick an installer.
+   * Always safe to expose to any viewer with `staff:view` — no PII fields
+   * are selected at all, so there is nothing to scrub or leak. Needs a
+   * corresponding controller route (e.g. `GET /staff?scope=picker`) added
+   * by the controller-owning builder; see PIECE-3 changelog.
+   */
+  async listStaffPicker(includeAdmins = false): Promise<
+    Array<{
+      id: string;
+      firstName: string;
+      lastName: string;
+      staffType: UserRole;
+    }>
+  > {
+    const roles = includeAdmins
+      ? [
+          UserRole.MANAGER,
+          UserRole.INSTALLER,
+          UserRole.EMPLOYEE,
+          UserRole.ADMIN,
+        ]
+      : [UserRole.MANAGER, UserRole.INSTALLER, UserRole.EMPLOYEE];
+
+    const users = await this.usersRepository.find({
+      where: {
+        role: In(roles),
+        deletedAt: IsNull(),
+      },
+      order: {
+        firstName: 'ASC',
+        lastName: 'ASC',
+      },
+    });
+
+    return users.map((user) => ({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      staffType: user.role,
+    }));
+  }
+
+  async createStaff(
+    dto: CreateStaffDto,
+    viewerCanSeePii = false,
+    actorUserId?: string,
+  ): Promise<StaffListItem> {
     const payload = this.normalizeCreatePayload(dto);
 
-    // Handle EMPLOYEE type (non-technical staff)
+    // Handle EMPLOYEE type (non-technical staff).
+    //
+    // EMPLOYEE previously never got a UserCredential row here, which made
+    // the role unreachable end to end: JwtAuthGuard requires a matching
+    // credential row for every token (even a validly-signed one), the
+    // permission profile added for EMPLOYEE was therefore dead code, and
+    // both `@Roles(..., UserRole.EMPLOYEE)` routes (`/tasks`,
+    // `/employee-forms/me`) and the sweep's EMPLOYEE block could never
+    // actually be exercised. Deliberate decision: employees ARE meant to
+    // authenticate — those routes exist and are gated for them on purpose —
+    // so they now get a username/password credential exactly like
+    // manager/installer, not a record-only row.
     if (payload.staffType === UserRole.EMPLOYEE) {
       const employeeRole = await this.resolveEmployeeRole(
         payload.employeeRoleId,
       );
+
+      if (!payload.username) {
+        throw new BadRequestException('Username is required for staff members');
+      }
+      if (!payload.password) {
+        throw new BadRequestException('Password is required for staff members');
+      }
+      const username = payload.username;
+      const password = payload.password;
 
       const identificationNumber =
         payload.identificationNumber?.trim() || (await this.generateStaffId());
 
       await this.ensureActiveIdentificationAvailable(identificationNumber);
       await this.ensureEmailAvailable(payload.emailAddress);
+      await this.ensureUsernameAvailable(username);
 
-      const user = await this.usersRepository.save(
-        this.usersRepository.create({
-          firstName: payload.firstName,
-          lastName: payload.lastName,
-          phoneNumber: payload.phoneNumber,
-          address: payload.address,
-          identificationNumber,
-          role: UserRole.EMPLOYEE,
-          emailAddress: payload.emailAddress,
-          employeeRoleId: employeeRole.id,
-          staffRoleId: null,
-        }),
-      );
+      const result = await this.dataSource.transaction(async (manager) => {
+        const userRepository = manager.getRepository(User);
+        const credentialRepository = manager.getRepository(UserCredential);
 
-      user.employeeRole = employeeRole;
-      const result = this.toStaffListItem(user);
+        const user = await userRepository.save(
+          userRepository.create({
+            firstName: payload.firstName,
+            lastName: payload.lastName,
+            phoneNumber: payload.phoneNumber,
+            address: payload.address,
+            identificationNumber,
+            role: UserRole.EMPLOYEE,
+            emailAddress: payload.emailAddress,
+            employeeRoleId: employeeRole.id,
+            staffRoleId: null,
+          }),
+        );
 
+        const credential = await credentialRepository.save(
+          credentialRepository.create({
+            username,
+            passwordHash: await hashPassword(password, 10),
+            mustChangePassword: true,
+            user,
+          }),
+        );
+
+        user.credential = credential;
+        user.employeeRole = employeeRole;
+        return this.toStaffListItem(user, viewerCanSeePii);
+      });
+
+      this.sendWelcomeEmail(result, password);
       await this.sendNotificationSafely(
         () =>
           this.notificationsService.sendToRole(
@@ -195,6 +297,22 @@ export class StaffService {
           ),
         `staff-created:${result.id}`,
       );
+
+      await this.audit.record({
+        action: 'staff.create',
+        actorUserId,
+        resourceType: 'user',
+        resourceId: result.id,
+        metadata: {
+          staffType: result.staffType,
+          emailAddress: result.emailAddress,
+          // `result.username` may be scrubbed to '' by `toStaffListItem`
+          // when `viewerCanSeePii` is false — the audit trail must record
+          // the real username regardless of what the response body shows.
+          username,
+          employeeRoleId: employeeRole.id,
+        },
+      });
 
       return result;
     }
@@ -250,7 +368,7 @@ export class StaffService {
 
       user.credential = credential;
       user.staffRole = staffRole ?? null;
-      return this.toStaffListItem(user);
+      return this.toStaffListItem(user, viewerCanSeePii);
     });
 
     this.sendWelcomeEmail(createdStaff, password);
@@ -274,11 +392,36 @@ export class StaffService {
       `staff-created:${createdStaff.id}`,
     );
 
+    await this.audit.record({
+      action: 'staff.create',
+      actorUserId,
+      resourceType: 'user',
+      resourceId: createdStaff.id,
+      metadata: {
+        staffType: createdStaff.staffType,
+        emailAddress: createdStaff.emailAddress,
+        // See the EMPLOYEE branch above: `createdStaff.username` may be
+        // scrubbed to '' by `toStaffListItem`; record the real username.
+        username,
+        staffRoleId: staffRole?.id ?? null,
+      },
+    });
+
     return createdStaff;
   }
 
-  async updateStaff(id: string, dto: UpdateStaffDto): Promise<StaffListItem> {
+  async updateStaff(
+    id: string,
+    dto: UpdateStaffDto,
+    actorRole: UserRole,
+    actorUserId?: string,
+    viewerCanSeePii = false,
+  ): Promise<StaffListItem> {
     const existing = await this.findActiveStaffOrFail(id);
+    assertActorCanActOnTarget(actorRole, existing.role);
+    const previousRole = existing.role;
+    const previousStaffRoleId = existing.staffRoleId;
+    const previousEmployeeRoleId = existing.employeeRoleId;
     const payload = this.normalizeUpdatePayload(dto);
 
     const nextStaffType =
@@ -344,7 +487,20 @@ export class StaffService {
       existing.employeeRole = employeeRole;
 
       const savedUser = await this.usersRepository.save(existing);
-      return this.toStaffListItem(savedUser);
+
+      await this.audit.record({
+        action: 'staff.update',
+        actorUserId,
+        resourceType: 'user',
+        resourceId: savedUser.id,
+        metadata: {
+          staffType: savedUser.role,
+          before: { employeeRoleId: previousEmployeeRoleId },
+          after: { employeeRoleId: savedUser.employeeRoleId },
+        },
+      });
+
+      return this.toStaffListItem(savedUser, viewerCanSeePii);
     }
 
     // Handle MANAGER/INSTALLER update
@@ -354,12 +510,15 @@ export class StaffService {
       );
     }
 
+    // Do NOT special-case MANAGER here. `resolveStaffRole` already applies
+    // the correct family-gated check (a manager may only be assigned an
+    // office-family staff role); forcing null unconditionally for every
+    // manager PATCH silently discarded any staffRoleId a caller submitted,
+    // making role authoring's manager-assignment path unreachable.
     const nextStaffRoleId =
-      nextStaffType === UserRole.MANAGER
-        ? null
-        : payload.staffRoleId === undefined
-          ? existing.staffRoleId
-          : payload.staffRoleId;
+      payload.staffRoleId === undefined
+        ? existing.staffRoleId
+        : payload.staffRoleId;
 
     const nextIdentificationNumber =
       payload.identificationNumber ?? existing.identificationNumber;
@@ -406,14 +565,41 @@ export class StaffService {
       );
       savedUser.credential = savedCredential;
 
-      return this.toStaffListItem(savedUser);
+      if (previousRole !== nextStaffType && actorUserId) {
+        // Mirrors ServiceTitan's "system updates reset individual
+        // permissions to match the role" — a role change must not let
+        // per-user overrides granted under the old role silently outlive it.
+        await this.permissions.clearOverridesForUser(id, actorUserId);
+      }
+
+      await this.audit.record({
+        action: 'staff.update',
+        actorUserId,
+        resourceType: 'user',
+        resourceId: savedUser.id,
+        metadata: {
+          before: {
+            staffType: previousRole,
+            staffRoleId: previousStaffRoleId,
+          },
+          after: {
+            staffType: savedUser.role,
+            staffRoleId: savedUser.staffRoleId,
+          },
+        },
+      });
+
+      return this.toStaffListItem(savedUser, viewerCanSeePii);
     });
   }
 
   async softDeleteStaff(
     id: string,
+    actorRole: UserRole,
+    actorUserId?: string,
   ): Promise<{ id: string; deletedAt: string }> {
     const existing = await this.findActiveStaffOrFail(id);
+    assertActorCanActOnTarget(actorRole, existing.role);
 
     existing.deletedAt = new Date();
     existing.identificationNumber = this.archiveIdentificationNumber(
@@ -422,6 +608,17 @@ export class StaffService {
     );
 
     await this.usersRepository.save(existing);
+
+    await this.audit.record({
+      action: 'staff.delete',
+      actorUserId,
+      resourceType: 'user',
+      resourceId: existing.id,
+      metadata: {
+        staffType: existing.role,
+        deletedAt: existing.deletedAt.toISOString(),
+      },
+    });
 
     return {
       id: existing.id,
@@ -433,17 +630,14 @@ export class StaffService {
     id: string,
     dto: ResetStaffPasswordDto,
     actorUserId: string,
+    actorRole: UserRole,
   ): Promise<{ staffId: string; username: string; mustChangePassword: true }> {
     const existing = await this.findActiveStaffOrFail(id);
+    assertActorCanActOnTarget(actorRole, existing.role);
 
-    // Reject employee records — they have no login credentials
-    if (existing.role === UserRole.EMPLOYEE) {
-      throw new BadRequestException(
-        'This staff member does not have login credentials',
-      );
-    }
-
-    // Reject if technical staff but credential is missing
+    // Employee records created before this fix (or via a direct DB write)
+    // may still have no credential row; everything created through
+    // `createStaff` now does, regardless of staff type.
     if (!existing.credential) {
       throw new BadRequestException(
         'Staff member is missing login credentials. Recreate this record to manage login fields.',
@@ -471,6 +665,18 @@ export class StaffService {
         targetStaffType: existing.role,
       }),
     );
+
+    await this.audit.record({
+      action: 'staff.password_reset',
+      actorUserId,
+      resourceType: 'user',
+      resourceId: existing.id,
+      metadata: {
+        targetUsername: existing.credential.username,
+        targetStaffType: existing.role,
+        tokenVersion: existing.credential.tokenVersion,
+      },
+    });
 
     return {
       staffId: existing.id,
@@ -617,13 +823,32 @@ export class StaffService {
     staffRoleId?: string | null,
   ): Promise<StaffRole | null> {
     if (staffType === UserRole.MANAGER) {
-      if (staffRoleId) {
-        throw new BadRequestException(
-          'Manager staff members cannot have a staff role',
-        );
+      if (!staffRoleId) {
+        return null;
       }
 
-      return null;
+      // A manager may be assigned a staff role ONLY when it backs an
+      // "office"-family permission profile (admin-authored custom roles
+      // like "Billing Clerk" — see PermissionsService#createRole). This is
+      // deliberately narrower than the installer path below: it must NOT
+      // be possible to hand a manager an installer-family role, since
+      // installer-family profiles are hard-capped to job=own/schedule=self
+      // and no invoice:* keys, which would silently downgrade the manager.
+      const role = await this.staffRolesRepository.findOne({
+        where: { id: staffRoleId },
+      });
+      if (!role) {
+        throw new NotFoundException('Staff role not found');
+      }
+      const family = await this.permissions.getStaffRoleFamily(
+        role.id,
+      );
+      if (family !== 'office') {
+        throw new BadRequestException(
+          'Manager staff members can only be assigned an office-family staff role',
+        );
+      }
+      return role;
     }
 
     if (!staffRoleId) {
@@ -638,6 +863,13 @@ export class StaffService {
 
     if (!role) {
       throw new NotFoundException('Staff role not found');
+    }
+
+    const family = await this.permissions.getStaffRoleFamily(role.id);
+    if (family === 'office') {
+      throw new BadRequestException(
+        'Installer staff members cannot be assigned an office-family staff role',
+      );
     }
 
     return role;
@@ -747,8 +979,11 @@ export class StaffService {
   }
 
   private normalizeCreatePayload(dto: CreateStaffDto): CreateStaffDto {
-    const isEmployee = dto.staffType === UserRole.EMPLOYEE;
-
+    // EMPLOYEE now authenticates the same as MANAGER/INSTALLER (see
+    // createStaff's EMPLOYEE branch), so username/password must survive
+    // normalization for every staff type — do not special-case EMPLOYEE
+    // here by nulling them out, or the credential-creation branch is
+    // starved before it ever runs.
     return {
       ...dto,
       firstName: dto.firstName.trim(),
@@ -757,8 +992,8 @@ export class StaffService {
       address: dto.address.trim(),
       identificationNumber: dto.identificationNumber?.trim(),
       emailAddress: dto.emailAddress.trim().toLowerCase(),
-      username: isEmployee ? undefined : dto.username?.trim(),
-      password: isEmployee ? undefined : dto.password?.trim(),
+      username: dto.username?.trim(),
+      password: dto.password?.trim(),
       staffRoleId: dto.staffRoleId?.trim(),
       employeeRoleId: dto.employeeRoleId?.trim(),
     };
@@ -859,8 +1094,22 @@ export class StaffService {
     return archivedValue.slice(0, 255);
   }
 
-  private toStaffListItem(user: User): StaffListItem {
-    return {
+  /**
+   * `viewerCanSeePii` gates the individually-sensitive contact/identity
+   * fields (`phoneNumber`, `address`, `identificationNumber`,
+   * `emailAddress`, `username`) via {@link scrubFields} — field-level, not
+   * object-level, per BAR-servicetitan.md's "each field independently
+   * toggleable" bar. Defaults to `true` to preserve existing behaviour for
+   * every call site that does not yet resolve a viewer (create/update/reset
+   * responses, where the record belongs to the actor's own write). List
+   * surfaces should pass the actual viewer's grant explicitly — see the
+   * PIECE-3 changelog gap note for the controller wiring this still needs.
+   */
+  private toStaffListItem(
+    user: User,
+    viewerCanSeePii = false,
+  ): StaffListItem {
+    const shape: StaffListItem = {
       id: user.id,
       firstName: user.firstName,
       lastName: user.lastName,
@@ -891,6 +1140,14 @@ export class StaffService {
           }
         : null,
     };
+
+    return scrubFields(shape, {
+      phoneNumber: viewerCanSeePii,
+      address: viewerCanSeePii,
+      identificationNumber: viewerCanSeePii,
+      emailAddress: viewerCanSeePii,
+      username: viewerCanSeePii,
+    });
   }
 
   private async generateStaffId(): Promise<string> {
