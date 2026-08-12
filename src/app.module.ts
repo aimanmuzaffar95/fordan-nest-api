@@ -115,6 +115,9 @@ import {
   InstallVisit,
 } from './projects/entities/install-visit.entity';
 import { Task } from './tasks/entities/task.entity';
+import { ComplaintsModule } from './complaints/complaints.module';
+import { Complaint } from './complaints/entities/complaint.entity';
+import { ComplaintEvent } from './complaints/entities/complaint-event.entity';
 import { loadEnvFile } from './common/load-env.util';
 import { getSettingsEncryptionKey } from './common/crypto.util';
 
@@ -271,6 +274,8 @@ getSettingsEncryptionKey();
         CommissionEvent,
         PortalAccessToken,
         CommunicationLog,
+        Complaint,
+        ComplaintEvent,
       ],
       migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,
@@ -326,6 +331,7 @@ getSettingsEncryptionKey();
     CommissionModule,
     CustomerPortalModule,
     CommunicationsModule,
+    ComplaintsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

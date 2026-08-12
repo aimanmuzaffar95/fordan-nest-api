@@ -80,6 +80,8 @@ export const PERMISSION_KEYS = [
   'document_taxonomy:manage',
   'task:view',
   'task:manage',
+  'complaint:view',
+  'complaint:manage',
   'alert:view',
   'alert:manage',
   'survey:view',
@@ -116,6 +118,7 @@ export type PermissionGroup =
   | 'households'
   | 'documents'
   | 'tasks'
+  | 'complaints'
   | 'alerts'
   | 'surveys'
   | 'communications'
@@ -542,13 +545,15 @@ const PERMISSION_CATALOG_ENTRIES: PermissionCatalogEntryInput[] = [
     key: 'equipment:manage',
     group: 'equipment',
     label: 'Manage equipment catalog',
-    description: 'Create and edit batteries, inverters and solar panel catalog items.',
+    description:
+      'Create and edit batteries, inverters and solar panel catalog items.',
   },
   {
     key: 'project:view',
     group: 'projects',
     label: 'View projects',
-    description: 'View install projects, milestones, visits, defects and permits.',
+    description:
+      'View install projects, milestones, visits, defects and permits.',
   },
   {
     key: 'project:manage',
@@ -609,6 +614,19 @@ const PERMISSION_CATALOG_ENTRIES: PermissionCatalogEntryInput[] = [
     group: 'tasks',
     label: 'Manage tasks',
     description: 'Create, edit and delete internal tasks.',
+  },
+  {
+    key: 'complaint:view',
+    group: 'complaints',
+    label: 'View complaints',
+    description: 'View customer complaints and their timeline.',
+  },
+  {
+    key: 'complaint:manage',
+    group: 'complaints',
+    label: 'Manage complaints',
+    description:
+      'Create complaints, change status/priority/assignee, and post replies or internal notes.',
   },
   {
     key: 'alert:view',
@@ -682,12 +700,13 @@ export type PermissionCatalogItem = PermissionCatalogEntryInput & {
   sensitive: boolean;
 };
 
-export const PERMISSION_CATALOG: PermissionCatalogItem[] = PERMISSION_CATALOG_ENTRIES.map(
-  (entry) => ({
+export const PERMISSION_CATALOG: PermissionCatalogItem[] =
+  PERMISSION_CATALOG_ENTRIES.map((entry) => ({
     ...entry,
-    sensitive: (SENSITIVE_PERMISSION_KEYS as readonly string[]).includes(entry.key),
-  }),
-);
+    sensitive: (SENSITIVE_PERMISSION_KEYS as readonly string[]).includes(
+      entry.key,
+    ),
+  }));
 
 export type PermissionScopeResource =
   | 'job'
@@ -777,6 +796,8 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
     'document_taxonomy:manage',
     'task:view',
     'task:manage',
+    'complaint:view',
+    'complaint:manage',
     'alert:view',
     'alert:manage',
     'survey:view',
@@ -814,6 +835,7 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
     'project:manage',
     'task:view',
     'task:manage',
+    'complaint:view',
     'alert:view',
     'survey:view',
     'survey:manage',
