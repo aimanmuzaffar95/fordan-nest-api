@@ -2,6 +2,7 @@ import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
+  IsIn,
   IsInt,
   IsNumber,
   IsObject,
@@ -202,4 +203,37 @@ export class UpdateAdminSettingsDto {
   @IsOptional()
   @IsObject()
   documentTaxonomy?: Record<string, unknown>;
+
+  // Roof designer satellite imagery — see solar-imagery.service.ts. `null`
+  // clears the override and falls back to `SOLAR_IMAGERY_PROVIDER`.
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsIn(['esri', 'google', 'mapbox'])
+  solarImageryProvider?: 'esri' | 'google' | 'mapbox' | null;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }): string | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'string' && value.trim() === '') return null;
+    if (typeof value === 'string') return value.trim();
+    return undefined;
+  })
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  @MaxLength(1024)
+  solarImageryGoogleKey?: string | null;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }): string | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'string' && value.trim() === '') return null;
+    if (typeof value === 'string') return value.trim();
+    return undefined;
+  })
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  @MaxLength(1024)
+  solarImageryMapboxToken?: string | null;
 }

@@ -3,7 +3,10 @@ import {
   GatewayTimeoutException,
   Injectable,
 } from '@nestjs/common';
-import { SolarImageryService } from './solar-imagery.service';
+import {
+  SolarImageryService,
+  type ResolvedImageryProvider,
+} from './solar-imagery.service';
 
 export type ProxiedTile = {
   buffer: Buffer;
@@ -42,8 +45,23 @@ export class SolarTileProxyService {
 
   async fetchTile(z: number, x: number, y: number): Promise<ProxiedTile> {
     this.validateCoords(z, x, y);
+    const resolved = await this.imagery.resolveProvider();
+    return this.fetchTileFromResolved(resolved, z, x, y);
+  }
 
-    const resolved = this.imagery.resolveProvider();
+  /**
+   * Same fetch/redirect/timeout guards as `fetchTile`, but against an
+   * arbitrary resolved provider rather than the saved runtime setting —
+   * used by `POST /solar-design/imagery-test` to verify a candidate key
+   * before it's saved.
+   */
+  async fetchTileFromResolved(
+    resolved: ResolvedImageryProvider,
+    z: number,
+    x: number,
+    y: number,
+  ): Promise<ProxiedTile> {
+    this.validateCoords(z, x, y);
     const url = resolved.upstreamTemplate
       .replace('{z}', String(z))
       .replace('{x}', String(x))

@@ -5,13 +5,16 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -19,12 +22,15 @@ import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import {
   CreateProposalVersionDto,
   DeclineProposalDto,
   SendProposalDto,
 } from './dto/proposal.dto';
+import { FindProposalVersionsQueryDto } from './dto/find-proposal-versions-query.dto';
+import { ProposalVersionListResponseDto } from './dto/proposal-version-list-item.dto';
 import { ProposalsService } from './proposals.service';
 
 type AuthRequest = Request & { user?: { sub?: string; role?: UserRole } };
@@ -44,7 +50,43 @@ function viewerOf(req: AuthRequest): { userId: string; role: UserRole } {
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProposalsController {
-  constructor(private readonly proposals: ProposalsService) {}
+  constructor(
+    private readonly proposals: ProposalsService,
+    private readonly permissions: PermissionsService,
+  ) {}
+
+  @Get('proposal-versions')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.MANAGER,
+    UserRole.INSTALLER,
+    UserRole.EMPLOYEE,
+  )
+  @ApiOperation({
+    summary: 'Cross-job proposal version index',
+    description:
+      'Backs the web Proposals page. **Admin:** all proposals. **Manager:** only proposals on jobs where `managerId` matches. **Installer/Employee (staff):** only proposals on jobs you are assigned to (`assignedStaffUserId` or an `assignments` row) — the same job-scoping `GET /jobs` and `GET /jobs/:id` already enforce.',
+  })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'sentFrom', required: false, description: 'ISO 8601' })
+  @ApiQuery({ name: 'sentTo', required: false, description: 'ISO 8601' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Free text across customer name and job order number',
+  })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'pageSize', required: false })
+  @ApiOkResponse({ type: ProposalVersionListResponseDto })
+  async listAll(
+    @Query() query: FindProposalVersionsQueryDto,
+    @Req() req: AuthRequest,
+  ) {
+    const viewer = viewerOf(req);
+    const effective = await this.permissions.getEffectiveForUser(viewer.userId);
+    this.permissions.assertPermission(effective, 'job:proposal:view');
+    return this.proposals.listAll(query, viewer);
+  }
 
   @Get('jobs/:jobId/proposal-versions')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)

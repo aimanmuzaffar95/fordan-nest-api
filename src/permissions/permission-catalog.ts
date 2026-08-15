@@ -850,6 +850,10 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
     'task:view',
     'task:manage',
     'settings:view',
+    // Cross-job proposal index (`GET /proposal-versions`) — staff only ever
+    // see rows for jobs they are assigned to (see ProposalsService.listAll),
+    // same gate INSTALLER already has on the per-job proposal routes.
+    'job:proposal:view',
   ],
 };
 

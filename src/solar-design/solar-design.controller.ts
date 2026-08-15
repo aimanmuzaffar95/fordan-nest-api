@@ -39,10 +39,15 @@ import {
 import { RoofDesignService } from './roof-design.service';
 import { RoofDesignRenderService } from './roof-design-render.service';
 import { SolarSimulationService } from './solar-simulation.service';
-import { SolarImageryService } from './solar-imagery.service';
+import {
+  SolarImageryService,
+  latLonToTile,
+  metresPerPixelAt,
+} from './solar-imagery.service';
 import { SolarTileProxyService } from './solar-tile-proxy.service';
 import { SolarTileTokenService } from './solar-tile-token.service';
 import { SolarTileTokenGuard } from './guards/solar-tile-token.guard';
+import { TestImageryProviderDto } from './dto/test-imagery-provider.dto';
 
 type AuthRequest = Request & { user?: { sub?: string; role?: UserRole } };
 
@@ -199,14 +204,51 @@ export class SolarDesignController {
     if (!userId) {
       throw new UnauthorizedException('Missing authenticated user context');
     }
-    const resolved = this.imagery.resolveProvider();
-    const base = this.imagery.getImageryToken();
+    const resolved = await this.imagery.resolveProvider();
+    const base = await this.imagery.getImageryToken();
     if (resolved.keyless) {
       return { data: base };
     }
     const token = await this.tileTokens.issue(userId);
     return {
       data: { ...base, urlTemplate: `${base.urlTemplate}?token=${token}` },
+    };
+  }
+
+  @Post('solar-design/imagery-test')
+  @UseGuards(JwtAuthGuard, RolesGuard, ThrottlerGuard)
+  @Roles(UserRole.ADMIN)
+  // One real outbound fetch to the provider under test — same bucket as the
+  // tile proxy, not the default CRUD-sized one.
+  @SkipThrottle({ default: true })
+  @Throttle({ 'solar-imagery-outbound': {} })
+  @ApiOperation({
+    summary: 'Verify an imagery provider/key by fetching one real tile',
+    description:
+      'Admin-only. Never persists anything. `apiKey` tests a not-yet-saved candidate key; omit it to re-test the currently saved key for that provider. Reports success plus the effective max native zoom and metres-per-pixel at the sample coordinate — never a raw upstream error/stack trace, always a clean message.',
+  })
+  async testImageryProvider(@Body() dto: TestImageryProviderDto) {
+    const resolved = await this.imagery.resolveForTest({
+      provider: dto.provider,
+      apiKey: dto.apiKey,
+    });
+    // Sydney CBD by default — an arbitrary real-world coordinate so the test
+    // tile plausibly exists upstream, not a null-island edge case.
+    const sampleLat = dto.sampleLat ?? -33.8688;
+    const sampleLon = dto.sampleLon ?? 151.2093;
+    const testZoom = Math.min(15, resolved.maxNativeZoom);
+    const { x, y } = latLonToTile(sampleLat, sampleLon, testZoom);
+    await this.tileProxy.fetchTileFromResolved(resolved, testZoom, x, y);
+
+    return {
+      data: {
+        success: true,
+        provider: resolved.provider,
+        maxNativeZoom: resolved.maxNativeZoom,
+        sampleLat,
+        sampleLon,
+        metresPerPixel: metresPerPixelAt(sampleLat, resolved.maxNativeZoom),
+      },
     };
   }
 

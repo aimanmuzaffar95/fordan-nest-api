@@ -1,5 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { TILE_TOKEN_TTL_MS } from './solar-tile-token.service';
+import {
+  RuntimeSettingsService,
+  type SolarImagerySettings,
+} from '../runtime-settings/runtime-settings.service';
 
 export type ImageryProvider = 'esri-world-imagery' | 'google' | 'mapbox';
 
@@ -47,59 +51,190 @@ const ESRI: ResolvedImageryProvider = {
   keyless: true,
 };
 
+/** Web-Mercator metres-per-pixel at a given latitude/zoom (tile size 256) — same formula the render composite and the web client use. */
+export function metresPerPixelAt(lat: number, zoom: number): number {
+  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom;
+}
+
+/** Slippy-map tile coordinates for a lat/lon at a given zoom (standard Web Mercator tiling). */
+export function latLonToTile(
+  lat: number,
+  lon: number,
+  zoom: number,
+): { x: number; y: number } {
+  const n = 2 ** zoom;
+  const x = Math.floor(((lon + 180) / 360) * n);
+  const latRad = (lat * Math.PI) / 180;
+  const y = Math.floor(
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
+  );
+  return {
+    x: Math.min(Math.max(x, 0), n - 1),
+    y: Math.min(Math.max(y, 0), n - 1),
+  };
+}
+
+/** A candidate provider config to resolve/test without touching the saved runtime setting. */
+export type ImageryProviderCandidate = {
+  provider: 'esri' | 'google' | 'mapbox';
+  apiKey?: string | null;
+};
+
+// Cache TTL for the DB-backed resolution — a backstop for multi-worker
+// deployments (each cPanel `lsnode` worker holds its own in-memory cache and
+// version counter, so a PATCH handled by one worker doesn't instantly
+// invalidate another's cache; this bounds how stale the others can get).
+// resolveProvider() is on the hot path (every tile request), so it isn't
+// left uncached entirely.
+const RESOLVED_PROVIDER_CACHE_TTL_MS = 30_000;
+
+function buildGoogle(key: string): ResolvedImageryProvider {
+  return {
+    provider: 'google',
+    upstreamTemplate: `https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}&key=${key}`,
+    upstreamHost: 'mt1.google.com',
+    attribution: '© Google',
+    maxNativeZoom: 21,
+    keyless: false,
+  };
+}
+
+function buildMapbox(token: string): ResolvedImageryProvider {
+  return {
+    provider: 'mapbox',
+    upstreamTemplate: `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/256/{z}/{x}/{y}?access_token=${token}`,
+    upstreamHost: 'api.mapbox.com',
+    attribution: '© Mapbox © OpenStreetMap',
+    maxNativeZoom: 22,
+    keyless: false,
+  };
+}
+
 /**
  * §6 of `docs/specs/solar-design-studio.md` — resolves the configured
  * imagery provider server-side so provider keys never reach the web bundle.
  * Keyed providers (google/mapbox) are handed out as a same-origin proxy URL
  * (`/solar-design/tiles/{z}/{x}/{y}`); the API injects the credential when it
- * fetches upstream. `SOLAR_IMAGERY_PROVIDER` selects
- * `esri-world-imagery` | `google` | `mapbox`; the matching key/token env var
- * must also be set or the service falls back to Esri.
+ * fetches upstream.
+ *
+ * Resolution order: the runtime setting saved via `Settings ▸ Integrations ▸
+ * Imagery` (`RuntimeSettingsService`, encrypted at rest) takes precedence;
+ * `SOLAR_IMAGERY_PROVIDER`/`SOLAR_IMAGERY_GOOGLE_KEY`/
+ * `SOLAR_IMAGERY_MAPBOX_TOKEN` env vars remain a fallback for deployments
+ * that have never touched the runtime setting, so nothing breaks on upgrade.
+ * Falls back to keyless Esri if neither resolves a usable key.
  */
 @Injectable()
 export class SolarImageryService {
+  constructor(private readonly runtimeSettings: RuntimeSettingsService) {}
+
+  private cache: {
+    version: number;
+    expiresAt: number;
+    value: ResolvedImageryProvider;
+  } | null = null;
+
   /** Resolves the configured provider, including the upstream (key-bearing) fetch template. */
-  resolveProvider(): ResolvedImageryProvider {
+  async resolveProvider(): Promise<ResolvedImageryProvider> {
+    const version = this.runtimeSettings.getImagerySettingsVersion();
+    const now = Date.now();
+    if (
+      this.cache &&
+      this.cache.version === version &&
+      this.cache.expiresAt > now
+    ) {
+      return this.cache.value;
+    }
+
+    const setting = await this.runtimeSettings.getSolarImagerySettings();
+    const resolved = this.buildResolved(setting);
+    this.cache = {
+      version,
+      expiresAt: now + RESOLVED_PROVIDER_CACHE_TTL_MS,
+      value: resolved,
+    };
+    return resolved;
+  }
+
+  /**
+   * Resolves a not-yet-saved candidate provider/key — used by `POST
+   * /solar-design/imagery-test` so an admin can verify a key before saving
+   * it, never touching the cache or the persisted setting.
+   */
+  resolveCandidate(
+    candidate: ImageryProviderCandidate,
+  ): ResolvedImageryProvider {
+    return this.buildResolved({
+      provider: candidate.provider,
+      googleKey:
+        candidate.provider === 'google' ? (candidate.apiKey ?? null) : null,
+      mapboxToken:
+        candidate.provider === 'mapbox' ? (candidate.apiKey ?? null) : null,
+    });
+  }
+
+  private buildResolved(
+    setting: SolarImagerySettings,
+  ): ResolvedImageryProvider {
     const provider = (
-      process.env.SOLAR_IMAGERY_PROVIDER ?? 'esri-world-imagery'
+      setting.provider ??
+      process.env.SOLAR_IMAGERY_PROVIDER ??
+      'esri'
     )
       .trim()
       .toLowerCase();
 
     if (provider === 'google') {
-      const key = process.env.SOLAR_IMAGERY_GOOGLE_KEY?.trim();
+      const key =
+        setting.googleKey ?? process.env.SOLAR_IMAGERY_GOOGLE_KEY?.trim();
       if (key) {
-        return {
-          provider: 'google',
-          upstreamTemplate: `https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}&key=${key}`,
-          upstreamHost: 'mt1.google.com',
-          attribution: '© Google',
-          maxNativeZoom: 21,
-          keyless: false,
-        };
+        return buildGoogle(key);
       }
     }
 
     if (provider === 'mapbox') {
-      const token = process.env.SOLAR_IMAGERY_MAPBOX_TOKEN?.trim();
+      const token =
+        setting.mapboxToken ?? process.env.SOLAR_IMAGERY_MAPBOX_TOKEN?.trim();
       if (token) {
-        return {
-          provider: 'mapbox',
-          upstreamTemplate: `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/256/{z}/{x}/{y}?access_token=${token}`,
-          upstreamHost: 'api.mapbox.com',
-          attribution: '© Mapbox © OpenStreetMap',
-          maxNativeZoom: 22,
-          keyless: false,
-        };
+        return buildMapbox(token);
       }
     }
 
     return ESRI;
   }
 
+  /**
+   * Resolves a provider/key for `POST /solar-design/imagery-test`: uses the
+   * given `apiKey` if present, otherwise the currently *saved* key for that
+   * provider (so a key can be re-tested after saving without retyping it).
+   * Never falls back to the env var here — the whole point of the test
+   * action is to verify what's actually configured in the runtime setting,
+   * not to silently succeed off an env fallback the admin can't see.
+   */
+  async resolveForTest(
+    candidate: ImageryProviderCandidate,
+  ): Promise<ResolvedImageryProvider> {
+    if (candidate.provider === 'esri') {
+      return ESRI;
+    }
+    const key = candidate.apiKey?.trim()
+      ? candidate.apiKey.trim()
+      : (await this.runtimeSettings.getSolarImagerySettings())[
+          candidate.provider === 'google' ? 'googleKey' : 'mapboxToken'
+        ];
+    if (!key) {
+      throw new BadRequestException(
+        `No ${candidate.provider} key to test — enter one first.`,
+      );
+    }
+    return candidate.provider === 'google'
+      ? buildGoogle(key)
+      : buildMapbox(key);
+  }
+
   /** Public token response (§6 canonical shape) — never leaks the upstream/key-bearing template. */
-  getImageryToken(): ImageryTokenResponse {
-    const resolved = this.resolveProvider();
+  async getImageryToken(): Promise<ImageryTokenResponse> {
+    const resolved = await this.resolveProvider();
     return {
       provider: resolved.provider,
       urlTemplate: resolved.keyless

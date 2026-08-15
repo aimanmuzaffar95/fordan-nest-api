@@ -124,6 +124,21 @@ export type AdminSettingsPayload = {
   pipelineStageConfig: PipelineStageConfig;
   qualificationConfig: QualificationConfig;
   documentTaxonomy: DocumentTaxonomyConfig;
+  /** `null` = no runtime override saved; `SolarImageryService` falls back to `SOLAR_IMAGERY_PROVIDER`. */
+  solarImageryProvider: 'esri' | 'google' | 'mapbox' | null;
+  solarImageryGoogleKeySet: boolean;
+  solarImageryMapboxTokenSet: boolean;
+};
+
+const SOLAR_IMAGERY_PROVIDERS = ['esri', 'google', 'mapbox'] as const;
+export type SolarImageryProviderSetting =
+  (typeof SOLAR_IMAGERY_PROVIDERS)[number];
+
+/** Decoded imagery settings for `SolarImageryService` — never logged, never returned to a client. */
+export type SolarImagerySettings = {
+  provider: SolarImageryProviderSetting | null;
+  googleKey: string | null;
+  mapboxToken: string | null;
 };
 
 @Injectable()
@@ -138,6 +153,42 @@ export class RuntimeSettingsService {
     private readonly notificationsService: NotificationsService,
     private readonly systemAudit: SystemAuditLogService,
   ) {}
+
+  // Process-local cache-busting counter for `SolarImageryService`'s resolved-
+  // provider cache — bumped whenever an imagery field changes so a saved
+  // provider switch takes effect without a restart (see that service for the
+  // multi-worker caveat: each cPanel `lsnode` worker only sees its own
+  // counter, so the cache also carries a short TTL as a backstop).
+  private imagerySettingsVersion = 0;
+
+  getImagerySettingsVersion(): number {
+    return this.imagerySettingsVersion;
+  }
+
+  /** Decoded imagery provider settings for `SolarImageryService` — never returned to a client. */
+  async getSolarImagerySettings(): Promise<SolarImagerySettings> {
+    const settings = await this.getOrCreateSettingsEntity();
+    return {
+      provider: this.isSolarImageryProvider(settings.solarImageryProvider)
+        ? settings.solarImageryProvider
+        : null,
+      googleKey: settings.solarImageryGoogleKeyEncrypted?.trim()
+        ? decodeSettingsValue(settings.solarImageryGoogleKeyEncrypted.trim())
+        : null,
+      mapboxToken: settings.solarImageryMapboxTokenEncrypted?.trim()
+        ? decodeSettingsValue(settings.solarImageryMapboxTokenEncrypted.trim())
+        : null,
+    };
+  }
+
+  private isSolarImageryProvider(
+    value: string | null,
+  ): value is SolarImageryProviderSetting {
+    return (
+      value != null &&
+      (SOLAR_IMAGERY_PROVIDERS as readonly string[]).includes(value)
+    );
+  }
 
   async getSettings(): Promise<AdminSettingsPayload> {
     const settings = await this.getOrCreateSettingsEntity();
@@ -176,6 +227,10 @@ export class RuntimeSettingsService {
     delete patch['qualificationConfig'];
     const documentTaxonomyRaw = patch['documentTaxonomy'];
     delete patch['documentTaxonomy'];
+    const solarImageryGoogleKeyRaw = patch['solarImageryGoogleKey'];
+    delete patch['solarImageryGoogleKey'];
+    const solarImageryMapboxTokenRaw = patch['solarImageryMapboxToken'];
+    delete patch['solarImageryMapboxToken'];
     const cleaned = Object.fromEntries(
       Object.entries(patch).filter(([, v]) => v !== undefined),
     );
@@ -193,6 +248,40 @@ export class RuntimeSettingsService {
         settings.smtpPass = encryptSettingsValue(smtpPassRaw);
       } else {
         throw new BadRequestException('smtpPass must be a string or null');
+      }
+    }
+    if (solarImageryGoogleKeyRaw !== undefined) {
+      if (
+        solarImageryGoogleKeyRaw === null ||
+        (typeof solarImageryGoogleKeyRaw === 'string' &&
+          solarImageryGoogleKeyRaw.trim() === '')
+      ) {
+        settings.solarImageryGoogleKeyEncrypted = null;
+      } else if (typeof solarImageryGoogleKeyRaw === 'string') {
+        settings.solarImageryGoogleKeyEncrypted = encryptSettingsValue(
+          solarImageryGoogleKeyRaw.trim(),
+        );
+      } else {
+        throw new BadRequestException(
+          'solarImageryGoogleKey must be a string or null',
+        );
+      }
+    }
+    if (solarImageryMapboxTokenRaw !== undefined) {
+      if (
+        solarImageryMapboxTokenRaw === null ||
+        (typeof solarImageryMapboxTokenRaw === 'string' &&
+          solarImageryMapboxTokenRaw.trim() === '')
+      ) {
+        settings.solarImageryMapboxTokenEncrypted = null;
+      } else if (typeof solarImageryMapboxTokenRaw === 'string') {
+        settings.solarImageryMapboxTokenEncrypted = encryptSettingsValue(
+          solarImageryMapboxTokenRaw.trim(),
+        );
+      } else {
+        throw new BadRequestException(
+          'solarImageryMapboxToken must be a string or null',
+        );
       }
     }
     if (messagingRaw !== undefined) {
@@ -273,6 +362,17 @@ export class RuntimeSettingsService {
     const changedFields = Object.keys(updates as Record<string, unknown>)
       .filter((k) => (updates as Record<string, unknown>)[k] !== undefined)
       .sort();
+    if (
+      solarImageryGoogleKeyRaw !== undefined ||
+      solarImageryMapboxTokenRaw !== undefined ||
+      'solarImageryProvider' in cleaned
+    ) {
+      // Bumped so `SolarImageryService`'s cache re-reads on this process's
+      // next request rather than serving the pre-change provider/key for
+      // its full TTL.
+      this.imagerySettingsVersion += 1;
+    }
+
     const saved = await this.settingsRepo.save(settings);
 
     const auditPatch: Record<string, unknown> = { ...updates } as Record<
@@ -282,6 +382,18 @@ export class RuntimeSettingsService {
     if ('smtpPass' in auditPatch) {
       // Never store plaintext credentials in audit.
       auditPatch['smtpPass'] = auditPatch['smtpPass'] ? '[set]' : null;
+    }
+    if ('solarImageryGoogleKey' in auditPatch) {
+      auditPatch['solarImageryGoogleKey'] = auditPatch['solarImageryGoogleKey']
+        ? '[set]'
+        : null;
+    }
+    if ('solarImageryMapboxToken' in auditPatch) {
+      auditPatch['solarImageryMapboxToken'] = auditPatch[
+        'solarImageryMapboxToken'
+      ]
+        ? '[set]'
+        : null;
     }
     await this.settingsAuditRepo.save(
       this.settingsAuditRepo.create({
@@ -500,6 +612,17 @@ export class RuntimeSettingsService {
         settings.qualificationConfig,
       ),
       documentTaxonomy: mergeDocumentTaxonomy(settings.documentTaxonomy),
+      solarImageryProvider: this.isSolarImageryProvider(
+        settings.solarImageryProvider,
+      )
+        ? settings.solarImageryProvider
+        : null,
+      solarImageryGoogleKeySet: Boolean(
+        settings.solarImageryGoogleKeyEncrypted?.trim(),
+      ),
+      solarImageryMapboxTokenSet: Boolean(
+        settings.solarImageryMapboxTokenEncrypted?.trim(),
+      ),
     };
   }
 

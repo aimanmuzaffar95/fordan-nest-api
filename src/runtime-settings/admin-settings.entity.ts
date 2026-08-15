@@ -115,6 +115,22 @@ export class AdminSettings {
   @Column({ type: 'json', nullable: true })
   documentTaxonomy: DocumentTaxonomyConfig | null;
 
+  // Runtime override for the roof designer's satellite imagery provider —
+  // lets an admin switch free (esri) vs. paid (google/mapbox) without
+  // editing server env vars. `null` = fall back to `SOLAR_IMAGERY_PROVIDER`.
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  solarImageryProvider: string | null;
+
+  // encryptSettingsValue() output (same AES-GCM helper as smtpPass /
+  // linked-mailbox passwords) — never returned by any endpoint. text (not
+  // varchar): see the comment on esignPublicBaseUrl above re: MariaDB's
+  // 8126-byte inline row cap.
+  @Column({ type: 'text', nullable: true })
+  solarImageryGoogleKeyEncrypted: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  solarImageryMapboxTokenEncrypted: string | null;
+
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'updatedByUserId' })
   updatedByUser: User | null;

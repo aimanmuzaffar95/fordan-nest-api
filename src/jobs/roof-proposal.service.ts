@@ -567,11 +567,12 @@ export class RoofProposalService {
       const panelSizeByModelId = await this.roofDesigns.resolvePanelSizesForDoc(
         roofDesign.doc,
       );
+      const resolvedProvider = await this.imagery.resolveProvider();
       const zoom = this.resolveHeroCropZoom(
         roofDesign.doc,
         RENDER_FALLBACK_WIDTH_PX,
         RENDER_FALLBACK_HEIGHT_PX,
-        this.imagery.resolveProvider().maxNativeZoom,
+        resolvedProvider.maxNativeZoom,
       );
       const buffer = await this.renderComposite.composite(
         roofDesign.doc,

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobsModule } from '../jobs/jobs.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { FilesModule } from '../files/files.module';
+import { RuntimeSettingsModule } from '../runtime-settings/runtime-settings.module';
 import { SolarPanel } from '../solar-panels/entities/solar-panel.entity';
 import { Job } from '../jobs/entities/job.entity';
 import { Customer } from '../customers/entities/customer.entity';
@@ -40,6 +41,7 @@ import { IrradianceCacheService } from './irradiance/irradiance-cache.service';
     forwardRef(() => JobsModule),
     PermissionsModule,
     FilesModule,
+    RuntimeSettingsModule,
     // Own JwtModule registration (not AuthModule's) — signs/verifies the
     // narrowly-scoped, short-lived tile token only; same JWT_SECRET, no
     // shared DI surface with the interactive-login JwtAuthGuard.

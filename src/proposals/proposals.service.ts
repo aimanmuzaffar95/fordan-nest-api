@@ -5,7 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Not, Repository } from 'typeorm';
+import { Brackets, DataSource, In, Not, Repository } from 'typeorm';
+import { Assignment } from '../assignments/entities/assignment.entity';
 import { Job } from '../jobs/entities/job.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
@@ -18,6 +19,8 @@ import {
   ProposalVersion,
 } from './entities/proposal-version.entity';
 import { CreateProposalVersionDto, SendProposalDto } from './dto/proposal.dto';
+import { FindProposalVersionsQueryDto } from './dto/find-proposal-versions-query.dto';
+import { ProposalVersionListItemDto } from './dto/proposal-version-list-item.dto';
 
 /** Statuses a version can no longer be edited from. */
 const TERMINAL_STATUSES: ProposalStatus[] = [
@@ -72,6 +75,117 @@ export class ProposalsService {
       where: { jobId },
       order: { versionNumber: 'DESC' },
     });
+  }
+
+  /**
+   * Cross-job index for `GET /proposal-versions` (the web Proposals page).
+   * Denormalises job/customer fields onto each row so the client never has
+   * to fan out per-job to build the index.
+   *
+   * Scoping mirrors `JobsService.list`: admin sees everything, manager is
+   * restricted to `job.managerId`, and installer/employee (staff) are
+   * restricted to jobs they are actually assigned to — either
+   * `job.assignedStaffUserId` or a row in `assignments` — the same "job
+   * scope" this codebase already enforces per-request via
+   * `jobsService.getOne`/`assertJobInScope` above. Never widen this to a
+   * bare role check; it is the only thing standing between a staff account
+   * and every other customer's pricing.
+   */
+  async listAll(
+    query: FindProposalVersionsQueryDto,
+    viewer: { userId: string; role: UserRole },
+  ): Promise<{
+    items: ProposalVersionListItemDto[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
+    await this.assertEnabled(viewer.role);
+
+    const qb = this.versionRepo
+      .createQueryBuilder('version')
+      .leftJoinAndSelect('version.job', 'job')
+      .leftJoinAndSelect('job.customer', 'customer');
+
+    if (viewer.role === UserRole.MANAGER) {
+      qb.andWhere('job.managerId = :managerUserId', {
+        managerUserId: viewer.userId,
+      });
+    } else if (
+      viewer.role === UserRole.INSTALLER ||
+      viewer.role === UserRole.EMPLOYEE
+    ) {
+      const directAssignmentSubquery = qb
+        .subQuery()
+        .select('1')
+        .from(Assignment, 'assignment')
+        .where('assignment.jobId = job.id')
+        .andWhere('assignment.staffUserId = :staffUserId')
+        .getQuery();
+      qb.andWhere(
+        new Brackets((sub) => {
+          sub.where('job.assignedStaffUserId = :staffUserId', {
+            staffUserId: viewer.userId,
+          });
+          sub.orWhere(`EXISTS ${directAssignmentSubquery}`, {
+            staffUserId: viewer.userId,
+          });
+        }),
+      );
+    }
+    // ADMIN: unrestricted.
+
+    if (query.status) {
+      qb.andWhere('version.status = :status', { status: query.status });
+    }
+    if (query.sentFrom) {
+      qb.andWhere('version.sentAt >= :sentFrom', { sentFrom: query.sentFrom });
+    }
+    if (query.sentTo) {
+      qb.andWhere('version.sentAt <= :sentTo', { sentTo: query.sentTo });
+    }
+    if (query.search) {
+      const term = `%${query.search.trim().toLowerCase()}%`;
+      qb.andWhere(
+        new Brackets((sub) => {
+          sub
+            .where('LOWER(job.orderNumber) LIKE :term', { term })
+            .orWhere('LOWER(customer.firstName) LIKE :term', { term })
+            .orWhere('LOWER(customer.lastName) LIKE :term', { term });
+        }),
+      );
+    }
+
+    // Most recently sent first; versions never sent (drafts) sort after
+    // every sent one, then by most recently created. No `NULLS LAST` — prod
+    // MariaDB rejects it (see tasks.service.ts) — so a `sentAt IS NULL`
+    // flag is ordered ahead of the real column instead.
+    qb.orderBy('(version.sentAt IS NULL)', 'ASC')
+      .addOrderBy('version.sentAt', 'DESC')
+      .addOrderBy('version.createdAt', 'DESC');
+
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? query.limit ?? 20;
+    qb.skip((page - 1) * pageSize).take(pageSize);
+
+    const [rows, total] = await qb.getManyAndCount();
+
+    const items: ProposalVersionListItemDto[] = rows.map((row) => ({
+      id: row.id,
+      jobId: row.jobId,
+      jobOrderNumber: row.job?.orderNumber ?? '',
+      customerName: row.job?.customer
+        ? `${row.job.customer.firstName} ${row.job.customer.lastName}`.trim()
+        : '',
+      status: row.status,
+      totalPrice: row.totalPrice,
+      systemSizeKw: row.job?.systemSizeKw ?? null,
+      sentAt: row.sentAt ? row.sentAt.toISOString() : null,
+      versionNumber: row.versionNumber,
+      createdAt: row.createdAt.toISOString(),
+    }));
+
+    return { items, total, page, pageSize };
   }
 
   /**
