@@ -109,7 +109,7 @@ export class SolarDesignController {
     @Req() req: AuthRequest,
   ) {
     await this.authorizeJobAction(req, jobId, 'job:view');
-    return { data: await this.roofDesigns.getForJob(jobId) };
+    return await this.roofDesigns.getForJob(jobId);
   }
 
   @Put('jobs/:jobId/roof-design')
@@ -131,9 +131,7 @@ export class SolarDesignController {
       jobId,
       'job:proposal:update',
     );
-    return {
-      data: await this.roofDesigns.upsert(jobId, dto, viewer.userId),
-    };
+    return await this.roofDesigns.upsert(jobId, dto, viewer.userId);
   }
 
   @Post('jobs/:jobId/roof-design/simulate')
@@ -151,7 +149,7 @@ export class SolarDesignController {
     @Req() req: AuthRequest,
   ) {
     await this.authorizeJobAction(req, jobId, 'job:view');
-    return { data: await this.simulation.simulate(dto, jobId) };
+    return await this.simulation.simulate(dto, jobId);
   }
 
   @Post('jobs/:jobId/roof-design/render')
@@ -178,17 +176,15 @@ export class SolarDesignController {
       jobId,
       'job:proposal:update',
     );
-    return {
-      data: await this.render.storeRender(
-        jobId,
-        {
-          pngBase64: dto.pngBase64,
-          widthPx: dto.widthPx,
-          heightPx: dto.heightPx,
-        },
-        viewer.userId,
-      ),
-    };
+    return await this.render.storeRender(
+      jobId,
+      {
+        pngBase64: dto.pngBase64,
+        widthPx: dto.widthPx,
+        heightPx: dto.heightPx,
+      },
+      viewer.userId,
+    );
   }
 
   @Get('solar-design/imagery-token')
@@ -207,12 +203,10 @@ export class SolarDesignController {
     const resolved = await this.imagery.resolveProvider();
     const base = await this.imagery.getImageryToken();
     if (resolved.keyless) {
-      return { data: base };
+      return base;
     }
     const token = await this.tileTokens.issue(userId);
-    return {
-      data: { ...base, urlTemplate: `${base.urlTemplate}?token=${token}` },
-    };
+    return { ...base, urlTemplate: `${base.urlTemplate}?token=${token}` };
   }
 
   @Post('solar-design/imagery-test')
@@ -241,14 +235,12 @@ export class SolarDesignController {
     await this.tileProxy.fetchTileFromResolved(resolved, testZoom, x, y);
 
     return {
-      data: {
-        success: true,
-        provider: resolved.provider,
-        maxNativeZoom: resolved.maxNativeZoom,
-        sampleLat,
-        sampleLon,
-        metresPerPixel: metresPerPixelAt(sampleLat, resolved.maxNativeZoom),
-      },
+      success: true,
+      provider: resolved.provider,
+      maxNativeZoom: resolved.maxNativeZoom,
+      sampleLat,
+      sampleLon,
+      metresPerPixel: metresPerPixelAt(sampleLat, resolved.maxNativeZoom),
     };
   }
 
