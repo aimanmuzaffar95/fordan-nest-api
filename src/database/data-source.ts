@@ -42,6 +42,7 @@ import { CustomerMergeLog } from '../households/entities/customer-merge-log.enti
 import { SiteSurvey } from '../surveys/entities/site-survey.entity';
 import { ProposalVersion } from '../proposals/entities/proposal-version.entity';
 import { RoofDesign } from '../solar-design/entities/roof-design.entity';
+import { IrradianceCache } from '../solar-design/irradiance/irradiance-cache.entity';
 import { FinancingApplication } from '../financing/entities/financing-application.entity';
 import { Project } from '../projects/entities/project.entity';
 import { Permit } from '../projects/entities/permit.entity';
@@ -165,6 +166,7 @@ export const AppDataSource = new DataSource({
     SiteSurvey,
     ProposalVersion,
     RoofDesign,
+    IrradianceCache,
     FinancingApplication,
     Project,
     Permit,

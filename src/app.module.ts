@@ -45,6 +45,8 @@ import { EmployeeFormsModule } from './employee-forms/employee-forms.module';
 import { EmployeeForm } from './employee-forms/entities/employee-form.entity';
 import { SolarPanelsModule } from './solar-panels/solar-panels.module';
 import { SolarPanel } from './solar-panels/entities/solar-panel.entity';
+import { RoofDesign } from './solar-design/entities/roof-design.entity';
+import { IrradianceCache } from './solar-design/irradiance/irradiance-cache.entity';
 import { InvertersModule } from './inverters/inverters.module';
 import { Inverter } from './inverters/entities/inverter.entity';
 import { BatteriesModule } from './batteries/batteries.module';
@@ -260,6 +262,8 @@ getSettingsEncryptionKey();
         TimelineEvent,
         EmployeeForm,
         SolarPanel,
+        RoofDesign,
+        IrradianceCache,
         Inverter,
         Battery,
         AdminSettings,
