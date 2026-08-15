@@ -160,7 +160,11 @@ export class ProposalsService {
     // every sent one, then by most recently created. No `NULLS LAST` — prod
     // MariaDB rejects it (see tasks.service.ts) — so a `sentAt IS NULL`
     // flag is ordered ahead of the real column instead.
-    qb.orderBy('(version.sentAt IS NULL)', 'ASC')
+    qb.addSelect(
+      'CASE WHEN version.sentAt IS NULL THEN 1 ELSE 0 END',
+      'sent_at_null_last',
+    )
+      .orderBy('sent_at_null_last', 'ASC')
       .addOrderBy('version.sentAt', 'DESC')
       .addOrderBy('version.createdAt', 'DESC');
 
