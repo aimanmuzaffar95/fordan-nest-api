@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobsModule } from '../jobs/jobs.module';
@@ -30,7 +30,14 @@ import { IrradianceCacheService } from './irradiance/irradiance-cache.service';
       Job,
       Customer,
     ]),
-    JobsModule,
+    // forwardRef: there is a module cycle here —
+    //   JobsModule -> TasksModule -> ProposalsModule -> SolarDesignModule -> JobsModule
+    // ProposalsModule needs RoofDesignService to snapshot the design when a
+    // proposal is sent, and this module needs JobsModule for job scoping.
+    // Without forwardRef on both sides, JobsModule evaluates to `undefined`
+    // here and Nest dies at boot with UndefinedModuleException. That failure
+    // does not appear in `nest build` or in the unit suite — only at startup.
+    forwardRef(() => JobsModule),
     PermissionsModule,
     FilesModule,
     // Own JwtModule registration (not AuthModule's) — signs/verifies the

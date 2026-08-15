@@ -1,4 +1,13 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+  "//": [
+    "`scripts` MUST stay excluded. The guardrail runners under scripts/ are",
+    "TypeScript and dev-only (run via ts-node by `npm run check:*`). Including",
+    "them widens TypeScript's inferred rootDir from src/ to the package root,",
+    "so the build emits dist/src/main.js instead of dist/main.js — and the",
+    "cPanel host boots dist/main.js directly, so production 503s on",
+    "MODULE_NOT_FOUND. This happened once; the deploy exits 0 because the",
+    "sync and restart both succeed."
+  ],
+  "exclude": ["node_modules", "test", "dist", "scripts", "**/*spec.ts"]
 }
