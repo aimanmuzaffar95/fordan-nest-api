@@ -3,6 +3,9 @@ export const ALLOWED_UPLOAD_KINDS = [
   'signed_paperwork',
   'meter_docs',
   'compliance',
+  'roof_design_render',
+  'roof_design_upload',
+  'proposal_pdf',
   'other',
 ] as const;
 

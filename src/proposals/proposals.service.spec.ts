@@ -3,9 +3,11 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Job } from '../jobs/entities/job.entity';
+import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
 import { defaultFeatureFlags } from '../feature-flags/feature-flags.config';
+import { RoofDesignService } from '../solar-design/roof-design.service';
 import {
   PricingMode,
   ProposalStatus,
@@ -98,13 +100,24 @@ describe('ProposalsService', () => {
       ),
     } as unknown as DataSource;
 
+    const roofDesigns = {
+      getForJob: jest.fn().mockResolvedValue(null),
+    } as unknown as Mocked<RoofDesignService>;
+
+    const timelineRepo = {
+      create: jest.fn((v: unknown) => v),
+      save: jest.fn((v: unknown) => Promise.resolve(v)),
+    } as unknown as Mocked<Repository<TimelineEvent>>;
+
     const moduleRef = await Test.createTestingModule({
       providers: [
         ProposalsService,
         { provide: getRepositoryToken(ProposalVersion), useValue: versionRepo },
         { provide: getRepositoryToken(Job), useValue: jobRepo },
+        { provide: getRepositoryToken(TimelineEvent), useValue: timelineRepo },
         { provide: DataSource, useValue: dataSource },
         { provide: RuntimeSettingsService, useValue: settings },
+        { provide: RoofDesignService, useValue: roofDesigns },
       ],
     }).compile();
 

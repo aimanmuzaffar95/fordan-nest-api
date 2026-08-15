@@ -755,7 +755,13 @@ export class JobsService {
       const normalizedDepositAmount = depositPaid
         ? (dto.depositAmount ?? 0)
         : 0;
-      const projectPrice = dto.projectPrice ?? 0;
+      // Absent means "not priced yet", not "priced at $0" — persist `null`
+      // so downstream `> 0` predicates (`hasProjectPrice` below,
+      // `resolveAgreedPrice` in roof-proposal.service.ts) can tell the two
+      // apart. Existing rows already persisted `'0.00'` for this and are
+      // left untouched.
+      const projectPrice =
+        dto.projectPrice === undefined ? null : dto.projectPrice.toFixed(2);
       const savedJob = await this.createJobWithGeneratedOrderNumber(jobsRepo, {
         customerId,
         systemType: dto.systemType,
@@ -768,7 +774,7 @@ export class JobsService {
           dto.systemType,
           dto.batterySizeKwh,
         ),
-        projectPrice: projectPrice.toFixed(2),
+        projectPrice,
         contractSigned: dto.contractSigned ?? false,
         depositAmount: normalizedDepositAmount.toFixed(2),
         depositPaid,

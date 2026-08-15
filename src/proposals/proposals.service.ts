@@ -10,6 +10,8 @@ import { Job } from '../jobs/entities/job.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
 import { isFeatureEnabled } from '../feature-flags/feature-flags.config';
+import { RoofDesignService } from '../solar-design/roof-design.service';
+import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import {
   PricingMode,
   ProposalStatus,
@@ -32,8 +34,11 @@ export class ProposalsService {
     private readonly versionRepo: Repository<ProposalVersion>,
     @InjectRepository(Job)
     private readonly jobRepo: Repository<Job>,
+    @InjectRepository(TimelineEvent)
+    private readonly timelineRepo: Repository<TimelineEvent>,
     private readonly dataSource: DataSource,
     private readonly settings: RuntimeSettingsService,
+    private readonly roofDesigns: RoofDesignService,
   ) {}
 
   private async assertEnabled(role: UserRole): Promise<void> {
@@ -98,7 +103,12 @@ export class ProposalsService {
           versionNumber: (latest?.versionNumber ?? 0) + 1,
           status: ProposalStatus.DRAFT,
           pricingMode: dto.pricingMode ?? PricingMode.CASH,
-          totalPrice: String(dto.totalPrice ?? 0),
+          // Absent means "not priced yet", not "priced at $0" — persist as
+          // `null` so `resolveAgreedPrice` can tell the two apart. Existing
+          // rows created before this change already persisted `'0.00'` for
+          // an unset price and are left untouched (see the migration).
+          totalPrice:
+            dto.totalPrice === undefined ? null : String(dto.totalPrice),
           depositAmount: String(dto.depositAmount ?? 0),
           rebateAmount:
             dto.rebateAmount === undefined ? null : String(dto.rebateAmount),
@@ -184,7 +194,34 @@ export class ProposalsService {
     if (dto.expiresAt !== undefined) {
       version.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
     }
-    return this.versionRepo.save(version);
+
+    // Freeze the current roof design (if any) into the snapshot so a sent
+    // proposal never changes when the coordinator keeps editing the design.
+    const roofDesign = await this.roofDesigns.getForJob(version.jobId);
+    if (roofDesign) {
+      version.systemSnapshot = {
+        ...(version.systemSnapshot ?? {}),
+        roofDesign,
+      };
+    }
+
+    const saved = await this.versionRepo.save(version);
+
+    await this.timelineRepo.save(
+      this.timelineRepo.create({
+        jobId: saved.jobId,
+        type: 'proposal_sent',
+        payload: {
+          proposalVersionId: saved.id,
+          versionNumber: saved.versionNumber,
+          recipientEmail: saved.sentToEmail,
+          sentAt: saved.sentAt?.toISOString() ?? null,
+        },
+        createdByUserId: viewer.userId,
+      }),
+    );
+
+    return saved;
   }
 
   /**
@@ -202,6 +239,7 @@ export class ProposalsService {
       return;
     }
     const now = new Date();
+    const isFirstView = !version.firstViewedAt;
     await this.versionRepo.update(
       { id },
       {
@@ -211,6 +249,20 @@ export class ProposalsService {
         viewCount: version.viewCount + 1,
       },
     );
+    if (isFirstView) {
+      await this.timelineRepo.save(
+        this.timelineRepo.create({
+          jobId: version.jobId,
+          type: 'proposal_viewed',
+          payload: {
+            proposalVersionId: version.id,
+            versionNumber: version.versionNumber,
+            firstViewedAt: now.toISOString(),
+          },
+          createdByUserId: null,
+        }),
+      );
+    }
   }
 
   async accept(
@@ -218,15 +270,31 @@ export class ProposalsService {
     viewer: { userId: string; role: UserRole },
   ): Promise<ProposalVersion> {
     // Scope check first, outside the transaction — it does not need the lock.
-    const scoped = await this.load(id, viewer);
+    await this.load(id, viewer);
+    return this.acceptCore(id, viewer.userId);
+  }
 
+  /**
+   * Customer-facing acceptance via the public signing token (P6). No RBAC —
+   * the token itself is the authorization, and it is single-purpose
+   * (`documentSource: 'proposal'`), scoped to exactly one job/version by
+   * `JobSignatureService`. Otherwise identical to the staff-triggered path.
+   */
+  async acceptViaPublicToken(id: string): Promise<ProposalVersion> {
+    return this.acceptCore(id, null);
+  }
+
+  private async acceptCore(
+    id: string,
+    acceptedByUserId: string | null,
+  ): Promise<ProposalVersion> {
     // Accepting is the money decision: it sets the job's contract price. Do it
     // under a row lock so two concurrent callers cannot both read a non-terminal
     // status and both proceed, and supersede every sibling in the same
     // transaction so a job can only ever hold one accepted version.
-    return this.versionRepo.manager.transaction(async (tx) => {
+    const saved = await this.versionRepo.manager.transaction(async (tx) => {
       const version = await tx.findOne(ProposalVersion, {
-        where: { id: scoped.id },
+        where: { id },
         lock: { mode: 'pessimistic_write' },
       });
       if (!version) {
@@ -290,6 +358,22 @@ export class ProposalsService {
 
       return saved;
     });
+
+    await this.timelineRepo.save(
+      this.timelineRepo.create({
+        jobId: saved.jobId,
+        type: 'proposal_accepted',
+        payload: {
+          proposalVersionId: saved.id,
+          versionNumber: saved.versionNumber,
+          totalPrice: saved.totalPrice,
+          acceptedAt: saved.acceptedAt?.toISOString() ?? null,
+        },
+        createdByUserId: acceptedByUserId,
+      }),
+    );
+
+    return saved;
   }
 
   async decline(
@@ -297,7 +381,24 @@ export class ProposalsService {
     reason: string | null,
     viewer: { userId: string; role: UserRole },
   ): Promise<ProposalVersion> {
-    const version = await this.load(id, viewer);
+    await this.load(id, viewer);
+    return this.declineCore(id, reason);
+  }
+
+  /** Customer-facing decline via the public signing token (P6). No RBAC. */
+  async declineViaPublicToken(
+    id: string,
+    reason: string | null,
+  ): Promise<ProposalVersion> {
+    return this.declineCore(id, reason);
+  }
+
+  private async declineCore(
+    id: string,
+    reason: string | null,
+  ): Promise<ProposalVersion> {
+    const version = await this.versionRepo.findOne({ where: { id } });
+    if (!version) throw new NotFoundException(`Proposal ${id} not found`);
     if (TERMINAL_STATUSES.includes(version.status)) {
       throw new BadRequestException(
         `A ${version.status} proposal cannot be declined`,
@@ -306,7 +407,23 @@ export class ProposalsService {
     version.status = ProposalStatus.DECLINED;
     version.declinedAt = new Date();
     version.declineReason = reason;
-    return this.versionRepo.save(version);
+    const saved = await this.versionRepo.save(version);
+
+    await this.timelineRepo.save(
+      this.timelineRepo.create({
+        jobId: saved.jobId,
+        type: 'proposal_declined',
+        payload: {
+          proposalVersionId: saved.id,
+          versionNumber: saved.versionNumber,
+          reason: saved.declineReason,
+          declinedAt: saved.declinedAt?.toISOString() ?? null,
+        },
+        createdByUserId: null,
+      }),
+    );
+
+    return saved;
   }
 
   /** Expire proposals past their date. Run from the SLA sweep. */

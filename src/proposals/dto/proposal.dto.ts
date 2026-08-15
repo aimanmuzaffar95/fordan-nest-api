@@ -34,7 +34,10 @@ export class CreateProposalVersionDto {
   @IsEnum(PricingMode)
   pricingMode?: PricingMode;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description:
+      'Omit rather than send 0 for "not priced yet" — persisted as `null`, not `0.00`, so it never presents as an agreed price.',
+  })
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)

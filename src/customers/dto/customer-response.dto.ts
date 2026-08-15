@@ -21,6 +21,10 @@ export class CustomerResponseDto {
   leadCapturedAt: Date | null;
   leadOwnerUserId: string | null;
   leadOwnershipHistory: LeadOwnershipEntry[];
+  importTariffPerKwh: number | null;
+  feedInTariffPerKwh: number | null;
+  dailySupplyCharge: number | null;
+  averageMonthlyBill: number | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -63,6 +67,18 @@ export class CustomerResponseDto {
       leadCapturedAt: entity.leadCapturedAt ?? null,
       leadOwnerUserId: entity.leadOwnerUserId ?? null,
       leadOwnershipHistory: entity.leadOwnershipHistory ?? [],
+      importTariffPerKwh: CustomerResponseDto.parseNullableDecimal(
+        entity.importTariffPerKwh,
+      ),
+      feedInTariffPerKwh: CustomerResponseDto.parseNullableDecimal(
+        entity.feedInTariffPerKwh,
+      ),
+      dailySupplyCharge: CustomerResponseDto.parseNullableDecimal(
+        entity.dailySupplyCharge,
+      ),
+      averageMonthlyBill: CustomerResponseDto.parseNullableDecimal(
+        entity.averageMonthlyBill,
+      ),
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
     };

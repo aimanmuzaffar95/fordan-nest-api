@@ -172,4 +172,36 @@ export class UpdateCustomerDto {
   @IsString()
   @MaxLength(200)
   leadOwnerChangeReason?: string | null;
+
+  // ─── Electricity tariff (solar proposal financials) ─────────────────────
+  // Pass null to clear a field back to "not captured" (engine defaults
+  // apply). Omit the field entirely to leave it unchanged.
+
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  importTariffPerKwh?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  feedInTariffPerKwh?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsNumber()
+  @Min(0)
+  @Max(50)
+  dailySupplyCharge?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsNumber()
+  @Min(0)
+  @Max(100000)
+  averageMonthlyBill?: number | null;
 }

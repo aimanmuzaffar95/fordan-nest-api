@@ -53,9 +53,11 @@ import { UpdateJobProposalConfigDto } from './dto/update-job-proposal-config.dto
 import { LeadCaptureInsightsService } from '../reports/lead-capture-insights.service';
 import { JobsService } from './jobs.service';
 import { JobQuotationService } from './job-quotation.service';
+import { RoofProposalService } from './roof-proposal.service';
 import { SendJobQuotationResponseDto } from './dto/send-job-quotation-response.dto';
 import { CreateJobSignatureRequestDto } from './dto/create-job-signature-request.dto';
 import { JobSignatureService } from './job-signature.service';
+import { JobProposalSendService } from './job-proposal-send.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import type { PermissionKey } from '../permissions/permission-catalog';
 import type { JobListViewer } from './jobs.service';
@@ -71,9 +73,11 @@ export class JobsController {
   constructor(
     private readonly jobs: JobsService,
     private readonly jobQuotation: JobQuotationService,
+    private readonly roofProposal: RoofProposalService,
     private readonly filesService: FilesService,
     private readonly leadCaptureInsightsService: LeadCaptureInsightsService,
     private readonly jobSignatures: JobSignatureService,
+    private readonly jobProposalSend: JobProposalSendService,
     private readonly permissions: PermissionsService,
   ) {}
 
@@ -226,6 +230,31 @@ export class JobsController {
 
     const safeName =
       attachmentFilename.replace(/[\r\n"]/g, '_').trim() || 'quotation.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.send(pdfBuffer);
+  }
+
+  /** Must stay above `@Get(':id')` so `proposal.pdf` is not parsed as a UUID. */
+  @Get(':id/proposal.pdf')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.INSTALLER)
+  @ApiOperation({
+    summary: 'Download the 10-page branded solar proposal PDF',
+    description:
+      'Streams the roof-design proposal (cover, executive summary, energy today, roof & array design, production, savings & payback, equipment, environmental impact, investment/finance, next steps + signature block). Every energy/money figure is recomputed server-side from the saved `RoofDesign` and the latest `ProposalVersion` — nothing is invented in the PDF layer. **400** when no roof design (with at least one array) has been saved yet. Reuses the same Settings → Templates PDF branding pipeline as the quotation PDF.',
+  })
+  async downloadProposalPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+    @Res() res: Response,
+  ): Promise<void> {
+    const viewer = await this.authorizeJobAction(req, 'job:proposal:view');
+
+    const { pdfBuffer, attachmentFilename } =
+      await this.roofProposal.buildValidatedProposalPdf(id, viewer);
+
+    const safeName =
+      attachmentFilename.replace(/[\r\n"]/g, '_').trim() || 'proposal.pdf';
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
     res.send(pdfBuffer);
@@ -509,6 +538,23 @@ export class JobsController {
     const viewer = await this.authorizeJobAction(req, 'job:quotation:send');
 
     return this.jobQuotation.sendQuotation(id, viewer);
+  }
+
+  @Post(':id/send-proposal')
+  @HttpCode(HttpStatus.OK)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Send the branded solar proposal to the customer',
+    description:
+      'Builds the 10-page roof-design proposal PDF, emails it to the customer with proposal-specific copy (system size, savings, payback), stores that exact PDF as the sent snapshot, transitions the `ProposalVersion` to `sent`, and mints a public acceptance link via the existing e-sign flow. **400** when prerequisites are missing (customer email, roof design, simulation). **503** (`EMAIL_DELIVERY_FAILED`) when SMTP fails — nothing is marked sent. **Manager:** only within your job scope.',
+  })
+  @ApiOkResponse({ description: 'Proposal sent successfully' })
+  async sendProposal(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeJobAction(req, 'job:proposal:update');
+    return this.jobProposalSend.sendProposal(id, viewer, req);
   }
 
   @Patch(':id/pipeline')

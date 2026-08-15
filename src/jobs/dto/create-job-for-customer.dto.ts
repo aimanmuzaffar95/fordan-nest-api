@@ -51,6 +51,7 @@ export class CreateJobForCustomerDto {
   @Min(0.01)
   depositAmount?: number;
 
+  /** Omit rather than send 0 for "not priced yet" — persisted as `null`, not `0.00`. */
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

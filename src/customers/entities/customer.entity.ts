@@ -138,6 +138,29 @@ export class Customer {
   @Column({ type: resolveTimestampColumnType(), nullable: true })
   mergedAt: Date | null;
 
+  // ─── Electricity tariff (solar proposal financials) ─────────────────────
+  // Nullable by design: absent means "no bill captured yet, engine defaults
+  // apply" — not zero. See `SolarSimulationService` and
+  // `SimulationResult.financial.tariffSource`. Escalation/discount rate are
+  // modelling assumptions, not customer facts, so they stay engine defaults
+  // and are not stored here.
+
+  /** Grid import (usage) rate, $/kWh, from the customer's latest bill. */
+  @Column({ type: 'decimal', precision: 8, scale: 4, nullable: true })
+  importTariffPerKwh: number | null;
+
+  /** Feed-in/export (solar buyback) rate, $/kWh. */
+  @Column({ type: 'decimal', precision: 8, scale: 4, nullable: true })
+  feedInTariffPerKwh: number | null;
+
+  /** Daily fixed supply/connection charge, $/day. */
+  @Column({ type: 'decimal', precision: 8, scale: 4, nullable: true })
+  dailySupplyCharge: number | null;
+
+  /** Customer-reported current average monthly bill, $. Optional — used for the "your energy today" comparison when present. */
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  averageMonthlyBill: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

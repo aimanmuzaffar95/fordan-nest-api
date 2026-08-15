@@ -26,10 +26,13 @@ import { Job } from './entities/job.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import type { CompletePublicSignatureDto } from './dto/complete-public-signature.dto';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
+import { ProposalsService } from '../proposals/proposals.service';
+import { ProposalVersion } from '../proposals/entities/proposal-version.entity';
 
 export const ESIGN_CONSENT_VERSION = '1';
 
 const SIGNED_FILE_KIND = 'signed_paperwork' as UploadKind;
+const PROPOSAL_FILE_KIND = 'proposal_pdf' as UploadKind;
 
 function sha256Hex(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
@@ -163,6 +166,8 @@ export class JobSignatureService {
     private readonly jobsRepo: Repository<Job>,
     @InjectRepository(TimelineEvent)
     private readonly timelineRepo: Repository<TimelineEvent>,
+    @InjectRepository(ProposalVersion)
+    private readonly proposalVersionsRepo: Repository<ProposalVersion>,
     private readonly jobs: JobsService,
     private readonly jobQuotation: JobQuotationService,
     private readonly pdfMerge: JobSignaturePdfMergeService,
@@ -170,6 +175,7 @@ export class JobSignatureService {
     private readonly email: EmailService,
     private readonly customerMessaging: CustomerMessagingRendererService,
     private readonly runtimeSettings: RuntimeSettingsService,
+    private readonly proposals: ProposalsService,
   ) {}
 
   private assertStaff(viewer: JobListViewer): void {
@@ -212,7 +218,11 @@ export class JobSignatureService {
   }
 
   private async expireIfNeeded(row: JobSignatureRequest): Promise<void> {
-    if (row.status === 'signed' || row.status === 'cancelled') {
+    if (
+      row.status === 'signed' ||
+      row.status === 'cancelled' ||
+      row.status === 'superseded'
+    ) {
       return;
     }
     if (new Date() > row.expiresAt) {
@@ -268,7 +278,7 @@ export class JobSignatureService {
     const tokenHash = sha256Hex(rawToken);
     const ref = await this.uniqueReferenceCode();
     const expiresAt = new Date(Date.now() + (await this.resolveTokenTtlMs()));
-    await this.cancelOpenRequests(jobId);
+    await this.cancelOpenRequests(jobId, 'quotation');
     const row = this.signatureRepo.create({
       jobId,
       status: 'pending' as JobSignatureRequestStatus,
@@ -283,6 +293,8 @@ export class JobSignatureService {
       signedFileId: null,
       auditPayload: null,
       createdByUserId: viewer.userId,
+      documentSource: 'quotation',
+      proposalVersionId: null,
     });
     const saved = await this.signatureRepo.save(row);
     const signingUrl = `${base}/sign/${rawToken}`;
@@ -359,15 +371,97 @@ export class JobSignatureService {
     return `SIG-${randomBytes(6).toString('hex').toUpperCase()}`;
   }
 
-  private async cancelOpenRequests(jobId: string): Promise<void> {
+  private async cancelOpenRequests(
+    jobId: string,
+    documentSource: 'quotation' | 'proposal',
+  ): Promise<void> {
     await this.signatureRepo.update(
-      { jobId, status: 'pending' as JobSignatureRequestStatus },
+      { jobId, documentSource, status: 'pending' as JobSignatureRequestStatus },
       { status: 'cancelled' },
     );
     await this.signatureRepo.update(
-      { jobId, status: 'viewed' as JobSignatureRequestStatus },
+      { jobId, documentSource, status: 'viewed' as JobSignatureRequestStatus },
       { status: 'cancelled' },
     );
+  }
+
+  /**
+   * Retires any still-open proposal signature request(s) for a job because
+   * a *new* proposal version is being sent — never because the customer did
+   * anything. Uses `superseded`, not `cancelled`, specifically so
+   * `getPublicSession` never reports this to the holder of the old link as
+   * "you declined" (that label is reserved for `declinePublicProposal`).
+   */
+  private async supersedeOpenProposalRequests(jobId: string): Promise<void> {
+    await this.signatureRepo.update(
+      {
+        jobId,
+        documentSource: 'proposal' as JobSignatureRequest['documentSource'],
+        status: 'pending' as JobSignatureRequestStatus,
+      },
+      { status: 'superseded' },
+    );
+    await this.signatureRepo.update(
+      {
+        jobId,
+        documentSource: 'proposal' as JobSignatureRequest['documentSource'],
+        status: 'viewed' as JobSignatureRequestStatus,
+      },
+      { status: 'superseded' },
+    );
+  }
+
+  /**
+   * Mints a signing/acceptance link for a `ProposalVersion` (P6). Reuses the
+   * exact same token/request machinery as `createRequest`, but sends no
+   * generic "please sign" email — the caller (job-proposal-send service)
+   * sends its own branded proposal email with the same link as the CTA, and
+   * completion binds to the stored `sentPdfFileId` snapshot, not a live
+   * regeneration.
+   */
+  async createProposalSignatureRequest(
+    jobId: string,
+    proposalVersionId: string,
+    signerEmail: string,
+    signerName: string,
+    createdByUserId: string,
+    req?: Request,
+  ): Promise<{
+    id: string;
+    signingUrl: string;
+    referenceCode: string;
+    expiresAt: string;
+  }> {
+    const base = await this.resolvePublicBaseUrl(req);
+    const rawToken = randomToken();
+    const tokenHash = sha256Hex(rawToken);
+    const ref = await this.uniqueReferenceCode();
+    const expiresAt = new Date(Date.now() + (await this.resolveTokenTtlMs()));
+    await this.supersedeOpenProposalRequests(jobId);
+    const row = this.signatureRepo.create({
+      jobId,
+      status: 'pending' as JobSignatureRequestStatus,
+      tokenHash,
+      referenceCode: ref,
+      expiresAt,
+      sentAt: new Date(),
+      viewedAt: null,
+      signedAt: null,
+      signerEmail,
+      signerName,
+      signedFileId: null,
+      auditPayload: null,
+      createdByUserId,
+      documentSource: 'proposal',
+      proposalVersionId,
+    });
+    const saved = await this.signatureRepo.save(row);
+    return {
+      id: saved.id,
+      signingUrl: `${base}/sign/${rawToken}`,
+      referenceCode: ref,
+      expiresAt: expiresAt.toISOString(),
+    };
   }
 
   async getPublicSession(rawToken: string) {
@@ -376,7 +470,23 @@ export class JobSignatureService {
       throw new NotFoundException('Invalid or expired signing link');
     }
     await this.expireIfNeeded(row);
-    if (row.status === 'expired' || row.status === 'cancelled') {
+    // A cancelled *proposal* request means the customer explicitly declined
+    // (`declinePublicProposal`) — a valid, informative outcome for the
+    // public page, not an invalid link. A *superseded* proposal request
+    // means a coordinator sent a newer version while this link was still
+    // open — also not "invalid", but must never be conflated with
+    // "declined": the customer never touched this link. A cancelled
+    // *quotation* request has no such meaning (quotation requests are only
+    // ever replaced, and always with 'cancelled' — see `cancelOpenRequests`),
+    // so keep the original 404 behavior there.
+    const isProposal = row.documentSource === 'proposal';
+    const isDeclinedProposal = row.status === 'cancelled' && isProposal;
+    const isSupersededProposal = row.status === 'superseded' && isProposal;
+    if (
+      row.status === 'expired' ||
+      (row.status === 'cancelled' && !isDeclinedProposal) ||
+      (row.status === 'superseded' && !isSupersededProposal)
+    ) {
       throw new NotFoundException('Invalid or expired signing link');
     }
     const jobFull = await this.jobsRepo.findOne({
@@ -393,18 +503,45 @@ export class JobSignatureService {
       referenceCode: row.referenceCode,
       expiresAt: row.expiresAt.toISOString(),
       consentVersion: ESIGN_CONSENT_VERSION,
+      documentSource: row.documentSource,
     };
     if (row.status === 'signed') {
       return {
         ...base,
         signingComplete: true,
         signedAt: row.signedAt?.toISOString() ?? null,
+        declined: false,
+        supersededByNewer: false,
+      };
+    }
+    if (isSupersededProposal) {
+      // A newer proposal was sent while this link was still open — the
+      // document at this link never changed, but it's no longer the
+      // current one. Distinct from `declined` on purpose (see comment
+      // above): the customer did not decline anything.
+      return {
+        ...base,
+        signingComplete: false,
+        signedAt: null,
+        declined: false,
+        supersededByNewer: true,
+      };
+    }
+    if (isDeclinedProposal) {
+      return {
+        ...base,
+        signingComplete: false,
+        signedAt: null,
+        declined: true,
+        supersededByNewer: false,
       };
     }
     return {
       ...base,
       signingComplete: false,
       signedAt: null,
+      declined: false,
+      supersededByNewer: false,
     };
   }
 
@@ -440,6 +577,10 @@ export class JobSignatureService {
         }),
       );
     }
+    if (row.documentSource === 'proposal' && row.proposalVersionId) {
+      // Side-effect-free beyond the view counters (§ ProposalsService.recordView).
+      await this.proposals.recordView(row.proposalVersionId);
+    }
     return { ok: true };
   }
 
@@ -448,7 +589,10 @@ export class JobSignatureService {
     filename: string;
   }> {
     const row = await this.findSignatureRowByRawToken(rawToken);
-    if (!row) {
+    // A proposal-source token must never be able to pull the quotation PDF:
+    // it's a live regeneration of a different document (possibly reflecting
+    // current, not sent, pricing) that this token was never meant to show.
+    if (!row || row.documentSource !== 'quotation') {
       throw new NotFoundException('Invalid or expired signing link');
     }
     await this.expireIfNeeded(row);
@@ -460,6 +604,55 @@ export class JobSignatureService {
     return { buffer: pdfBuffer, filename: attachmentFilename };
   }
 
+  /**
+   * Streams the **stored** proposal PDF snapshot generated at send time —
+   * never a live regeneration. This is what makes the "sent proposal stays
+   * immutable" guarantee real: the design or pricing can change after
+   * sending and the customer still sees, signs, and accepts exactly the
+   * document that was emailed.
+   */
+  async getPublicProposalPdf(rawToken: string): Promise<{
+    stream: Readable;
+    contentLength?: number;
+    contentType: string | null;
+    filename: string;
+  }> {
+    const row = await this.findSignatureRowByRawToken(rawToken);
+    if (!row || row.documentSource !== 'proposal' || !row.proposalVersionId) {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    await this.expireIfNeeded(row);
+    // A cancelled proposal request just means "declined" — the customer can
+    // still open the PDF they were shown. Only `expired` blocks access.
+    if (row.status === 'expired') {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    const version = await this.proposalVersionsRepo.findOne({
+      where: { id: row.proposalVersionId },
+    });
+    if (!version || !version.sentPdfFileId) {
+      throw new NotFoundException('Proposal document is not available');
+    }
+    const dl = await this.files.getJobFileStreamWithKindGate({
+      jobId: row.jobId,
+      fileId: version.sentPdfFileId,
+      allowedKinds: [PROPOSAL_FILE_KIND],
+    });
+    const safeName = (
+      dl.file.displayName ??
+      dl.file.originalName ??
+      'proposal.pdf'
+    )
+      .replace(/[\r\n"]/g, '_')
+      .trim();
+    return {
+      stream: dl.stream,
+      contentLength: dl.contentLength,
+      contentType: dl.file.contentType,
+      filename: safeName || 'proposal.pdf',
+    };
+  }
+
   async getPublicSignedPdfStream(rawToken: string): Promise<{
     stream: Readable;
     contentLength?: number;
@@ -467,7 +660,16 @@ export class JobSignatureService {
     filename: string;
   }> {
     const row = await this.findSignatureRowByRawToken(rawToken);
-    if (!row) {
+    // `row.signedFileId` is written only by this exact row's own completion
+    // flow (`finishClaimedPublicSign`/`finishClaimedProposalSign`) — there
+    // is no path that lets one row's `documentSource` read another row's
+    // file. The explicit check below is defense in depth, not a fix for a
+    // reachable leak: it guards against a future change to this method
+    // accepting an externally-supplied file id instead of the row's own.
+    if (
+      !row ||
+      (row.documentSource !== 'quotation' && row.documentSource !== 'proposal')
+    ) {
       throw new NotFoundException('Invalid or expired signing link');
     }
     await this.expireIfNeeded(row);
@@ -479,10 +681,14 @@ export class JobSignatureService {
       fileId: row.signedFileId,
       allowedKinds: [SIGNED_FILE_KIND],
     });
+    const defaultName =
+      row.documentSource === 'proposal'
+        ? 'accepted-proposal.pdf'
+        : 'signed-quotation.pdf';
     const safeName = (
       dl.file.displayName ??
       dl.file.originalName ??
-      'signed-quotation.pdf'
+      defaultName
     )
       .replace(/[\r\n"]/g, '_')
       .trim();
@@ -490,7 +696,7 @@ export class JobSignatureService {
       stream: dl.stream,
       contentLength: dl.contentLength,
       contentType: dl.file.contentType,
-      filename: safeName || 'signed-quotation.pdf',
+      filename: safeName || defaultName,
     };
   }
 
@@ -519,6 +725,13 @@ export class JobSignatureService {
     await this.expireIfNeeded(row);
     if (row.status === 'expired' || row.status === 'cancelled') {
       throw new NotFoundException('Invalid or expired signing link');
+    }
+    if (row.status === 'superseded') {
+      throw new BadRequestException({
+        message:
+          'A newer version of this proposal has been sent. Please use the link from your most recent email.',
+        code: 'PROPOSAL_SUPERSEDED',
+      });
     }
     if (row.status === 'signed') {
       throw new BadRequestException({
@@ -565,6 +778,9 @@ export class JobSignatureService {
     req: Request,
     png: Buffer,
   ): Promise<{ ok: true; referenceCode: string }> {
+    if (row.documentSource === 'proposal' && row.proposalVersionId) {
+      return this.finishClaimedProposalSign(row, dto, req, png);
+    }
     const { pdfBuffer, attachmentFilename, orderNumber, customerName } =
       await this.jobQuotation.buildValidatedQuotationPdf(row.jobId, undefined);
     const forwarded = req.headers['x-forwarded-for'];
@@ -646,5 +862,156 @@ export class JobSignatureService {
       }),
     );
     return { ok: true, referenceCode: row.referenceCode };
+  }
+
+  /**
+   * Proposal acceptance via the e-sign flow. Signs the **stored** proposal
+   * PDF (`ProposalVersion.sentPdfFileId`) — the exact document emailed at
+   * send time — never a fresh regeneration, so the signature binds to what
+   * the customer actually saw even if the design/pricing has since changed.
+   * Moves the `ProposalVersion` to `accepted` via `ProposalsService`
+   * (job price sync + supersede-siblings + timeline all happen there).
+   */
+  private async finishClaimedProposalSign(
+    row: JobSignatureRequest,
+    dto: CompletePublicSignatureDto,
+    req: Request,
+    png: Buffer,
+  ): Promise<{ ok: true; referenceCode: string }> {
+    const version = await this.proposalVersionsRepo.findOne({
+      where: { id: row.proposalVersionId as string },
+    });
+    if (!version || !version.sentPdfFileId) {
+      throw new NotFoundException('Proposal document is not available');
+    }
+    const sourcePdf = await this.files.getJobFileStreamWithKindGate({
+      jobId: row.jobId,
+      fileId: version.sentPdfFileId,
+      allowedKinds: [PROPOSAL_FILE_KIND],
+    });
+    const sourcePdfBuffer = await this.streamToBuffer(sourcePdf.stream);
+
+    const jobRow = await this.jobsRepo.findOne({
+      where: { id: row.jobId },
+      relations: { customer: true },
+    });
+    if (!jobRow) {
+      throw new NotFoundException('Job not found');
+    }
+    const customerName =
+      `${jobRow.customer?.firstName ?? ''} ${jobRow.customer?.lastName ?? ''}`.trim() ||
+      row.signerName ||
+      'Customer';
+
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip =
+      typeof forwarded === 'string'
+        ? forwarded.split(',')[0]?.trim()
+        : req.ip || req.socket.remoteAddress || 'unknown';
+    const signedAtIso = new Date().toISOString();
+    const certLines = [
+      'Electronic acceptance certificate (Fordan Solar CRM)',
+      `Reference: ${row.referenceCode}`,
+      `Order: ${jobRow.orderNumber}`,
+      `Proposal version: ${version.versionNumber}`,
+      `Signer: ${customerName}`,
+      `Email: ${row.signerEmail}`,
+      `Signed at (server UTC): ${signedAtIso}`,
+      `IP address: ${ip}`,
+    ];
+    if (dto.geoLatitude != null && dto.geoLongitude != null) {
+      certLines.push(
+        `Client-reported location: ${dto.geoLatitude}, ${dto.geoLongitude}`,
+      );
+    }
+    certLines.push(
+      `Consent version: ${ESIGN_CONSENT_VERSION}`,
+      'This page was generated when the customer accepted the proposal electronically.',
+    );
+    const merged = await this.pdfMerge.mergeSignatureAndCertificate(
+      sourcePdfBuffer,
+      png,
+      certLines,
+    );
+    const displayName = `Accepted proposal ${jobRow.orderNumber} v${version.versionNumber}`;
+    const auditPayload: Record<string, unknown> = {
+      ip,
+      userAgent:
+        typeof req.headers['user-agent'] === 'string'
+          ? req.headers['user-agent']
+          : null,
+      signedAt: signedAtIso,
+      referenceCode: row.referenceCode,
+      consentVersion: ESIGN_CONSENT_VERSION,
+      proposalVersionId: version.id,
+    };
+    if (dto.geoLatitude != null && dto.geoLongitude != null) {
+      auditPayload.geoLatitude = dto.geoLatitude;
+      auditPayload.geoLongitude = dto.geoLongitude;
+    }
+    const savedFile = await this.files.persistJobGeneratedPdf({
+      jobId: row.jobId,
+      buffer: merged,
+      displayName,
+      kind: SIGNED_FILE_KIND,
+      contentType: 'application/pdf',
+      uploadedByUserId: null,
+      timelineActorUserId: null,
+    });
+
+    // Accept the proposal version — job price sync, supersede-siblings and
+    // the `proposal_accepted` timeline event all happen inside this call.
+    await this.proposals.acceptViaPublicToken(version.id);
+
+    row.status = 'signed';
+    row.signedAt = new Date(signedAtIso);
+    row.signedFileId = savedFile.id;
+    row.auditPayload = auditPayload;
+    await this.signatureRepo.save(row);
+
+    return { ok: true, referenceCode: row.referenceCode };
+  }
+
+  private async streamToBuffer(stream: Readable): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream as AsyncIterable<Buffer | string>) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
+  /**
+   * Customer-facing decline via the public token (P6). Cancels the
+   * signature request (so the link no longer offers signing) and moves the
+   * `ProposalVersion` to `declined` with the reason + a timeline event.
+   */
+  async declinePublicProposal(
+    rawToken: string,
+    reason: string | null,
+  ): Promise<{ ok: true }> {
+    const row = await this.findSignatureRowByRawToken(rawToken);
+    if (!row || row.documentSource !== 'proposal' || !row.proposalVersionId) {
+      throw new NotFoundException('Invalid or expired signing link');
+    }
+    await this.expireIfNeeded(row);
+    if (
+      row.status === 'expired' ||
+      row.status === 'signed' ||
+      row.status === 'superseded'
+    ) {
+      throw new BadRequestException(
+        row.status === 'signed'
+          ? 'This proposal has already been accepted.'
+          : row.status === 'superseded'
+            ? 'A newer version of this proposal has been sent. Please use the link from your most recent email.'
+            : 'Invalid or expired signing link',
+      );
+    }
+    if (row.status !== 'cancelled') {
+      row.status = 'cancelled';
+      await this.signatureRepo.save(row);
+    }
+    await this.proposals.declineViaPublicToken(row.proposalVersionId, reason);
+    return { ok: true };
   }
 }

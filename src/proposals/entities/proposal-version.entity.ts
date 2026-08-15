@@ -31,6 +31,26 @@ export enum ProposalStatus {
 }
 
 /**
+ * Statuses under which a version is a live, current offer — the thing a
+ * customer-facing document may present pricing off of. `DRAFT` is not yet
+ * offered to anyone; `DECLINED`/`EXPIRED`/`SUPERSEDED` were offered but are
+ * no longer live — presenting their price as a confident current quote is
+ * exactly the "declined proposal still prints a confident ROI" defect this
+ * predicate exists to close off. Kept next to `ProposalStatus` (not
+ * duplicated at each consuming call site) so there is exactly one place that
+ * answers "is this version still a live offer".
+ */
+const LIVE_PROPOSAL_STATUSES: ReadonlySet<ProposalStatus> = new Set([
+  ProposalStatus.SENT,
+  ProposalStatus.VIEWED,
+  ProposalStatus.ACCEPTED,
+]);
+
+export function isLiveProposalStatus(status: ProposalStatus): boolean {
+  return LIVE_PROPOSAL_STATUSES.has(status);
+}
+
+/**
  * An immutable-once-sent snapshot of a quote (PRD v2 Phase 2).
  *
  * The existing configurator writes the *current* selection onto the job; a
@@ -64,8 +84,15 @@ export class ProposalVersion {
 
   // ─── Frozen commercial terms ────────────────────────────────────────────
 
-  @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
-  totalPrice: string;
+  /**
+   * Nullable so "no price supplied yet" (`null`) is distinguishable from
+   * "priced at $0" (`'0.00'`) — see `resolveAgreedPrice` in
+   * `jobs/roof-proposal.service.ts`. Existing rows created before this
+   * change persisted an unset price as `'0.00'`; those are left as-is (see
+   * the migration) rather than guessed at.
+   */
+  @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
+  totalPrice: string | null;
 
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
   depositAmount: string;
@@ -133,6 +160,16 @@ export class ProposalVersion {
 
   @Column({ type: 'varchar', length: 200, nullable: true })
   declineReason: string | null;
+
+  /**
+   * The exact PDF (job file) generated and emailed at send time. Every
+   * subsequent public view/sign/accept reads this stored file — never
+   * regenerates from the live design/pricing — so an accepted proposal is
+   * always bound to precisely what the customer was shown, even if the
+   * design or proposal config changes afterwards.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  sentPdfFileId: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   createdByUserId: string | null;

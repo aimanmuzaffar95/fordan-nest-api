@@ -477,4 +477,91 @@ export class CustomerMessagingRendererService {
     );
     return { subject, html };
   }
+
+  /**
+   * The customer-facing solar proposal email (P6, `solar-design-studio.md`
+   * §5). Reuses the `quotationEmail` brand theme (colors/logo/footer are
+   * already configured in Settings → Templates) but the copy is its own —
+   * this is the moment a homeowner who just had a rep at their house opens
+   * their inbox, so it leads with the numbers that matter to them (system
+   * size, annual savings, payback), not "please find attached".
+   */
+  async renderProposalSentCustomerEmail(input: {
+    customerName: string;
+    orderNumber: string;
+    systemSizeLabel: string;
+    annualSavingsLabel: string;
+    paybackLabel: string;
+    offsetPercentLabel: string;
+    /**
+     * True when the headline numbers were computed on a fallback regional
+     * irradiance estimate rather than real site data (simulation warning
+     * `climate-data-unavailable`). Must never be silently dropped — the
+     * copy below is the only place these numbers reach the customer.
+     */
+    provisional: boolean;
+    viewProposalUrl: string;
+  }): Promise<{ subject: string; html: string }> {
+    const { templates, brandLogoUrl } = await this.templates();
+    const q = templates.quotationEmail;
+    const firstName = input.customerName.split(' ')[0] || input.customerName;
+    const ctx = {
+      brandName: q.brandName,
+      customerName: input.customerName,
+      firstName,
+      orderNumber: input.orderNumber,
+      systemSizeLabel: input.systemSizeLabel,
+      annualSavingsLabel: input.annualSavingsLabel,
+      paybackLabel: input.paybackLabel,
+      offsetPercentLabel: input.offsetPercentLabel,
+      currentYear: new Date().getFullYear(),
+    };
+
+    const subject = `Your ${input.systemSizeLabel} solar proposal is ready, ${firstName}`;
+
+    const numbersIntro = input.provisional
+      ? `Here's what your new solar system looks like on your roof, with early estimated numbers behind it:`
+      : `Here's what your new solar system looks like on your roof, with real numbers behind it:`;
+    const numbersLine = input.provisional
+      ? `<strong>${input.systemSizeLabel}</strong> system, provisionally projected to save you <strong>${input.annualSavingsLabel} in year one</strong>, with a payback of roughly <strong>${input.paybackLabel}</strong> and covering about <strong>${input.offsetPercentLabel} of your usage</strong> — these figures are estimates and will be refined once site-specific data is available.`
+      : `<strong>${input.systemSizeLabel}</strong> system, projected to save you <strong>${input.annualSavingsLabel} in year one</strong>, with a payback of roughly <strong>${input.paybackLabel}</strong> and covering about <strong>${input.offsetPercentLabel} of your usage</strong>.`;
+    const bodyHtml = [
+      numbersIntro,
+      numbersLine,
+      `Take a look through the full proposal — the design, production estimate, equipment, and pricing are all inside. When you're ready, you can accept it right from that page.`,
+    ].join('<br /><br />');
+
+    let html = renderTemplate('simple-branded', {
+      primaryHex: q.primaryHex,
+      heroAccentHex: q.heroAccentHex,
+      heroBgHex: q.heroBgHex,
+      heroLeadHex: q.heroLeadHex,
+      bodyTextHex: q.bodyTextHex,
+      bodyMutedHex: q.bodyMutedHex,
+      cardBgHex: q.cardBgHex,
+      borderHex: q.borderHex,
+      pageBgHex: q.pageBgHex,
+      brandHeaderName: q.brandName,
+      brandLogoUrl,
+      footerBrandName: q.footerBrandName,
+      compiledKicker: 'Your solar proposal',
+      compiledHeroTitle: `${input.systemSizeLabel} for your home`,
+      compiledHeroIntro: input.provisional
+        ? `Estimated to save ${input.annualSavingsLabel} in year one (provisional) — take a look and let us know when you're ready.`
+        : `Projected to save ${input.annualSavingsLabel} in year one — take a look and let us know when you're ready.`,
+      compiledBodyHtml: bodyHtml,
+      ctaLabel: 'View your proposal',
+      ctaUrl: input.viewProposalUrl,
+      compiledFooterLine1: this.compile(q.footerLine1Template, ctx),
+      compiledFooterLine2: this.compile(q.footerLine2Template, ctx),
+    });
+
+    html = this.appendGlobalEmailSignature(
+      html,
+      templates,
+      q.appendEmailSignature,
+      ctx,
+    );
+    return { subject, html };
+  }
 }

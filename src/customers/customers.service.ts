@@ -417,6 +417,20 @@ export class CustomersService {
       }
     }
 
+    // ─── Electricity tariff ────────────────────────────────────────────
+    if (typeof dto.importTariffPerKwh !== 'undefined') {
+      customer.importTariffPerKwh = dto.importTariffPerKwh;
+    }
+    if (typeof dto.feedInTariffPerKwh !== 'undefined') {
+      customer.feedInTariffPerKwh = dto.feedInTariffPerKwh;
+    }
+    if (typeof dto.dailySupplyCharge !== 'undefined') {
+      customer.dailySupplyCharge = dto.dailySupplyCharge;
+    }
+    if (typeof dto.averageMonthlyBill !== 'undefined') {
+      customer.averageMonthlyBill = dto.averageMonthlyBill;
+    }
+
     try {
       const updated = await this.customersRepository.save(customer);
       const auditChanges = this.buildCustomerAuditChanges(original, customer);

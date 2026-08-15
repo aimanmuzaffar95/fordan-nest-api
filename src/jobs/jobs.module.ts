@@ -40,6 +40,23 @@ import { RuntimeSettingsModule } from '../runtime-settings/runtime-settings.modu
 import { PermissionsModule } from '../permissions/permissions.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { ProjectsModule } from '../projects/projects.module';
+import { RoofDesign } from '../solar-design/entities/roof-design.entity';
+import { RoofDesignService } from '../solar-design/roof-design.service';
+import { RoofDesignRenderCompositeService } from '../solar-design/roof-design-render-composite.service';
+import { SolarTileProxyService } from '../solar-design/solar-tile-proxy.service';
+import { SolarImageryService } from '../solar-design/solar-imagery.service';
+import { ProposalVersion } from '../proposals/entities/proposal-version.entity';
+// Not importing `ProposalsModule` here: SolarDesignModule already imports
+// JobsModule and ProposalsModule imports SolarDesignModule, so that would
+// close a cycle. Following the existing pattern in this file (RoofDesign
+// entity/services are independently re-provided rather than imported via
+// SolarDesignModule), ProposalsService is re-provided directly below with
+// its own `ProposalVersion`/`TimelineEvent` repositories (already
+// registered in this module's `TypeOrmModule.forFeature`).
+import { ProposalsService } from '../proposals/proposals.service';
+import { RoofProposalPdfService } from './roof-proposal-pdf.service';
+import { RoofProposalService } from './roof-proposal.service';
+import { JobProposalSendService } from './job-proposal-send.service';
 
 @Module({
   imports: [
@@ -71,6 +88,8 @@ import { ProjectsModule } from '../projects/projects.module';
       SolarPanel,
       Inverter,
       Battery,
+      RoofDesign,
+      ProposalVersion,
     ]),
   ],
   controllers: [
@@ -90,6 +109,14 @@ import { ProjectsModule } from '../projects/projects.module';
     LeadCaptureInsightsService,
     AdminDashboardReportsService,
     InstallerReportsService,
+    RoofDesignService,
+    RoofDesignRenderCompositeService,
+    SolarTileProxyService,
+    SolarImageryService,
+    RoofProposalPdfService,
+    RoofProposalService,
+    ProposalsService,
+    JobProposalSendService,
   ],
   exports: [JobsService, JobAuditLogsService],
 })

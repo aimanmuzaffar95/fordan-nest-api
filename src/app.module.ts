@@ -95,6 +95,7 @@ import { QualificationModule } from './qualification/qualification.module';
 import { SurveysModule } from './surveys/surveys.module';
 import { SiteSurvey } from './surveys/entities/site-survey.entity';
 import { ProposalsModule } from './proposals/proposals.module';
+import { SolarDesignModule } from './solar-design/solar-design.module';
 import { ProposalVersion } from './proposals/entities/proposal-version.entity';
 import { FinancingModule } from './financing/financing.module';
 import { FinancingApplication } from './financing/entities/financing-application.entity';
@@ -179,6 +180,35 @@ const publicLeadThrottleTtl = Number(
 );
 const publicLeadThrottleLimit = Number(
   process.env.PUBLIC_LEAD_THROTTLE_LIMIT ?? '12',
+);
+
+// The public e-sign/proposal surface (`/public/sign/**`) previously shared
+// the public-lead bucket (12 req/60s) even though a single normal customer
+// page load already spends 3 of those (session + view + PDF), before ever
+// touching signing/accept/decline. Give it its own named bucket sized for a
+// real customer flow, applied via `@Throttle({ 'public-sign': ... })` +
+// `@SkipThrottle({ default: true })` on `PublicSignatureController`.
+const publicSignThrottleTtl = Number(
+  process.env.PUBLIC_SIGN_THROTTLE_TTL_MS ?? '60000',
+);
+const publicSignThrottleLimit = Number(
+  process.env.PUBLIC_SIGN_THROTTLE_LIMIT ?? '40',
+);
+
+// `GET /solar-design/tiles/:z/:x/:y` and `POST /jobs/:jobId/roof-design/render`
+// (fallback path) are the only authenticated routes that turn one inbound
+// request into unbounded *outbound* fetches on the app's behalf (tile-grid
+// stitching against the upstream imagery provider). The app's default
+// bucket above is sized for ordinary CRUD traffic, not outbound fan-out, so
+// give these their own tighter named bucket rather than inheriting it —
+// applied via `@Throttle({ 'solar-imagery-outbound': ... })` +
+// `@SkipThrottle({ default: true })` on the relevant `SolarDesignController`
+// routes.
+const solarImageryOutboundThrottleTtl = Number(
+  process.env.SOLAR_IMAGERY_OUTBOUND_THROTTLE_TTL_MS ?? '60000',
+);
+const solarImageryOutboundThrottleLimit = Number(
+  process.env.SOLAR_IMAGERY_OUTBOUND_THROTTLE_LIMIT ?? '60',
 );
 
 getSettingsEncryptionKey();
@@ -302,8 +332,19 @@ getSettingsEncryptionKey();
     ThrottlerModule.forRoot({
       throttlers: [
         {
+          name: 'default',
           ttl: publicLeadThrottleTtl,
           limit: publicLeadThrottleLimit,
+        },
+        {
+          name: 'public-sign',
+          ttl: publicSignThrottleTtl,
+          limit: publicSignThrottleLimit,
+        },
+        {
+          name: 'solar-imagery-outbound',
+          ttl: solarImageryOutboundThrottleTtl,
+          limit: solarImageryOutboundThrottleLimit,
         },
       ],
     }),
@@ -325,6 +366,7 @@ getSettingsEncryptionKey();
     QualificationModule,
     SurveysModule,
     ProposalsModule,
+    SolarDesignModule,
     FinancingModule,
     DocumentTaxonomyModule,
     ProjectsModule,
