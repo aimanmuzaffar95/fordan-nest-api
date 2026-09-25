@@ -4,6 +4,8 @@ import { Customer } from '../customers/entities/customer.entity';
 import { Job } from '../jobs/entities/job.entity';
 import { Project } from '../projects/entities/project.entity';
 import { RuntimeSettingsModule } from '../runtime-settings/runtime-settings.module';
+import { ComplaintsModule } from '../complaints/complaints.module';
+import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { PortalAccessToken } from './entities/portal-access-token.entity';
 import {
   CustomerPortalAdminController,
@@ -13,8 +15,15 @@ import { CustomerPortalService } from './customer-portal.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PortalAccessToken, Job, Customer, Project]),
+    TypeOrmModule.forFeature([
+      PortalAccessToken,
+      Job,
+      Customer,
+      Project,
+      TimelineEvent,
+    ]),
     RuntimeSettingsModule,
+    ComplaintsModule,
   ],
   controllers: [CustomerPortalAdminController, CustomerPortalPublicController],
   providers: [CustomerPortalService],

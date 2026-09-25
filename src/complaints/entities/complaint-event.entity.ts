@@ -85,6 +85,10 @@ export class ComplaintEvent {
   @Column({ type: 'uuid', nullable: true })
   actorUserId: string | null;
 
+  /** True when the customer wrote this from the portal (`actorUserId` is null). */
+  @Column({ type: 'boolean', default: false })
+  fromCustomer: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }

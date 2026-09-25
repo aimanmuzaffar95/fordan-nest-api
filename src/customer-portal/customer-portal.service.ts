@@ -13,6 +13,11 @@ import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.ser
 import { isFeatureEnabled } from '../feature-flags/feature-flags.config';
 import { Project } from '../projects/entities/project.entity';
 import { PortalAccessToken } from './entities/portal-access-token.entity';
+import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
+import {
+  ComplaintsService,
+  PortalTicket,
+} from '../complaints/complaints.service';
 
 /** Default link lifetime. Long enough to be useful, short enough to expire. */
 const DEFAULT_TTL_DAYS = 90;
@@ -39,6 +44,37 @@ export type PortalStatusView = {
   /** Scheduled install date, when one is set and confirmed. */
   scheduledInstallDate: string | null;
   completedAt: string | null;
+  /** How to reach the installer — from Settings → Company profile. */
+  support: { companyName: string; phone: string | null; email: string | null };
+  /** Newest first. Plain-language progress notes derived from the job timeline. */
+  updates: { at: string; text: string }[];
+};
+
+/** Timeline event types the customer may see, and how to phrase them. */
+const UPDATE_TEXT: Record<
+  string,
+  (payload: Record<string, unknown>) => string | null
+> = {
+  job_created: () => 'We received your enquiry.',
+  proposal_sent: () => 'Your proposal has been sent to you.',
+  proposal_accepted: () => 'Thanks — your proposal was accepted.',
+  pre_meter: () => 'Your connection paperwork has been submitted.',
+  post_meter: () => 'Final connection paperwork has been submitted.',
+  meter_status_change: (p) =>
+    p.status === 'approved'
+      ? 'Your connection paperwork was approved.'
+      : p.status === 'rejected'
+        ? 'Some paperwork needs another look — we are on it.'
+        : null,
+  stage_change: (p) => {
+    const idx =
+      typeof p.toStage === 'string'
+        ? STAGE_TO_MILESTONE_INDEX[p.toStage]
+        : undefined;
+    return typeof idx === 'number'
+      ? `Progress: ${MILESTONE_SEQUENCE[idx].label.toLowerCase()}.`
+      : null;
+  },
 };
 
 /** Ordered customer-facing journey, mapped from internal stages. */
@@ -78,8 +114,71 @@ export class CustomerPortalService {
     private readonly customerRepo: Repository<Customer>,
     @InjectRepository(Project)
     private readonly projectRepo: Repository<Project>,
+    @InjectRepository(TimelineEvent)
+    private readonly timelineRepo: Repository<TimelineEvent>,
     private readonly settings: RuntimeSettingsService,
+    private readonly complaints: ComplaintsService,
   ) {}
+
+  /**
+   * Resolve a live portal token to its job and customer, or 404. Every
+   * failure is the same 404 so tokens cannot be enumerated.
+   */
+  private async resolveLiveToken(
+    token: string,
+  ): Promise<{ record: PortalAccessToken; job: Job; customer: Customer }> {
+    const flags = await this.settings.getFeatureFlags();
+    if (!flags.customerPortal?.enabled) {
+      throw new NotFoundException('Not found');
+    }
+    if (!token || token.length < 20) {
+      throw new NotFoundException('Not found');
+    }
+    const record = await this.tokenRepo.findOne({
+      where: { tokenHash: this.hash(token) },
+    });
+    if (
+      !record ||
+      record.revokedAt !== null ||
+      record.expiresAt.getTime() <= Date.now()
+    ) {
+      throw new NotFoundException('Not found');
+    }
+    const job = await this.jobRepo.findOne({ where: { id: record.jobId } });
+    const customer = await this.customerRepo.findOne({
+      where: { id: record.customerId },
+    });
+    if (!job || !customer) throw new NotFoundException('Not found');
+    return { record, job, customer };
+  }
+
+  async ticketsForToken(token: string): Promise<PortalTicket[]> {
+    const { job } = await this.resolveLiveToken(token);
+    return this.complaints.listForPortal(job.id);
+  }
+
+  async createTicketForToken(
+    token: string,
+    subject: string,
+    body: string,
+  ): Promise<PortalTicket> {
+    const { job, customer } = await this.resolveLiveToken(token);
+    return this.complaints.createFromPortal({
+      jobId: job.id,
+      customerId: customer.id,
+      subject,
+      body,
+    });
+  }
+
+  async replyForToken(
+    token: string,
+    ticketId: string,
+    body: string,
+  ): Promise<PortalTicket> {
+    const { job } = await this.resolveLiveToken(token);
+    return this.complaints.addCustomerMessage(ticketId, job.id, body);
+  }
 
   private hash(token: string): string {
     return createHash('sha256').update(token).digest('hex');
@@ -153,34 +252,7 @@ export class CustomerPortalService {
    * which tokens exist.
    */
   async statusForToken(token: string): Promise<PortalStatusView> {
-    // Public surface: only the on/off switch matters. `isFeatureEnabled` with
-    // no role returns false whenever the flag is scoped to specific roles,
-    // which made every customer link 404 on a tenant that had enabled the
-    // portal for admins/managers only (the staff who issue the links).
-    const flags = await this.settings.getFeatureFlags();
-    if (!flags.customerPortal?.enabled) {
-      throw new NotFoundException('Not found');
-    }
-    if (!token || token.length < 20) {
-      throw new NotFoundException('Not found');
-    }
-
-    const record = await this.tokenRepo.findOne({
-      where: { tokenHash: this.hash(token) },
-    });
-    if (
-      !record ||
-      record.revokedAt !== null ||
-      record.expiresAt.getTime() <= Date.now()
-    ) {
-      throw new NotFoundException('Not found');
-    }
-
-    const job = await this.jobRepo.findOne({ where: { id: record.jobId } });
-    const customer = await this.customerRepo.findOne({
-      where: { id: record.customerId },
-    });
-    if (!job || !customer) throw new NotFoundException('Not found');
+    const { record, job, customer } = await this.resolveLiveToken(token);
 
     await this.tokenRepo.update(
       { id: record.id },
@@ -224,6 +296,25 @@ export class CustomerPortalService {
     setDate('installed', installedDate);
     setDate('connected', ptoDate);
 
+    const [company, timeline] = await Promise.all([
+      this.settings.getSettings().then((all) => all.companyProfileSettings),
+      this.timelineRepo.find({
+        where: { jobId: job.id },
+        order: { createdAt: 'DESC' },
+        take: 40,
+      }),
+    ]);
+    const updates = timeline
+      .map((event) => {
+        const phrase = UPDATE_TEXT[event.type];
+        const text = phrase
+          ? phrase((event.payload ?? {}) as Record<string, unknown>)
+          : null;
+        return text ? { at: event.createdAt.toISOString(), text } : null;
+      })
+      .filter((u): u is { at: string; text: string } => u !== null)
+      .slice(0, 10);
+
     return {
       customerFirstName: customer.firstName,
       // Order number only. No pricing, no staff names, no internal notes.
@@ -234,6 +325,12 @@ export class CustomerPortalService {
       milestones,
       scheduledInstallDate: scheduledDate,
       completedAt: ptoDate,
+      support: {
+        companyName: company.tradingName || company.legalName,
+        phone: company.supportPhone,
+        email: company.supportEmail,
+      },
+      updates,
     };
   }
 

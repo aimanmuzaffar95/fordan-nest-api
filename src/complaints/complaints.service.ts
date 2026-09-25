@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, type SelectQueryBuilder } from 'typeorm';
+import { In, IsNull, Repository, type SelectQueryBuilder } from 'typeorm';
 import { Customer } from '../customers/entities/customer.entity';
 import { Job } from '../jobs/entities/job.entity';
 import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
@@ -32,6 +32,21 @@ type Viewer = { userId: string; role: UserRole };
 
 /** Roles allowed to see every complaint, not just their own assignments. */
 const PRIVILEGED_ROLES = new Set([UserRole.ADMIN, UserRole.MANAGER]);
+
+export type PortalTicket = {
+  id: string;
+  subject: string;
+  status: ComplaintStatus;
+  createdAt: string;
+  updatedAt: string;
+  messages: {
+    id: string;
+    body: string;
+    fromCustomer: boolean;
+    author: string;
+    createdAt: string;
+  }[];
+};
 
 @Injectable()
 export class ComplaintsService {
@@ -205,6 +220,177 @@ export class ComplaintsService {
     );
 
     return this.findOne(saved.id, viewer);
+  }
+
+  // ─── Customer portal ──────────────────────────────────────────────────────
+
+  /** Customer-visible view: replies only, never internal notes or actors' ids. */
+  private toPortalTicket(
+    complaint: Complaint,
+    events: ComplaintEvent[],
+  ): PortalTicket {
+    return {
+      id: complaint.id,
+      subject: complaint.subject,
+      status: complaint.status,
+      createdAt: complaint.createdAt.toISOString(),
+      updatedAt: complaint.updatedAt.toISOString(),
+      messages: events
+        .filter((e) => e.type === ComplaintEventType.REPLY && e.body)
+        .map((e) => ({
+          id: e.id,
+          body: e.body as string,
+          fromCustomer: e.fromCustomer,
+          author: e.fromCustomer
+            ? 'You'
+            : (e.actorUser?.firstName ?? '').trim() || 'Support team',
+          createdAt: e.createdAt.toISOString(),
+        })),
+    };
+  }
+
+  async listForPortal(jobId: string): Promise<PortalTicket[]> {
+    const complaints = await this.complaintRepo.find({
+      where: { jobId },
+      order: { createdAt: 'DESC' },
+    });
+    if (complaints.length === 0) return [];
+    const events = await this.eventRepo.find({
+      where: { complaintId: In(complaints.map((c) => c.id)) },
+      relations: { actorUser: true },
+      order: { createdAt: 'ASC' },
+    });
+    return complaints.map((c) =>
+      this.toPortalTicket(
+        c,
+        events.filter((e) => e.complaintId === c.id),
+      ),
+    );
+  }
+
+  async createFromPortal(input: {
+    jobId: string;
+    customerId: string;
+    subject: string;
+    body: string;
+  }): Promise<PortalTicket> {
+    const saved = await this.complaintRepo.save(
+      this.complaintRepo.create({
+        subject: input.subject.trim(),
+        status: ComplaintStatus.NEW,
+        priority: ComplaintPriority.NORMAL,
+        channel: 'portal',
+        customerId: input.customerId,
+        jobId: input.jobId,
+        assigneeUserId: null,
+        createdByUserId: null,
+        solvedAt: null,
+        closedAt: null,
+      }),
+    );
+    const events = await this.eventRepo.save(
+      this.eventRepo.create([
+        {
+          complaintId: saved.id,
+          type: ComplaintEventType.CREATED,
+          body: null,
+          actorUserId: null,
+          fromCustomer: true,
+        },
+        {
+          complaintId: saved.id,
+          type: ComplaintEventType.REPLY,
+          body: input.body.trim(),
+          actorUserId: null,
+          fromCustomer: true,
+        },
+      ]),
+    );
+    await this.notifyStaffOfCustomerMessage(saved, input.body);
+    return this.toPortalTicket(saved, events);
+  }
+
+  async addCustomerMessage(
+    complaintId: string,
+    jobId: string,
+    body: string,
+  ): Promise<PortalTicket> {
+    const complaint = await this.complaintRepo.findOne({
+      where: { id: complaintId, jobId },
+    });
+    if (!complaint) throw new NotFoundException('Not found');
+    if (complaint.status === ComplaintStatus.CLOSED) {
+      throw new BadRequestException(
+        'This ticket is closed. Please start a new one.',
+      );
+    }
+    const events: Partial<ComplaintEvent>[] = [
+      {
+        complaintId,
+        type: ComplaintEventType.REPLY,
+        body: body.trim(),
+        actorUserId: null,
+        fromCustomer: true,
+      },
+    ];
+    // A customer writing back on a solved ticket reopens it — same rule as
+    // every helpdesk, and the only way the reply is seen in the "unsolved" queue.
+    if (complaint.status === ComplaintStatus.SOLVED) {
+      events.push({
+        complaintId,
+        type: ComplaintEventType.STATUS_CHANGE,
+        body: null,
+        statusFrom: complaint.status,
+        statusTo: ComplaintStatus.OPEN,
+        actorUserId: null,
+        fromCustomer: true,
+      });
+      complaint.status = ComplaintStatus.OPEN;
+      complaint.solvedAt = null;
+    }
+    await this.complaintRepo.save(complaint);
+    await this.eventRepo.save(this.eventRepo.create(events));
+    await this.notifyStaffOfCustomerMessage(complaint, body);
+    const all = await this.eventRepo.find({
+      where: { complaintId },
+      relations: { actorUser: true },
+      order: { createdAt: 'ASC' },
+    });
+    return this.toPortalTicket(complaint, all);
+  }
+
+  /** Assignee, else the job's manager, else every active admin. */
+  private async notifyStaffOfCustomerMessage(
+    complaint: Complaint,
+    body: string,
+  ): Promise<void> {
+    let recipients: string[] = [];
+    if (complaint.assigneeUserId) {
+      recipients = [complaint.assigneeUserId];
+    } else {
+      const job = complaint.jobId
+        ? await this.jobRepo.findOne({ where: { id: complaint.jobId } })
+        : null;
+      if (job?.managerId) {
+        recipients = [job.managerId];
+      } else {
+        const admins = await this.userRepo.find({
+          where: { role: UserRole.ADMIN, active: true, deletedAt: IsNull() },
+        });
+        recipients = admins.map((a) => a.id);
+      }
+    }
+    if (recipients.length === 0) return;
+    await this.notifications.sendToUsers(recipients, {
+      type: NOTIFICATION_TYPE.TASK_ASSIGNED,
+      title: 'Customer message on a ticket',
+      body: `${complaint.subject}: ${body.trim().slice(0, 140)}`,
+      metadata: {
+        complaintId: complaint.id,
+        jobId: complaint.jobId,
+        customerId: complaint.customerId,
+      },
+    });
   }
 
   // ─── Status / assignment transition rules ─────────────────────────────────
@@ -422,6 +608,7 @@ export class ComplaintsService {
       subject: complaint.subject,
       status: complaint.status,
       priority: complaint.priority,
+      channel: complaint.channel ?? 'staff',
       customerId: complaint.customerId,
       customerName: complaint.customer
         ? `${complaint.customer.firstName} ${complaint.customer.lastName}`.trim()
@@ -463,6 +650,7 @@ export class ComplaintsService {
       assigneeFromUserId: event.assigneeFromUserId,
       assigneeToUserId: event.assigneeToUserId,
       actorUserId: event.actorUserId,
+      fromCustomer: event.fromCustomer ?? false,
       actorName: actor
         ? `${actor.firstName ?? ''} ${actor.lastName ?? ''}`.trim() || null
         : null,

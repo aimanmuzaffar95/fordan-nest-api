@@ -51,6 +51,10 @@ export class Complaint {
   })
   priority: ComplaintPriority;
 
+  /** Where the ticket came from: raised by staff, or by the customer from the portal. */
+  @Column({ type: 'varchar', length: 20, default: 'staff' })
+  channel: 'staff' | 'portal';
+
   @ManyToOne(() => Customer, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'customerId' })
   customer: Customer | null;

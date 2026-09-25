@@ -17,7 +17,15 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -34,6 +42,25 @@ function viewerOf(req: AuthRequest): { userId: string; role: UserRole } {
   const role = req.user?.role;
   if (!userId || !role) throw new Error('Missing authenticated user context');
   return { userId, role };
+}
+
+export class PortalTicketDto {
+  @IsString()
+  @MinLength(3)
+  @MaxLength(200)
+  subject!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(5000)
+  body!: string;
+}
+
+export class PortalMessageDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(5000)
+  body!: string;
 }
 
 export class IssuePortalTokenDto {
@@ -108,5 +135,36 @@ export class CustomerPortalPublicController {
   })
   status(@Query('token') token: string) {
     return this.portal.statusForToken(token ?? '');
+  }
+
+  @Get('tickets')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Tickets the customer raised (or staff replied to) for this job',
+    description:
+      'No authentication. Replies only — internal notes and staff identities are never exposed.',
+  })
+  tickets(@Query('token') token: string) {
+    return this.portal.ticketsForToken(token ?? '');
+  }
+
+  @Post('tickets')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Customer raises a ticket for this job' })
+  createTicket(@Query('token') token: string, @Body() dto: PortalTicketDto) {
+    return this.portal.createTicketForToken(token ?? '', dto.subject, dto.body);
+  }
+
+  @Post('tickets/:ticketId/messages')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Customer replies on a ticket (reopens it if it was solved)',
+  })
+  reply(
+    @Query('token') token: string,
+    @Param('ticketId', ParseUUIDPipe) ticketId: string,
+    @Body() dto: PortalMessageDto,
+  ) {
+    return this.portal.replyForToken(token ?? '', ticketId, dto.body);
   }
 }

@@ -10,6 +10,8 @@ import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.ser
 import { defaultFeatureFlags } from '../feature-flags/feature-flags.config';
 import { Project } from '../projects/entities/project.entity';
 import { PortalAccessToken } from './entities/portal-access-token.entity';
+import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
+import { ComplaintsService } from '../complaints/complaints.service';
 import { CustomerPortalService } from './customer-portal.service';
 
 type Mocked<T> = { [K in keyof T]: jest.Mock };
@@ -73,6 +75,14 @@ describe('CustomerPortalService', () => {
 
     settings = {
       getFeatureFlags: jest.fn().mockResolvedValue(flagsOn()),
+      getSettings: jest.fn().mockResolvedValue({
+        companyProfileSettings: {
+          legalName: 'Fordan',
+          tradingName: null,
+          supportPhone: null,
+          supportEmail: null,
+        },
+      }),
     } as unknown as Mocked<RuntimeSettingsService>;
 
     const moduleRef = await Test.createTestingModule({
@@ -93,6 +103,11 @@ describe('CustomerPortalService', () => {
           useValue: { findOne: jest.fn().mockResolvedValue(null) },
         },
         { provide: RuntimeSettingsService, useValue: settings },
+        {
+          provide: getRepositoryToken(TimelineEvent),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        { provide: ComplaintsService, useValue: {} },
       ],
     }).compile();
 

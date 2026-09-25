@@ -36,6 +36,11 @@ export class ComplaintEventResponseDto {
   @ApiPropertyOptional({ nullable: true })
   actorName: string | null;
 
+  @ApiProperty({
+    description: 'True when the customer wrote this from the portal.',
+  })
+  fromCustomer: boolean;
+
   @ApiProperty()
   createdAt: string;
 }
@@ -52,6 +57,12 @@ export class ComplaintResponseDto {
 
   @ApiProperty({ enum: ComplaintPriority })
   priority: ComplaintPriority;
+
+  @ApiProperty({
+    enum: ['staff', 'portal'],
+    description: 'Raised by staff, or by the customer from the portal.',
+  })
+  channel: 'staff' | 'portal';
 
   @ApiPropertyOptional({ nullable: true })
   customerId: string | null;
