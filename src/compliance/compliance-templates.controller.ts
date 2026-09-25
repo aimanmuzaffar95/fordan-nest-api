@@ -62,7 +62,7 @@ export class ComplianceTemplatesController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('compliance:template:manage')
   @ApiOperation({ summary: 'Create a compliance template (admin only)' })
   create(@Body() dto: CreateComplianceTemplateDto) {
@@ -70,7 +70,7 @@ export class ComplianceTemplatesController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('compliance:template:manage')
   @ApiOperation({ summary: 'Update a compliance template (admin only)' })
   update(

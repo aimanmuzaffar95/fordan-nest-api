@@ -177,7 +177,7 @@ export class ProjectsController {
   }
 
   @Delete('permits/:permitId')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('project:manage')
   @ApiOperation({ summary: 'Delete a permit (admin)' })
   @ApiParam({ name: 'permitId', description: 'Permit UUID' })
@@ -189,7 +189,7 @@ export class ProjectsController {
   }
 
   @Post('permits/sweep-stalled')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('project:manage')
   @ApiOperation({
     summary: 'Flag permits stalled with an authority (admin)',
@@ -317,7 +317,7 @@ export class ProjectsController {
   }
 
   @Delete('project-notes/:noteId')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('project:manage')
   @ApiOperation({ summary: 'Delete a project note (admin)' })
   @ApiParam({ name: 'noteId', description: 'Project note UUID' })

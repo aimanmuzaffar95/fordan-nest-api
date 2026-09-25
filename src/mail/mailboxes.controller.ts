@@ -26,7 +26,7 @@ import { CreateMailboxDto, UpdateMailboxDto } from './dto/mailbox.dto';
 @ApiBearerAuth('JWT')
 @Controller('settings/mailboxes')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
-@Roles(UserRole.ADMIN)
+@Roles(UserRole.ADMIN, UserRole.MANAGER)
 @RequirePermission('mailbox:manage')
 export class MailboxesController {
   constructor(private readonly mail: MailService) {}

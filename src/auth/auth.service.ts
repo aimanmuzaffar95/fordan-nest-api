@@ -15,6 +15,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { UserCredential } from './entities/user-credential.entity';
 import { UserRole } from '../users/entities/user-role.enum';
+import { hasActiveTemporaryAdmin } from '../users/temporary-admin.util';
 import { SystemAuditLogService } from '../system-audit/system-audit-log.service';
 import { SYSTEM_AUDIT_ACTION } from '../system-audit/system-audit-action.constants';
 import { McpAccessService } from '../mcp-access/mcp-access.service';
@@ -42,7 +43,12 @@ export type McpAuthResult = {
 
 export type AuthProfile = {
   id: string;
+  /** Effective role: `admin` while a temporary admin grant is active. */
   role: UserRole;
+  /** The role stored on the account (what `role` reverts to when the grant lapses). */
+  baseRole: UserRole;
+  /** ISO expiry of the temporary admin grant, or null. */
+  temporaryAdminUntil: string | null;
   firstName: string;
   lastName: string;
   emailAddress: string;
@@ -312,9 +318,14 @@ export class AuthService implements OnModuleInit {
   }
 
   private toAuthProfile(credential: UserCredential): AuthProfile {
+    const elevated = hasActiveTemporaryAdmin(credential.user);
     return {
       id: credential.user.id,
-      role: credential.user.role,
+      role: elevated ? UserRole.ADMIN : credential.user.role,
+      baseRole: credential.user.role,
+      temporaryAdminUntil: elevated
+        ? new Date(credential.user.adminUntil as Date).toISOString()
+        : null,
       firstName: credential.user.firstName,
       lastName: credential.user.lastName,
       emailAddress: credential.user.emailAddress,

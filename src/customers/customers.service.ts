@@ -80,7 +80,10 @@ export class CustomersService {
     private readonly leadRouting: LeadRoutingService,
   ) {}
 
-  async create(dto: CreateCustomerDto): Promise<CustomerResponseDto> {
+  async create(
+    dto: CreateCustomerDto,
+    creator?: { userId?: string; role?: UserRole },
+  ): Promise<CustomerResponseDto> {
     const existing = await this.customersRepository.findOne({
       where: { email: dto.email },
     });
@@ -94,6 +97,17 @@ export class CustomersService {
         dto.acquisitionSource,
         dto.acquisitionSourceOther,
       );
+
+    // A manager who captures a lead owns it. Without this, a manager-created
+    // customer had no managed job yet, so `applyViewerScope` (own scope)
+    // hid it from its own creator: 404 on the detail page and on
+    // POST /customers/:id/jobs — the manager could create a lead and then
+    // do nothing with it.
+    const leadOwnerUserId =
+      dto.leadOwnerUserId ??
+      (creator?.role === UserRole.MANAGER && creator.userId
+        ? creator.userId
+        : null);
 
     const customer = this.customersRepository.create({
       firstName: dto.firstName,
@@ -115,13 +129,13 @@ export class CustomersService {
       leadCapturedAt: dto.leadCapturedAt
         ? new Date(dto.leadCapturedAt)
         : new Date(),
-      leadOwnerUserId: dto.leadOwnerUserId ?? null,
-      leadOwnershipHistory: dto.leadOwnerUserId
+      leadOwnerUserId,
+      leadOwnershipHistory: leadOwnerUserId
         ? [
             {
-              userId: dto.leadOwnerUserId,
+              userId: leadOwnerUserId,
               assignedAt: new Date().toISOString(),
-              assignedByUserId: null,
+              assignedByUserId: creator?.userId ?? null,
               reason: 'initial_owner',
             },
           ]
@@ -666,9 +680,12 @@ export class CustomersService {
       .where('job_scope.managerId = :managerUserId')
       .getQuery();
 
-    return qb.andWhere(`customer.id IN ${managerScopeSubQuery}`, {
-      managerUserId: viewer.userId,
-    });
+    // Own scope = customers with a job this manager runs OR leads this
+    // manager owns (see `create`): a fresh lead has no job yet.
+    return qb.andWhere(
+      `(customer.id IN ${managerScopeSubQuery} OR customer.leadOwnerUserId = :managerUserId)`,
+      { managerUserId: viewer.userId },
+    );
   }
 
   private buildCustomerAuditChanges(

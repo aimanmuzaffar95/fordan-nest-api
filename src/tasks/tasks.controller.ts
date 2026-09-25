@@ -93,7 +93,7 @@ export class TasksController {
   }
 
   @Post('sweep-sla')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('task:manage')
   @ApiOperation({
     summary: 'Run the SLA sweep now (admin only)',

@@ -15,6 +15,7 @@ import { ALLOW_PASSWORD_RESET_REQUIRED_KEY } from '../decorators/allow-password-
 import { resolveJwtSecret } from '../jwt-secret.util';
 import { UserCredential } from '../entities/user-credential.entity';
 import { UserRole } from '../../users/entities/user-role.enum';
+import { hasActiveTemporaryAdmin } from '../../users/temporary-admin.util';
 
 type JwtPayload = {
   sub: string;
@@ -23,6 +24,8 @@ type JwtPayload = {
   tv?: number;
   mcp?: boolean;
   mcpWrites?: boolean;
+  /** True when a MANAGER is acting as ADMIN under a temporary grant. */
+  elevated?: boolean;
 };
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -114,6 +117,16 @@ export class JwtAuthGuard implements CanActivate {
       if (!payload.mcp && credential.user.role) {
         payload.role = credential.user.role;
         payload.isAdmin = credential.user.role === UserRole.ADMIN;
+        // Temporary admin grant on a manager: act as ADMIN for this request.
+        // Resolved from the DB row, never the token, so revocation is
+        // immediate and expiry needs no re-login.
+        if (hasActiveTemporaryAdmin(credential.user)) {
+          payload.role = UserRole.ADMIN;
+          payload.isAdmin = true;
+          payload.elevated = true;
+        } else {
+          payload.elevated = false;
+        }
       }
 
       request.user = payload;

@@ -74,7 +74,7 @@ export class FinancingController {
   }
 
   @Post('financing/sweep-expiries')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('financing:manage')
   @ApiOperation({
     summary: 'Warn on and expire lapsed approvals (admin)',

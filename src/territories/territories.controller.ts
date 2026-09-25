@@ -62,7 +62,7 @@ export class TerritoriesController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('territory:manage')
   @ApiOperation({ summary: 'Create a territory (admin)' })
   create(@Body() dto: CreateTerritoryDto, @Req() req: AuthRequest) {
@@ -96,7 +96,7 @@ export class TerritoriesController {
   }
 
   @Post('reassign-stale')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('territory:manage')
   @ApiOperation({
     summary: 'Reassign leads past their territory SLA (admin)',
@@ -126,7 +126,7 @@ export class TerritoriesController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('territory:manage')
   @ApiOperation({
     summary: 'Update a territory (admin)',
@@ -143,7 +143,7 @@ export class TerritoriesController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('territory:manage')
   @ApiOperation({
     summary: 'Retire a territory (admin)',

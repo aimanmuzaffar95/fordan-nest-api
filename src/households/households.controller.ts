@@ -71,7 +71,7 @@ export class HouseholdsController {
   }
 
   @Post('household-keys/backfill')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('household:manage')
   @ApiOperation({
     summary: 'Backfill household keys (admin)',
@@ -131,7 +131,7 @@ export class HouseholdsController {
   }
 
   @Post(':id/merge')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('household:manage')
   @ApiOperation({
     summary: 'Merge another customer into this one (admin)',

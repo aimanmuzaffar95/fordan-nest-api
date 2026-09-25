@@ -59,6 +59,14 @@ export class User {
   @Column({ type: 'boolean', default: true })
   active: boolean;
 
+  /**
+   * Temporary admin access for a MANAGER. While this is in the future the
+   * user is treated as ADMIN everywhere (JWT guard, permission resolution,
+   * /auth/me). Null or past = plain manager. See users/temporary-admin.util.ts.
+   */
+  @Column({ type: resolveTimestampColumnType(), nullable: true })
+  adminUntil: Date | null;
+
   @OneToOne(() => UserCredential, (credential) => credential.user)
   credential: UserCredential;
 

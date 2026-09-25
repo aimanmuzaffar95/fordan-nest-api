@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -19,6 +18,7 @@ import { PermissionsService } from '../permissions/permissions.service';
 import { SystemAuditLogService } from '../system-audit/system-audit-log.service';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
+import { MAX_TEMPORARY_ADMIN_DAYS } from '../users/temporary-admin.util';
 import { CreateEmployeeRoleDto } from './dto/create-employee-role.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { CreateStaffRoleDto } from './dto/create-staff-role.dto';
@@ -58,6 +58,8 @@ export type StaffListItem = {
     | UserRole.ADMIN;
   emailAddress: string;
   username: string;
+  /** ISO expiry of a temporary admin grant (managers only), else null. */
+  adminUntil: string | null;
   staffRole: StaffRoleSummary | null;
   employeeRole: EmployeeRoleSummary | null;
 };
@@ -720,6 +722,49 @@ export class StaffService {
     }
   }
 
+  /**
+   * Grant (future `until`) or revoke (`null`) temporary admin access on a
+   * manager. Expiry is enforced at read time (`hasActiveTemporaryAdmin`), so
+   * nothing needs to sweep lapsed grants.
+   */
+  async setTemporaryAdmin(
+    id: string,
+    until: Date | null,
+    actorUserId: string,
+  ): Promise<StaffListItem> {
+    const existing = await this.findActiveStaffOrFail(id);
+    if (existing.role !== UserRole.MANAGER) {
+      throw new BadRequestException(
+        'Temporary admin access can only be granted to managers',
+      );
+    }
+    if (until) {
+      if (Number.isNaN(until.getTime()) || until.getTime() <= Date.now()) {
+        throw new BadRequestException('until must be a future date');
+      }
+      const maxMs = MAX_TEMPORARY_ADMIN_DAYS * 24 * 60 * 60 * 1000;
+      if (until.getTime() - Date.now() > maxMs) {
+        throw new BadRequestException(
+          `until must be within ${MAX_TEMPORARY_ADMIN_DAYS} days`,
+        );
+      }
+    }
+    const previous = existing.adminUntil;
+    existing.adminUntil = until;
+    await this.usersRepository.save(existing);
+    await this.audit.record({
+      action: until ? 'staff.admin_access.grant' : 'staff.admin_access.revoke',
+      actorUserId,
+      resourceType: 'user',
+      resourceId: existing.id,
+      metadata: {
+        until: until ? until.toISOString() : null,
+        previousUntil: previous ? new Date(previous).toISOString() : null,
+      },
+    });
+    return this.toStaffListItem(existing, true);
+  }
+
   private async findActiveStaffOrFail(id: string): Promise<User> {
     const user = await this.usersRepository.findOne({
       where: {
@@ -840,9 +885,7 @@ export class StaffService {
       if (!role) {
         throw new NotFoundException('Staff role not found');
       }
-      const family = await this.permissions.getStaffRoleFamily(
-        role.id,
-      );
+      const family = await this.permissions.getStaffRoleFamily(role.id);
       if (family !== 'office') {
         throw new BadRequestException(
           'Manager staff members can only be assigned an office-family staff role',
@@ -1105,10 +1148,7 @@ export class StaffService {
    * surfaces should pass the actual viewer's grant explicitly — see the
    * PIECE-3 changelog gap note for the controller wiring this still needs.
    */
-  private toStaffListItem(
-    user: User,
-    viewerCanSeePii = false,
-  ): StaffListItem {
+  private toStaffListItem(user: User, viewerCanSeePii = false): StaffListItem {
     const shape: StaffListItem = {
       id: user.id,
       firstName: user.firstName,
@@ -1125,6 +1165,10 @@ export class StaffService {
         user.role === UserRole.EMPLOYEE
           ? ''
           : (user.credential?.username ?? ''),
+      adminUntil:
+        user.role === UserRole.MANAGER && user.adminUntil
+          ? new Date(user.adminUntil).toISOString()
+          : null,
       staffRole: user.staffRole
         ? {
             id: user.staffRole.id,

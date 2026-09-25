@@ -74,7 +74,7 @@ export class CommissionController {
   }
 
   @Get('export')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('commission:view_all')
   @ApiOperation({
     summary: 'Flat rows for an accounting export (admin)',
@@ -91,7 +91,7 @@ export class CommissionController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('commission:manage')
   @ApiOperation({
     summary: 'Create a commission record (admin)',
@@ -103,7 +103,7 @@ export class CommissionController {
   }
 
   @Post('payouts')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('commission:manage')
   @ApiOperation({
     summary: 'Record a payout run (admin)',
@@ -127,7 +127,7 @@ export class CommissionController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('commission:manage')
   @ApiOperation({
     summary: 'Update a commission record (admin)',

@@ -38,7 +38,7 @@ export class OrganizationProfileController {
   }
 
   @Patch()
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('org_profile:manage')
   @ApiOperation({
     summary: 'Update organization profile',

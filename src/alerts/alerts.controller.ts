@@ -64,7 +64,7 @@ export class AlertsController {
   }
 
   @Post('evaluate')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('alert:manage')
   @ApiOperation({
     summary: 'Trigger alert evaluation (admin only)',

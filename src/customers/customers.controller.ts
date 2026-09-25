@@ -98,7 +98,10 @@ export class CustomersController {
     @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
   ) {
     await this.authorizeCustomerAction(req, 'customer:create');
-    return this.customersService.create(dto);
+    return this.customersService.create(dto, {
+      userId: req.user?.sub,
+      role: req.user?.role,
+    });
   }
 
   @Get()

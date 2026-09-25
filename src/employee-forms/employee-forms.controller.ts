@@ -89,7 +89,7 @@ export class EmployeeFormsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('staff:update')
   @ApiOperation({ summary: 'Update a submitted employee form as admin' })
   updateByAdmin(

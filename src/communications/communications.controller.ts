@@ -98,7 +98,7 @@ export class CommunicationsController {
   }
 
   @Delete('communications/:id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @RequirePermission('communication:manage')
   @ApiOperation({
     summary: 'Delete a logged communication (admin)',

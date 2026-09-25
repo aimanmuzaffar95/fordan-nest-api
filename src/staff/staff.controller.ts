@@ -2,11 +2,13 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -21,6 +23,7 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { CreateEmployeeRoleDto } from './dto/create-employee-role.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { CreateStaffRoleDto } from './dto/create-staff-role.dto';
+import { GrantAdminAccessDto } from './dto/grant-admin-access.dto';
 import { ResetStaffPasswordDto } from './dto/reset-staff-password.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { StaffService, StaffListItem } from './staff.service';
@@ -68,7 +71,10 @@ export class StaffController {
   ): Promise<StaffListItem[]> {
     await this.assertStaffPermission(req, 'staff:view');
     const viewerCanSeePii = await this.canViewStaffPii(req);
-    return this.staffService.listStaff(includeAdmins === 'true', viewerCanSeePii);
+    return this.staffService.listStaff(
+      includeAdmins === 'true',
+      viewerCanSeePii,
+    );
   }
 
   @Post()
@@ -140,6 +146,51 @@ export class StaffController {
       actorUserId,
       actorRole,
     );
+  }
+
+  /**
+   * Temporary admin access for a manager. Real admins only: a manager who is
+   * currently elevated carries `role: admin` in the request but must not be
+   * able to extend their own grant or elevate peers (`elevated` flag).
+   */
+  @Put(':id/admin-access')
+  @Roles(UserRole.ADMIN)
+  async grantAdminAccess(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: GrantAdminAccessDto,
+    @Req() req: Request & { user?: { sub?: string; elevated?: boolean } },
+  ): Promise<StaffListItem> {
+    const actorUserId = this.assertRealAdmin(req);
+    return this.staffService.setTemporaryAdmin(
+      id,
+      new Date(dto.until),
+      actorUserId,
+    );
+  }
+
+  @Delete(':id/admin-access')
+  @Roles(UserRole.ADMIN)
+  async revokeAdminAccess(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; elevated?: boolean } },
+  ): Promise<StaffListItem> {
+    const actorUserId = this.assertRealAdmin(req);
+    return this.staffService.setTemporaryAdmin(id, null, actorUserId);
+  }
+
+  private assertRealAdmin(
+    req: Request & { user?: { sub?: string; elevated?: boolean } },
+  ): string {
+    const actorUserId = req.user?.sub;
+    if (!actorUserId) {
+      throw new Error('Missing authenticated user context');
+    }
+    if (req.user?.elevated) {
+      throw new ForbiddenException(
+        'Temporary admin access cannot be granted by a temporarily elevated account',
+      );
+    }
+    return actorUserId;
   }
 
   @Get('roles')

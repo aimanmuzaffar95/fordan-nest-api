@@ -12,6 +12,7 @@ import { StaffRole } from '../staff/entities/staff-role.entity';
 import { SystemAuditLogService } from '../system-audit/system-audit-log.service';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
+import { hasActiveTemporaryAdmin } from '../users/temporary-admin.util';
 import { CreatePermissionRoleDto } from './dto/create-permission-role.dto';
 import { RenamePermissionRoleDto } from './dto/rename-permission-role.dto';
 import { UpdatePermissionRoleDto } from './dto/update-permission-role.dto';
@@ -86,6 +87,8 @@ export type EffectivePermissions = {
   permissions: PermissionKey[];
   scopes: Partial<Record<PermissionScopeResource, PermissionScopeValue>>;
   fixedAdminCapabilities: string[];
+  /** Set when a manager is acting as admin under a temporary grant. */
+  temporaryAdminUntil: string | null;
 };
 
 @Injectable()
@@ -469,10 +472,11 @@ export class PermissionsService implements OnModuleInit {
       throw new NotFoundException('User not found');
     }
 
-    if (user.role === UserRole.ADMIN) {
+    const temporaryAdmin = hasActiveTemporaryAdmin(user);
+    if (user.role === UserRole.ADMIN || temporaryAdmin) {
       return {
         userId: user.id,
-        role: user.role,
+        role: UserRole.ADMIN,
         baseRole: user.role,
         profileId: 'admin',
         profile: {
@@ -486,6 +490,9 @@ export class PermissionsService implements OnModuleInit {
         permissions: [...PERMISSION_KEYS],
         scopes: DEFAULT_SCOPES_BY_ROLE[UserRole.ADMIN],
         fixedAdminCapabilities: [...FIXED_ADMIN_CAPABILITIES],
+        temporaryAdminUntil: temporaryAdmin
+          ? new Date(user.adminUntil as Date).toISOString()
+          : null,
       };
     }
 
@@ -503,6 +510,7 @@ export class PermissionsService implements OnModuleInit {
       permissions,
       scopes: this.scopeMap(profile),
       fixedAdminCapabilities: [],
+      temporaryAdminUntil: null,
     };
   }
 
@@ -592,7 +600,11 @@ export class PermissionsService implements OnModuleInit {
       } else {
         projected.delete(permissionKey);
       }
-      this.validateProfileRules(profile, [...projected], this.scopeMap(profile));
+      this.validateProfileRules(
+        profile,
+        [...projected],
+        this.scopeMap(profile),
+      );
     }
 
     if (enabled === null) {
