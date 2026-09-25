@@ -8,7 +8,7 @@ import { resolveTimestampColumnType } from '../common/timestamp-column-type.util
  *
  * cPanel/MariaDB: apply scripts/sql/2026-09-temp-admin-mariadb.sql instead.
  */
-export class AddAdminUntilToUsers20260925_1700000005000 implements MigrationInterface {
+export class AddAdminUntilToUsers20260925_1700000006000 implements MigrationInterface {
   private readonly column = new TableColumn({
     name: 'adminUntil',
     type: resolveTimestampColumnType(),
