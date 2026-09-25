@@ -153,8 +153,12 @@ export class CustomerPortalService {
    * which tokens exist.
    */
   async statusForToken(token: string): Promise<PortalStatusView> {
+    // Public surface: only the on/off switch matters. `isFeatureEnabled` with
+    // no role returns false whenever the flag is scoped to specific roles,
+    // which made every customer link 404 on a tenant that had enabled the
+    // portal for admins/managers only (the staff who issue the links).
     const flags = await this.settings.getFeatureFlags();
-    if (!isFeatureEnabled(flags, 'customerPortal')) {
+    if (!flags.customerPortal?.enabled) {
       throw new NotFoundException('Not found');
     }
     if (!token || token.length < 20) {
