@@ -18,6 +18,16 @@ import {
   ComplaintsService,
   PortalTicket,
 } from '../complaints/complaints.service';
+import { Invoice } from '../invoices/entities/invoice.entity';
+import { InvoiceStatus } from '../invoices/entities/invoice-status.enum';
+import {
+  ProposalStatus,
+  ProposalVersion,
+} from '../proposals/entities/proposal-version.entity';
+import { FilesService } from '../files/files.service';
+import { JobQuotationService } from '../jobs/job-quotation.service';
+import { RoofProposalService } from '../jobs/roof-proposal.service';
+import { JobListViewer } from '../jobs/jobs.service';
 
 /** Default link lifetime. Long enough to be useful, short enough to expire. */
 const DEFAULT_TTL_DAYS = 90;
@@ -48,6 +58,34 @@ export type PortalStatusView = {
   support: { companyName: string; phone: string | null; email: string | null };
   /** Newest first. Plain-language progress notes derived from the job timeline. */
   updates: { at: string; text: string }[];
+};
+
+export type PortalDocuments = {
+  proposal: {
+    available: boolean;
+    status: ProposalStatus | null;
+    sentAt: string | null;
+    acceptedAt: string | null;
+    totalPrice: string | null;
+  };
+  quote: { available: boolean };
+  invoices: {
+    id: string;
+    invoiceNumber: string;
+    status: string;
+    currency: string;
+    issueDate: string;
+    dueDate: string;
+    total: string;
+    amountPaid: string;
+  }[];
+  files: {
+    id: string;
+    name: string;
+    contentType: string | null;
+    sizeBytes: string | null;
+    uploadedAt: string;
+  }[];
 };
 
 /** Timeline event types the customer may see, and how to phrase them. */
@@ -116,9 +154,135 @@ export class CustomerPortalService {
     private readonly projectRepo: Repository<Project>,
     @InjectRepository(TimelineEvent)
     private readonly timelineRepo: Repository<TimelineEvent>,
+    @InjectRepository(Invoice)
+    private readonly invoiceRepo: Repository<Invoice>,
+    @InjectRepository(ProposalVersion)
+    private readonly proposalVersionRepo: Repository<ProposalVersion>,
     private readonly settings: RuntimeSettingsService,
     private readonly complaints: ComplaintsService,
+    private readonly files: FilesService,
+    private readonly quotation: JobQuotationService,
+    private readonly roofProposal: RoofProposalService,
   ) {}
+
+  /**
+   * The PDF builders take a staff viewer for scoping. The portal token has
+   * already pinned the request to one job, so an unscoped ADMIN viewer is
+   * the correct equivalent; the id is a marker, never persisted.
+   */
+  private portalViewer(job: Job): JobListViewer {
+    return {
+      userId: `portal:${job.id}`,
+      role: UserRole.ADMIN,
+      jobScope: 'all',
+      canViewJobFinancials: true,
+    };
+  }
+
+  async documentsForToken(token: string): Promise<PortalDocuments> {
+    const { job } = await this.resolveLiveToken(token);
+    const [latestProposal, invoices, files] = await Promise.all([
+      this.proposalVersionRepo.findOne({
+        where: { jobId: job.id },
+        order: { versionNumber: 'DESC' },
+      }),
+      this.invoiceRepo.find({
+        where: { jobId: job.id },
+        order: { issueDate: 'DESC' },
+      }),
+      this.files.listCustomerVisibleJobFiles(job.id),
+    ]);
+
+    const customerFacing = new Set<ProposalStatus>([
+      ProposalStatus.SENT,
+      ProposalStatus.VIEWED,
+      ProposalStatus.ACCEPTED,
+      ProposalStatus.DECLINED,
+      ProposalStatus.EXPIRED,
+    ]);
+    const proposalAvailable =
+      !!latestProposal && customerFacing.has(latestProposal.status);
+
+    let quoteAvailable = false;
+    try {
+      await this.quotation.validateQuotationPrerequisites(
+        job.id,
+        this.portalViewer(job),
+      );
+      quoteAvailable = true;
+    } catch {
+      quoteAvailable = false;
+    }
+
+    return {
+      proposal: {
+        available: proposalAvailable,
+        status:
+          proposalAvailable && latestProposal ? latestProposal.status : null,
+        sentAt: latestProposal?.sentAt
+          ? latestProposal.sentAt.toISOString()
+          : null,
+        acceptedAt: latestProposal?.acceptedAt
+          ? latestProposal.acceptedAt.toISOString()
+          : null,
+        totalPrice: proposalAvailable
+          ? (latestProposal?.totalPrice ?? null)
+          : null,
+      },
+      quote: { available: quoteAvailable },
+      invoices: invoices
+        .filter((inv) => inv.status !== InvoiceStatus.DRAFT)
+        .map((inv) => ({
+          id: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          status: inv.status,
+          currency: inv.currency,
+          issueDate: inv.issueDate,
+          dueDate: inv.dueDate,
+          total: inv.total,
+          amountPaid: inv.amountPaid,
+        })),
+      files: files.map((f) => ({
+        id: f.id,
+        name: f.displayName?.trim() || f.originalName?.trim() || 'File',
+        contentType: f.contentType,
+        sizeBytes: f.sizeBytes,
+        uploadedAt: f.createdAt,
+      })),
+    };
+  }
+
+  async proposalPdfForToken(token: string) {
+    const { job } = await this.resolveLiveToken(token);
+    const latest = await this.proposalVersionRepo.findOne({
+      where: { jobId: job.id },
+      order: { versionNumber: 'DESC' },
+    });
+    if (
+      !latest ||
+      latest.status === ProposalStatus.DRAFT ||
+      latest.status === ProposalStatus.SENDING
+    ) {
+      throw new NotFoundException('Not found');
+    }
+    return this.roofProposal.buildValidatedProposalPdf(
+      job.id,
+      this.portalViewer(job),
+    );
+  }
+
+  async quotePdfForToken(token: string) {
+    const { job } = await this.resolveLiveToken(token);
+    return this.quotation.buildValidatedQuotationPdf(
+      job.id,
+      this.portalViewer(job),
+    );
+  }
+
+  async fileForToken(token: string, fileId: string) {
+    const { job } = await this.resolveLiveToken(token);
+    return this.files.getCustomerVisibleJobFileDownload(job.id, fileId);
+  }
 
   /**
    * Resolve a live portal token to its job and customer, or 404. Every

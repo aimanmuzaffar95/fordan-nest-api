@@ -40,6 +40,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { FilesService } from '../files/files.service';
 import { uploadFileFilter } from '../files/upload-file-filter';
 import { UploadJobFileDto } from './dto/upload-job-file.dto';
+import { SetFileCustomerVisibilityDto } from './dto/set-file-customer-visibility.dto';
 import { UploadedBinaryFile } from '../files/uploaded-binary-file.type';
 import { DEFAULT_MAX_UPLOAD_SIZE_BYTES } from '../files/upload.constants';
 import { UserRole } from '../users/entities/user-role.enum';
@@ -370,6 +371,28 @@ export class JobsController {
     const viewer = await this.authorizeJobAction(req, 'job:file:upload');
 
     return this.filesService.uploadJobFile(id, dto, file, viewer);
+  }
+
+  @Patch(':id/files/:fileId')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Share / unshare a job file with the customer portal',
+    description:
+      'Requires `job:file:upload`. Body `{ "customerVisible": boolean }`. Shared files appear on the customer portal Files tab.',
+  })
+  async setFileCustomerVisibility(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fileId', ParseUUIDPipe) fileId: string,
+    @Body() dto: SetFileCustomerVisibilityDto,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeJobAction(req, 'job:file:upload');
+    return this.filesService.setJobFileCustomerVisibility(
+      id,
+      fileId,
+      dto.customerVisible,
+      { userId: viewer.userId, role: viewer.role },
+    );
   }
 
   @Get(':id/files/:fileId/download')

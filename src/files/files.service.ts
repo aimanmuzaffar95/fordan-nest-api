@@ -48,6 +48,7 @@ export type OwnedFileItem = {
   sizeBytes: string | null;
   uploadedByUserId: string | null;
   uploadedByName: string | null;
+  customerVisible: boolean;
   createdAt: string;
   downloadPath: string;
 };
@@ -351,6 +352,55 @@ export class FilesService {
     return savedUpload.savedFile;
   }
 
+  /** Staff toggle: share/unshare a job file with the customer portal. */
+  async setJobFileCustomerVisibility(
+    jobId: string,
+    fileId: string,
+    customerVisible: boolean,
+    viewer: AuthenticatedViewer,
+  ): Promise<OwnedFileItem> {
+    await this.getScopedJobOrFail(jobId, viewer);
+    const row = await this.fileRepo.findOne({
+      where: { id: fileId, ownerType: 'job', ownerId: jobId },
+      relations: { uploadedByUser: true },
+    });
+    if (!row) throw new NotFoundException('File not found');
+    row.customerVisible = customerVisible;
+    await this.fileRepo.save(row);
+    return this.toOwnedFileItem(row);
+  }
+
+  /** Customer portal: only files staff explicitly shared. No viewer — the portal token already scopes the job. */
+  async listCustomerVisibleJobFiles(jobId: string): Promise<OwnedFileItem[]> {
+    const rows = await this.fileRepo.find({
+      where: { ownerType: 'job', ownerId: jobId, customerVisible: true },
+      order: { createdAt: 'DESC' },
+    });
+    return rows.map((row) => this.toOwnedFileItem(row, null));
+  }
+
+  /** Customer portal download — 404 unless the file is shared. */
+  async getCustomerVisibleJobFileDownload(
+    jobId: string,
+    fileId: string,
+  ): Promise<DownloadableFile> {
+    const row = await this.fileRepo.findOne({
+      where: {
+        id: fileId,
+        ownerType: 'job',
+        ownerId: jobId,
+        customerVisible: true,
+      },
+    });
+    if (!row) throw new NotFoundException('File not found');
+    const storedFile = await this.storageService.getStoredFile(row);
+    return {
+      file: row,
+      stream: storedFile.stream,
+      contentLength: storedFile.contentLength,
+    };
+  }
+
   async getJobFileDownload(
     jobId: string,
     fileId: string,
@@ -651,6 +701,7 @@ export class FilesService {
       contentType: row.contentType,
       sizeBytes: row.sizeBytes,
       uploadedByUserId: row.uploadedByUserId,
+      customerVisible: row.customerVisible ?? false,
       uploadedByName,
       createdAt: row.createdAt.toISOString(),
       downloadPath: this.buildDownloadPath(row),

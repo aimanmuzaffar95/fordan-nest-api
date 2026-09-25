@@ -50,6 +50,10 @@ export class File {
   @Column({ type: 'uuid', nullable: true })
   uploadedByUserId: string | null;
 
+  /** Shown to the customer on the portal Files tab when true. Staff opt-in per file. */
+  @Column({ type: 'boolean', default: false })
+  customerVisible: boolean;
+
   // ─── Document taxonomy (PRD v2, Phase 2) ────────────────────────────────
   // `kind` stays the internal upload channel (job_file, meter_doc, …); these
   // describe the document to a human and to the required-by-stage rules.

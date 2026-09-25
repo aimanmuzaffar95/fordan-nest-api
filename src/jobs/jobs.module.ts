@@ -118,6 +118,11 @@ import { JobProposalSendService } from './job-proposal-send.service';
     ProposalsService,
     JobProposalSendService,
   ],
-  exports: [JobsService, JobAuditLogsService],
+  exports: [
+    JobsService,
+    JobAuditLogsService,
+    JobQuotationService,
+    RoofProposalService,
+  ],
 })
 export class JobsModule {}

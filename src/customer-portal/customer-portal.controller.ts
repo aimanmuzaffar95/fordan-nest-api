@@ -1,5 +1,8 @@
 import {
   Body,
+  StreamableFile,
+  Res,
+  Header,
   Controller,
   Get,
   Param,
@@ -26,7 +29,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { Request } from 'express';
+import type { Request, Response } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -135,6 +138,70 @@ export class CustomerPortalPublicController {
   })
   status(@Query('token') token: string) {
     return this.portal.statusForToken(token ?? '');
+  }
+
+  @Get('documents')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiOperation({
+    summary:
+      'Proposal / quote availability, invoices and shared files for this job',
+  })
+  documents(@Query('token') token: string) {
+    return this.portal.documentsForToken(token ?? '');
+  }
+
+  @Get('documents/proposal.pdf')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Latest sent proposal PDF' })
+  async proposalPdf(@Query('token') token: string, @Res() res: Response) {
+    const { pdfBuffer, attachmentFilename } =
+      await this.portal.proposalPdfForToken(token ?? '');
+    this.sendPdf(res, pdfBuffer, attachmentFilename);
+  }
+
+  @Get('documents/quote.pdf')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Quotation PDF' })
+  async quotePdf(@Query('token') token: string, @Res() res: Response) {
+    const { pdfBuffer, attachmentFilename } =
+      await this.portal.quotePdfForToken(token ?? '');
+    this.sendPdf(res, pdfBuffer, attachmentFilename);
+  }
+
+  private sendPdf(res: Response, pdfBuffer: Buffer, filename: string) {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${filename.replace(/[\r\n"]/g, '_')}"`,
+    );
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(pdfBuffer);
+  }
+
+  @Get('documents/files/:fileId')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Download a file staff shared with the customer' })
+  @Header('Cache-Control', 'private, no-store')
+  async file(
+    @Query('token') token: string,
+    @Param('fileId', ParseUUIDPipe) fileId: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const download = await this.portal.fileForToken(token ?? '', fileId);
+    const name = (
+      download.file.displayName ??
+      download.file.originalName ??
+      'download'
+    ).replace(/[\r\n"]/g, '_');
+    res.setHeader(
+      'Content-Type',
+      download.file.contentType ?? 'application/octet-stream',
+    );
+    res.setHeader('Content-Disposition', `inline; filename="${name}"`);
+    if (download.contentLength) {
+      res.setHeader('Content-Length', String(download.contentLength));
+    }
+    return new StreamableFile(download.stream);
   }
 
   @Get('tickets')

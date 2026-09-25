@@ -12,6 +12,11 @@ import { Project } from '../projects/entities/project.entity';
 import { PortalAccessToken } from './entities/portal-access-token.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { ComplaintsService } from '../complaints/complaints.service';
+import { Invoice } from '../invoices/entities/invoice.entity';
+import { ProposalVersion } from '../proposals/entities/proposal-version.entity';
+import { FilesService } from '../files/files.service';
+import { JobQuotationService } from '../jobs/job-quotation.service';
+import { RoofProposalService } from '../jobs/roof-proposal.service';
 import { CustomerPortalService } from './customer-portal.service';
 
 type Mocked<T> = { [K in keyof T]: jest.Mock };
@@ -108,6 +113,17 @@ describe('CustomerPortalService', () => {
           useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         { provide: ComplaintsService, useValue: {} },
+        {
+          provide: getRepositoryToken(Invoice),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: getRepositoryToken(ProposalVersion),
+          useValue: { findOne: jest.fn().mockResolvedValue(null) },
+        },
+        { provide: FilesService, useValue: {} },
+        { provide: JobQuotationService, useValue: {} },
+        { provide: RoofProposalService, useValue: {} },
       ],
     }).compile();
 
