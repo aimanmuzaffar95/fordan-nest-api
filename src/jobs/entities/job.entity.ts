@@ -1,5 +1,6 @@
 import {
   Column,
+  DeleteDateColumn,
   CreateDateColumn,
   Entity,
   ManyToOne,
@@ -128,4 +129,12 @@ export class Job {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  /**
+   * Soft delete. TypeORM excludes rows with a value here from every find /
+   * query-builder read (and from joined relations) unless `withDeleted()`.
+   * Set via DELETE /customers/:id or DELETE /jobs/:id; never hard-deleted.
+   */
+  @DeleteDateColumn({ nullable: true })
+  deletedAt: Date | null;
 }

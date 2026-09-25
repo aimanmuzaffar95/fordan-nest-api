@@ -4,6 +4,7 @@ export const PERMISSION_KEYS = [
   'job:view',
   'job:create',
   'job:update',
+  'job:delete',
   'job:financials:view',
   'job:pipeline:update',
   'job:proposal:view',
@@ -19,6 +20,7 @@ export const PERMISSION_KEYS = [
   'customer:create',
   'customer:view',
   'customer:update',
+  'customer:delete',
   'customer:timeline:view',
   'customer:job:create',
   'assignment:view',
@@ -140,6 +142,8 @@ type PermissionCatalogEntryInput = {
  * the risk tier is reviewable as a single list.
  */
 const SENSITIVE_PERMISSION_KEYS: PermissionKey[] = [
+  'job:delete',
+  'customer:delete',
   'job:financials:view',
   'customer:pii:view',
   'staff:pii:view',
@@ -176,6 +180,13 @@ const PERMISSION_CATALOG_ENTRIES: PermissionCatalogEntryInput[] = [
     group: 'jobs',
     label: 'Edit jobs',
     description: 'Edit non-pipeline job fields on visible jobs.',
+  },
+  {
+    key: 'job:delete',
+    group: 'jobs',
+    label: 'Delete jobs',
+    description:
+      'Soft-delete visible jobs (hidden everywhere, kept in the database). Refused while the job has invoices.',
   },
   {
     key: 'job:financials:view',
@@ -267,6 +278,13 @@ const PERMISSION_CATALOG_ENTRIES: PermissionCatalogEntryInput[] = [
     group: 'customers',
     label: 'Edit customers',
     description: 'Update customers within scope.',
+  },
+  {
+    key: 'customer:delete',
+    group: 'customers',
+    label: 'Delete customers',
+    description:
+      'Soft-delete customers within scope together with their jobs. Refused while any invoice exists for them.',
   },
   {
     key: 'customer:timeline:view',

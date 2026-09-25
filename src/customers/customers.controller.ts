@@ -213,6 +213,21 @@ export class CustomersController {
     });
   }
 
+  @Delete(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Soft-delete a customer and its jobs',
+    description:
+      'Requires `customer:delete`. Hides the customer and every job under it (rows kept, `deletedAt` set), removes those jobs\' schedule assignments and records a `job_deleted` timeline event per job. **409** (`code: "CUSTOMER_HAS_INVOICES"` / `"JOB_HAS_INVOICES"`) while any invoice exists. **Manager:** **404** outside your scope.',
+  })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeCustomerAction(req, 'customer:delete');
+    return this.customersService.softDelete(id, viewer);
+  }
+
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({

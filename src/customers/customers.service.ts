@@ -18,6 +18,8 @@ import {
 } from 'typeorm';
 import { scrubFields } from '../common/field-scrub.util';
 import { Job } from '../jobs/entities/job.entity';
+import { softDeleteJobs } from '../jobs/job-soft-delete.util';
+import { Invoice } from '../invoices/entities/invoice.entity';
 import { Note } from '../notes/entities/note.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -293,6 +295,47 @@ export class CustomersService {
     }
 
     return this.toResponseDto(customer, viewer);
+  }
+
+  /**
+   * Soft-delete a customer and every job under it. Refused (409) while any
+   * invoice references the customer or one of its jobs.
+   */
+  async softDelete(
+    id: string,
+    viewer: CustomerViewer,
+  ): Promise<{ id: string; deletedAt: string; deletedJobs: number }> {
+    const qb = this.customersRepository
+      .createQueryBuilder('customer')
+      .where('customer.id = :id', { id });
+    this.applyViewerScope(qb, viewer, await this.hasMergedColumn());
+    const customer = await qb.getOne();
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const invoiced = await manager
+        .getRepository(Invoice)
+        .count({ where: { customerId: customer.id } });
+      if (invoiced > 0) {
+        throw new ConflictException({
+          message:
+            'This customer has invoices. Cancel or delete the invoices before deleting the customer.',
+          code: 'CUSTOMER_HAS_INVOICES',
+        });
+      }
+      const jobs = await manager
+        .getRepository(Job)
+        .find({ where: { customerId: customer.id } });
+      await softDeleteJobs(manager, jobs, viewer.userId);
+      await manager.getRepository(Customer).softDelete(customer.id);
+      return {
+        id: customer.id,
+        deletedAt: new Date().toISOString(),
+        deletedJobs: jobs.length,
+      };
+    });
   }
 
   async update(

@@ -43,6 +43,7 @@ import { JobAuditLog } from './entities/job-audit-log.entity';
 import { JobInternalComment } from './entities/job-internal-comment.entity';
 import { JobProposalSelection } from './entities/job-proposal-selection.entity';
 import { Job } from './entities/job.entity';
+import { softDeleteJobs } from './job-soft-delete.util';
 import { Customer } from '../customers/entities/customer.entity';
 import { User } from '../users/entities/user.entity';
 import { FindJobsQueryDto } from './dto/find-jobs-query.dto';
@@ -865,6 +866,22 @@ export class JobsService {
     }
   }
 
+  /** Soft-delete one job. See job-soft-delete.util.ts for the rules. */
+  async softDelete(
+    id: string,
+    viewer: JobListViewer,
+  ): Promise<{ id: string; deletedAt: string }> {
+    return this.dataSource.transaction(async (manager) => {
+      const job = await this.findOneOrFail(
+        manager.getRepository(Job),
+        id,
+        viewer,
+      );
+      await softDeleteJobs(manager, [job], viewer.userId);
+      return { id: job.id, deletedAt: new Date().toISOString() };
+    });
+  }
+
   async markLost(
     id: string,
     reason: string,
@@ -1221,7 +1238,10 @@ export class JobsService {
           }
         : null,
       manager: this.mapUserSummary(manager, canViewStaffPii),
-      assignedStaffUser: this.mapUserSummary(assignedStaffUser, canViewStaffPii),
+      assignedStaffUser: this.mapUserSummary(
+        assignedStaffUser,
+        canViewStaffPii,
+      ),
       installerAssignments: installerRows.map((row) => ({
         id: row.id,
         scheduledDate: row.scheduledDate,
@@ -1873,8 +1893,7 @@ export class JobsService {
     viewer?: JobListViewer,
   ): T {
     const canViewCustomerPii = viewer?.canViewCustomerPii ?? false;
-    const customer = (item as { customer?: Record<string, unknown> })
-      .customer;
+    const customer = (item as { customer?: Record<string, unknown> }).customer;
     if (!customer) {
       return item;
     }

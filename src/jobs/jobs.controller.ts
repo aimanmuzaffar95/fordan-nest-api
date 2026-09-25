@@ -1,5 +1,6 @@
 import {
   Body,
+  Delete,
   Controller,
   Get,
   Header,
@@ -189,6 +190,21 @@ export class JobsController {
   ) {
     const viewer = await this.authorizeJobAction(req, 'job:pipeline:update');
     return this.jobs.markLost(id, dto.reason, viewer);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @ApiOperation({
+    summary: 'Soft-delete a job',
+    description:
+      'Requires `job:delete`. Hides the job everywhere (row kept, `deletedAt` set), removes its schedule assignments and records a **`job_deleted`** timeline event. **409** (`code: "JOB_HAS_INVOICES"`) while the job has invoices. **Manager:** **404** if the job is outside your scope.',
+  })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request & { user?: { sub?: string; role?: UserRole } },
+  ) {
+    const viewer = await this.authorizeJobAction(req, 'job:delete');
+    return this.jobs.softDelete(id, viewer);
   }
 
   @Post(':id/reopen')
