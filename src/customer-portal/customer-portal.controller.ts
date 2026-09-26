@@ -140,6 +140,31 @@ export class CustomerPortalPublicController {
     return this.portal.statusForToken(token ?? '');
   }
 
+  @Get('design')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Roof design summary for the dashboard (null when none drawn)',
+  })
+  design(@Query('token') token: string) {
+    return this.portal.designForToken(token ?? '');
+  }
+
+  @Get('design/render.png')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Roof render with the planned panels' })
+  async render(@Query('token') token: string, @Res() res: Response) {
+    const png = await this.portal.renderForToken(token ?? '');
+    if (!png) {
+      res
+        .status(404)
+        .json({ success: false, statusCode: 404, message: 'Not found' });
+      return;
+    }
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(png);
+  }
+
   @Get('documents')
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @ApiOperation({

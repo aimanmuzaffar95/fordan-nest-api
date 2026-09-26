@@ -149,10 +149,16 @@ export class RoofProposalService {
     // back to `jobDetail.job.projectPrice` still wins when it clears the
     // `> 0` bar (that's still a real, current price), so this only fires
     // when the job has genuinely nothing else to fall back on either.
+    // A version in `SENDING` (the brief window between claiming a send and
+    // it finalizing to `SENT` — see `JobProposalSendService`) is neither
+    // "not yet sent" nor "was sent and lapsed"; it's an in-flight send, and
+    // this heuristic must not label it "declined/expired" just because it
+    // isn't `DRAFT` and isn't (yet) a live status.
     const priceDeclinedOrExpired =
       agreedAmount == null &&
       latestProposalVersion != null &&
       latestProposalVersion.status !== ProposalStatus.DRAFT &&
+      latestProposalVersion.status !== ProposalStatus.SENDING &&
       !isLiveProposalStatus(latestProposalVersion.status) &&
       latestProposalVersion.totalPrice != null &&
       Number(latestProposalVersion.totalPrice) > 0;
@@ -534,6 +540,18 @@ export class RoofProposalService {
    * 3) undefined — `RoofProposalPdfService` renders a clean placeholder,
    *    never a blank box or a red X.
    */
+  /**
+   * Customer portal hero image: the same stored-render → composite →
+   * placeholder chain the proposal PDF uses. No viewer — the portal token
+   * already pins the job.
+   */
+  async renderImageForPortal(jobId: string): Promise<Buffer | null> {
+    const roofDesign = await this.roofDesigns.getForJob(jobId);
+    if (!roofDesign || roofDesign.doc.arrays.length === 0) return null;
+    const result = await this.resolveRenderImage(jobId, roofDesign);
+    return result.buffer ?? null;
+  }
+
   private async resolveRenderImage(
     jobId: string,
     roofDesign: NonNullable<

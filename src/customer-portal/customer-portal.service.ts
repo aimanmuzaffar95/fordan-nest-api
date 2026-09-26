@@ -28,6 +28,9 @@ import { FilesService } from '../files/files.service';
 import { JobQuotationService } from '../jobs/job-quotation.service';
 import { RoofProposalService } from '../jobs/roof-proposal.service';
 import { JobListViewer } from '../jobs/jobs.service';
+import { User } from '../users/entities/user.entity';
+import { RoofDesignService } from '../solar-design/roof-design.service';
+import { SolarSimulationService } from '../solar-design/solar-simulation.service';
 
 /** Default link lifetime. Long enough to be useful, short enough to expire. */
 const DEFAULT_TTL_DAYS = 90;
@@ -56,6 +59,8 @@ export type PortalStatusView = {
   completedAt: string | null;
   /** How to reach the installer — from Settings → Company profile. */
   support: { companyName: string; phone: string | null; email: string | null };
+  /** The job's manager (the customer's agent), when one is assigned. */
+  agent: { name: string; phone: string | null; email: string | null } | null;
   /** Newest first. Plain-language progress notes derived from the job timeline. */
   updates: { at: string; text: string }[];
 };
@@ -86,6 +91,17 @@ export type PortalDocuments = {
     sizeBytes: string | null;
     uploadedAt: string;
   }[];
+};
+
+export type PortalDesign = {
+  panelCount: number;
+  arrayCount: number;
+  dcKw: number | null;
+  annualKwh: number | null;
+  annualSavings: number | null;
+  paybackYears: number | null;
+  hasRender: boolean;
+  updatedAt: string;
 };
 
 /** Timeline event types the customer may see, and how to phrase them. */
@@ -163,7 +179,59 @@ export class CustomerPortalService {
     private readonly files: FilesService,
     private readonly quotation: JobQuotationService,
     private readonly roofProposal: RoofProposalService,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
+    private readonly roofDesigns: RoofDesignService,
+    private readonly simulation: SolarSimulationService,
   ) {}
+
+  /** Roof design summary for the dashboard hero. Null when no design has been drawn. */
+  async designForToken(token: string): Promise<PortalDesign | null> {
+    const { job } = await this.resolveLiveToken(token);
+    const design = await this.roofDesigns.getForJob(job.id);
+    if (!design || design.doc.arrays.length === 0) return null;
+    const arrays = design.doc.arrays;
+    const panelCount = arrays.reduce(
+      (sum, a) => sum + a.panels.filter((p) => p.enabled).length,
+      0,
+    );
+    let dcKw: number | null = null;
+    let annualKwh: number | null = null;
+    let annualSavings: number | null = null;
+    let paybackYears: number | null = null;
+    try {
+      const sim = await this.simulation.simulate(
+        {
+          version: design.doc.version,
+          anchor: design.doc.anchor,
+          arrays: design.doc.arrays,
+          obstructions: design.doc.obstructions,
+        } as Parameters<SolarSimulationService['simulate']>[0],
+        job.id,
+      );
+      dcKw = sim.system.dcKw;
+      annualKwh = sim.production.annualKwh;
+      annualSavings = sim.financial?.year1Savings ?? null;
+      paybackYears = sim.financial?.paybackYears ?? null;
+    } catch {
+      // Simulation is best-effort for the dashboard; the render + panel count still show.
+    }
+    return {
+      panelCount,
+      arrayCount: arrays.length,
+      dcKw,
+      annualKwh,
+      annualSavings,
+      paybackYears,
+      hasRender: true,
+      updatedAt: design.updatedAt,
+    };
+  }
+
+  async renderForToken(token: string): Promise<Buffer | null> {
+    const { job } = await this.resolveLiveToken(token);
+    return this.roofProposal.renderImageForPortal(job.id);
+  }
 
   /**
    * The PDF builders take a staff viewer for scoping. The portal token has
@@ -460,13 +528,16 @@ export class CustomerPortalService {
     setDate('installed', installedDate);
     setDate('connected', ptoDate);
 
-    const [company, timeline] = await Promise.all([
+    const [company, timeline, manager] = await Promise.all([
       this.settings.getSettings().then((all) => all.companyProfileSettings),
       this.timelineRepo.find({
         where: { jobId: job.id },
         order: { createdAt: 'DESC' },
         take: 40,
       }),
+      job.managerId
+        ? this.userRepo.findOne({ where: { id: job.managerId } })
+        : Promise.resolve(null),
     ]);
     const updates = timeline
       .map((event) => {
@@ -494,6 +565,13 @@ export class CustomerPortalService {
         phone: company.supportPhone,
         email: company.supportEmail,
       },
+      agent: manager
+        ? {
+            name: `${manager.firstName} ${manager.lastName}`.trim(),
+            phone: manager.phoneNumber?.trim() || null,
+            email: manager.emailAddress?.trim() || null,
+          }
+        : null,
       updates,
     };
   }

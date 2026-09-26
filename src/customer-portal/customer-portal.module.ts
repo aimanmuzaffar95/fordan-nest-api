@@ -7,6 +7,8 @@ import { RuntimeSettingsModule } from '../runtime-settings/runtime-settings.modu
 import { ComplaintsModule } from '../complaints/complaints.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { FilesModule } from '../files/files.module';
+import { SolarDesignModule } from '../solar-design/solar-design.module';
+import { User } from '../users/entities/user.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
 import { ProposalVersion } from '../proposals/entities/proposal-version.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
@@ -27,11 +29,13 @@ import { CustomerPortalService } from './customer-portal.service';
       TimelineEvent,
       Invoice,
       ProposalVersion,
+      User,
     ]),
     RuntimeSettingsModule,
     ComplaintsModule,
     JobsModule,
     FilesModule,
+    SolarDesignModule,
   ],
   controllers: [CustomerPortalAdminController, CustomerPortalPublicController],
   providers: [CustomerPortalService],

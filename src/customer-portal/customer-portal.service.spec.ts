@@ -17,6 +17,9 @@ import { ProposalVersion } from '../proposals/entities/proposal-version.entity';
 import { FilesService } from '../files/files.service';
 import { JobQuotationService } from '../jobs/job-quotation.service';
 import { RoofProposalService } from '../jobs/roof-proposal.service';
+import { User } from '../users/entities/user.entity';
+import { RoofDesignService } from '../solar-design/roof-design.service';
+import { SolarSimulationService } from '../solar-design/solar-simulation.service';
 import { CustomerPortalService } from './customer-portal.service';
 
 type Mocked<T> = { [K in keyof T]: jest.Mock };
@@ -124,6 +127,15 @@ describe('CustomerPortalService', () => {
         { provide: FilesService, useValue: {} },
         { provide: JobQuotationService, useValue: {} },
         { provide: RoofProposalService, useValue: {} },
+        {
+          provide: getRepositoryToken(User),
+          useValue: { findOne: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: RoofDesignService,
+          useValue: { getForJob: jest.fn().mockResolvedValue(null) },
+        },
+        { provide: SolarSimulationService, useValue: {} },
       ],
     }).compile();
 
