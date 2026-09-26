@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
 import { Notification } from './entities/notification.entity';
@@ -9,6 +9,7 @@ import {
   NotificationResponseDto,
   NotificationsListResponseDto,
 } from './dto/notification-response.dto';
+import { PushService } from './push.service';
 
 export type NotificationPayload = {
   type: string;
@@ -47,11 +48,14 @@ function toResponseDto(notification: Notification): NotificationResponseDto {
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     @InjectRepository(Notification)
     private readonly notificationsRepo: Repository<Notification>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
+    private readonly pushService: PushService,
   ) {}
 
   async sendToUser(
@@ -79,7 +83,25 @@ export class NotificationsService {
       readAt: null,
     });
 
-    return this.notificationsRepo.save(notification);
+    const saved = await this.notificationsRepo.save(notification);
+
+    // Fire-and-forget: push delivery must never fail the write path.
+    this.pushService
+      .notifyUsers(
+        [userId],
+        { title: saved.title, body: saved.body },
+        {
+          notificationId: saved.id,
+          type: saved.type,
+        },
+      )
+      .catch((err) =>
+        this.logger.warn(
+          `Push notify failed for user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+
+    return saved;
   }
 
   async sendToUsers(

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import { DeviceRegistration } from './entities/device-registration.entity';
 
@@ -30,5 +30,18 @@ export class DevicesService {
       }),
     );
     return { id: saved.id, platform: saved.platform };
+  }
+
+  /** All registered device tokens for the given users (push fan-out). */
+  findTokensForUsers(userIds: string[]): Promise<DeviceRegistration[]> {
+    if (userIds.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.repo.find({ where: { userId: In(userIds) } });
+  }
+
+  /** Drop a token FCM reports as no longer valid (uninstalled/unregistered). */
+  async removeByToken(pushToken: string): Promise<void> {
+    await this.repo.delete({ pushToken });
   }
 }
