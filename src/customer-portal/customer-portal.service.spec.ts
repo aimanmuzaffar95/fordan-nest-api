@@ -20,6 +20,8 @@ import { RoofProposalService } from '../jobs/roof-proposal.service';
 import { User } from '../users/entities/user.entity';
 import { RoofDesignService } from '../solar-design/roof-design.service';
 import { SolarSimulationService } from '../solar-design/solar-simulation.service';
+import { AttendanceRecord } from '../attendance/entities/attendance-record.entity';
+import { Assignment } from '../assignments/entities/assignment.entity';
 import { CustomerPortalService } from './customer-portal.service';
 
 type Mocked<T> = { [K in keyof T]: jest.Mock };
@@ -136,6 +138,25 @@ describe('CustomerPortalService', () => {
           useValue: { getForJob: jest.fn().mockResolvedValue(null) },
         },
         { provide: SolarSimulationService, useValue: {} },
+        {
+          provide: getRepositoryToken(AttendanceRecord),
+          useValue: {
+            createQueryBuilder: () => {
+              const qb = {
+                leftJoinAndSelect: () => qb,
+                where: () => qb,
+                andWhere: () => qb,
+                orderBy: () => qb,
+                getMany: (): Promise<unknown[]> => Promise.resolve([]),
+              };
+              return qb;
+            },
+          },
+        },
+        {
+          provide: getRepositoryToken(Assignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
       ],
     }).compile();
 

@@ -31,6 +31,14 @@ import {
 } from './upload.constants';
 import { UploadedBinaryFile } from './uploaded-binary-file.type';
 
+/** Upload kinds that default to customer-visible on the portal. */
+const CUSTOMER_SHAREABLE_KINDS = new Set<UploadKind>([
+  'other',
+  'photos',
+  'signed_paperwork',
+  'proposal_pdf',
+]);
+
 type AuthenticatedViewer = {
   userId: string;
   role: UserRole;
@@ -246,6 +254,12 @@ export class FilesService {
           contentType: file.mimetype,
           sizeBytes: String(file.size),
           uploadedByUserId: viewer.userId,
+          // Files staff attach on the job Documents tab are for the customer
+          // by default; internal kinds (compliance, meter docs, roof design
+          // artefacts) stay private. Staff can untick "Visible to customer".
+          customerVisible: CUSTOMER_SHAREABLE_KINDS.has(
+            (dto.kind ?? 'other') as UploadKind,
+          ),
         }),
       );
 

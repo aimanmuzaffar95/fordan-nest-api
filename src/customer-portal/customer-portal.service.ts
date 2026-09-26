@@ -29,6 +29,8 @@ import { JobQuotationService } from '../jobs/job-quotation.service';
 import { RoofProposalService } from '../jobs/roof-proposal.service';
 import { JobListViewer } from '../jobs/jobs.service';
 import { User } from '../users/entities/user.entity';
+import { AttendanceRecord } from '../attendance/entities/attendance-record.entity';
+import { Assignment } from '../assignments/entities/assignment.entity';
 import { RoofDesignService } from '../solar-design/roof-design.service';
 import { SolarSimulationService } from '../solar-design/solar-simulation.service';
 
@@ -61,6 +63,8 @@ export type PortalStatusView = {
   support: { companyName: string; phone: string | null; email: string | null };
   /** The job's manager (the customer's agent), when one is assigned. */
   agent: { name: string; phone: string | null; email: string | null } | null;
+  /** Who is scheduled / on site today — pinned on the portal. */
+  today: PortalToday;
   /** Newest first. Plain-language progress notes derived from the job timeline. */
   updates: { at: string; text: string }[];
 };
@@ -91,6 +95,21 @@ export type PortalDocuments = {
     sizeBytes: string | null;
     uploadedAt: string;
   }[];
+};
+
+export type PortalTodayCrew = {
+  firstName: string;
+  /** scheduled = assigned for today, not clocked in yet; on_site = clocked in; left = clocked out. */
+  status: 'scheduled' | 'on_site' | 'left';
+  slot: 'AM' | 'PM' | null;
+  arrivedAt: string | null;
+  leftAt: string | null;
+};
+export type PortalToday = {
+  date: string;
+  scheduled: boolean;
+  onSiteNow: number;
+  crew: PortalTodayCrew[];
 };
 
 export type PortalDesign = {
@@ -181,6 +200,10 @@ export class CustomerPortalService {
     private readonly roofProposal: RoofProposalService,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(AttendanceRecord)
+    private readonly attendanceRepo: Repository<AttendanceRecord>,
+    @InjectRepository(Assignment)
+    private readonly assignmentRepo: Repository<Assignment>,
     private readonly roofDesigns: RoofDesignService,
     private readonly simulation: SolarSimulationService,
   ) {}
@@ -539,6 +562,7 @@ export class CustomerPortalService {
         ? this.userRepo.findOne({ where: { id: job.managerId } })
         : Promise.resolve(null),
     ]);
+    const today = await this.todayForJob(job.id);
     const updates = timeline
       .map((event) => {
         const phrase = UPDATE_TEXT[event.type];
@@ -573,6 +597,81 @@ export class CustomerPortalService {
           }
         : null,
       updates,
+      today,
+    };
+  }
+
+  /**
+   * Today's crew for the customer: assignments dated today plus any
+   * attendance record opened today (clock-in without an assignment row
+   * still counts — the customer cares who is physically there). First
+   * names only.
+   */
+  private async todayForJob(jobId: string): Promise<PortalToday> {
+    // "Today" is the company's local day (Settings → Company profile →
+    // timezone), not UTC — an Australian customer checking at 8am must see
+    // this morning's crew, not yesterday's UTC date.
+    const tz =
+      (await this.settings.getSettings()).companyProfileSettings.timezone ||
+      'Australia/Sydney';
+    const now = new Date();
+    let date: string;
+    try {
+      date = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(now);
+    } catch {
+      date = now.toISOString().slice(0, 10);
+    }
+    // ponytail: attendance is matched on a rolling 18h window (open sessions
+    // always included) instead of exact local-midnight bounds; swap for a
+    // tz-aware day range if overnight jobs ever matter.
+    const since = new Date(now.getTime() - 18 * 3600 * 1000);
+    const [assignments, records] = await Promise.all([
+      this.assignmentRepo.find({
+        where: { jobId, scheduledDate: date },
+        relations: { staffUser: true },
+      }),
+      this.attendanceRepo
+        .createQueryBuilder('a')
+        .leftJoinAndSelect('a.staff', 'staff')
+        .where('a.jobId = :jobId', { jobId })
+        .andWhere('(a.clockOutAt IS NULL OR a.clockInAt >= :since)', { since })
+        .orderBy('a.clockInAt', 'DESC')
+        .getMany(),
+    ]);
+    const crew = new Map<string, PortalTodayCrew>();
+    for (const a of assignments) {
+      crew.set(a.staffUserId, {
+        firstName: a.staffUser?.firstName?.trim() || 'Installer',
+        status: 'scheduled',
+        slot: a.slot === 'AM' || a.slot === 'PM' ? a.slot : null,
+        arrivedAt: null,
+        leftAt: null,
+      });
+    }
+    for (const r of records) {
+      // newest record per person wins (ordered DESC above)
+      if (crew.get(r.staffId)?.arrivedAt) continue;
+      const existing = crew.get(r.staffId);
+      crew.set(r.staffId, {
+        firstName:
+          existing?.firstName ?? (r.staff?.firstName?.trim() || 'Installer'),
+        status: r.clockOutAt ? 'left' : 'on_site',
+        slot: existing?.slot ?? null,
+        arrivedAt: r.clockInAt.toISOString(),
+        leftAt: r.clockOutAt ? r.clockOutAt.toISOString() : null,
+      });
+    }
+    const list = [...crew.values()];
+    return {
+      date,
+      scheduled: list.length > 0,
+      onSiteNow: list.filter((c) => c.status === 'on_site').length,
+      crew: list,
     };
   }
 

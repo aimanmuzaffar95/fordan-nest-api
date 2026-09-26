@@ -9,6 +9,8 @@ import { JobsModule } from '../jobs/jobs.module';
 import { FilesModule } from '../files/files.module';
 import { SolarDesignModule } from '../solar-design/solar-design.module';
 import { User } from '../users/entities/user.entity';
+import { AttendanceRecord } from '../attendance/entities/attendance-record.entity';
+import { Assignment } from '../assignments/entities/assignment.entity';
 import { Invoice } from '../invoices/entities/invoice.entity';
 import { ProposalVersion } from '../proposals/entities/proposal-version.entity';
 import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
@@ -30,6 +32,8 @@ import { CustomerPortalService } from './customer-portal.service';
       Invoice,
       ProposalVersion,
       User,
+      AttendanceRecord,
+      Assignment,
     ]),
     RuntimeSettingsModule,
     ComplaintsModule,
