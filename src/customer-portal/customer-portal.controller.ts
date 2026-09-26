@@ -162,6 +162,10 @@ export class CustomerPortalPublicController {
     }
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Cache-Control', 'private, max-age=300');
+    // The portal page on the web origin embeds this as <img>; helmet's
+    // default CORP (same-origin) makes the browser drop it (same fix as the
+    // public branding assets, BUG-9).
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.send(png);
   }
 
