@@ -31,7 +31,65 @@ export class ComplianceFieldDto {
   required?: boolean;
 }
 
+export const COMPLIANCE_CATEGORIES = [
+  'checklist',
+  'sop',
+  'training',
+  'safety',
+] as const;
+export const COMPLIANCE_PHASES = [
+  'pre_install',
+  'install',
+  'post_install',
+  'handover',
+  'any',
+] as const;
+export const EVIDENCE_SOURCES = ['camera', 'gallery', 'document'] as const;
+
+export class ComplianceEvidenceDto {
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsIn(EVIDENCE_SOURCES as unknown as string[], { each: true })
+  sources?: string[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(20)
+  min?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(50)
+  max?: number;
+}
+
 export class CreateComplianceTemplateDto {
+  @IsOptional()
+  @IsIn(COMPLIANCE_CATEGORIES as unknown as string[])
+  category?: string;
+
+  @IsOptional()
+  @IsIn(COMPLIANCE_PHASES as unknown as string[])
+  phase?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20_000)
+  instructions?: string | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ComplianceEvidenceDto)
+  evidence?: ComplianceEvidenceDto | null;
+
   @IsString()
   @MaxLength(200)
   name: string;
@@ -59,6 +117,24 @@ export class CreateComplianceTemplateDto {
 }
 
 export class UpdateComplianceTemplateDto {
+  @IsOptional()
+  @IsIn(COMPLIANCE_CATEGORIES as unknown as string[])
+  category?: string;
+
+  @IsOptional()
+  @IsIn(COMPLIANCE_PHASES as unknown as string[])
+  phase?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20_000)
+  instructions?: string | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ComplianceEvidenceDto)
+  evidence?: ComplianceEvidenceDto | null;
+
   @IsOptional()
   @IsString()
   @MaxLength(200)

@@ -38,6 +38,10 @@ export class JobComplianceSubmission {
   @Column({ type: 'text', nullable: true })
   signaturePngBase64: string | null;
 
+  /** Ids of `files` rows (ownerType job, kind compliance) attached as evidence. */
+  @Column({ type: 'json', nullable: true })
+  evidenceFileIds: string[] | null;
+
   @Column({ type: 'timestamp' })
   completedAt: Date;
 

@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsObject,
   IsOptional,
   IsString,
@@ -17,4 +19,11 @@ export class SubmitJobComplianceDto {
   @IsString()
   @MaxLength(6_000_000)
   signaturePngBase64?: string;
+
+  /** `files` ids already uploaded to this job with kind `compliance`. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID('all', { each: true })
+  evidenceFileIds?: string[];
 }

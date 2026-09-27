@@ -10,6 +10,7 @@ import { ComplianceService } from './compliance.service';
 import { ComplianceTemplatesController } from './compliance-templates.controller';
 import { JobComplianceController } from './job-compliance.controller';
 import { ComplianceFormTemplate } from './entities/compliance-form-template.entity';
+import { File as FileEntity } from '../files/entities/file.entity';
 import { JobComplianceSubmission } from './entities/job-compliance-submission.entity';
 import { JobCecItemTick } from './entities/job-cec-item-tick.entity';
 
@@ -23,6 +24,7 @@ import { JobCecItemTick } from './entities/job-cec-item-tick.entity';
       Job,
       Assignment,
       TimelineEvent,
+      FileEntity,
     ]),
     RuntimeSettingsModule,
   ],

@@ -12,6 +12,14 @@ import { TimelineEvent } from '../timeline/entities/timeline-event.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { RuntimeSettingsService } from '../runtime-settings/runtime-settings.service';
 import { JobCecItemTick } from './entities/job-cec-item-tick.entity';
+import { File as FileEntity } from '../files/entities/file.entity';
+import { In } from 'typeorm';
+import {
+  COMPLIANCE_CATEGORIES,
+  COMPLIANCE_PHASES,
+  ComplianceEvidenceDto,
+  EVIDENCE_SOURCES,
+} from './dto/compliance-field.dto';
 import type {
   ComplianceFieldDto,
   CreateComplianceTemplateDto,
@@ -22,6 +30,20 @@ import { ComplianceFormTemplate } from './entities/compliance-form-template.enti
 import { JobComplianceSubmission } from './entities/job-compliance-submission.entity';
 
 export type ComplianceViewer = { userId: string; role: UserRole };
+
+export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
+export type NormalizedEvidenceRule = {
+  required: boolean;
+  sources: EvidenceSource[];
+  min: number;
+  max: number;
+};
+export const DEFAULT_EVIDENCE_RULE: NormalizedEvidenceRule = {
+  required: false,
+  sources: ['camera', 'gallery', 'document'],
+  min: 0,
+  max: 20,
+};
 
 export type NormalizedComplianceField = {
   key: string;
@@ -65,6 +87,8 @@ export class ComplianceService {
     private readonly timelineRepo: Repository<TimelineEvent>,
     @InjectRepository(JobCecItemTick)
     private readonly cecTicksRepo: Repository<JobCecItemTick>,
+    @InjectRepository(FileEntity)
+    private readonly filesRepo: Repository<FileEntity>,
     private readonly runtimeSettings: RuntimeSettingsService,
   ) {}
 
@@ -157,6 +181,44 @@ export class ComplianceService {
     return out;
   }
 
+  private normalizeEvidence(
+    raw: unknown,
+  ): NormalizedEvidenceRule {
+    if (!raw || typeof raw !== 'object') return { ...DEFAULT_EVIDENCE_RULE };
+    const r = raw as Partial<ComplianceEvidenceDto>;
+    const sources = (Array.isArray(r.sources) ? r.sources : []).filter(
+      (x): x is EvidenceSource =>
+        (EVIDENCE_SOURCES as readonly string[]).includes(String(x)),
+    );
+    const required = Boolean(r.required);
+    const min = Math.max(
+      required ? 1 : 0,
+      Math.min(20, Math.trunc(Number(r.min ?? (required ? 1 : 0)) || 0)),
+    );
+    const max = Math.max(
+      min,
+      Math.min(50, Math.trunc(Number(r.max ?? 20) || 20)),
+    );
+    return {
+      required,
+      sources: sources.length ? sources : [...DEFAULT_EVIDENCE_RULE.sources],
+      min,
+      max,
+    };
+  }
+
+  private normalizeCategory(v: unknown): string {
+    return (COMPLIANCE_CATEGORIES as readonly string[]).includes(String(v))
+      ? String(v)
+      : 'checklist';
+  }
+
+  private normalizePhase(v: unknown): string {
+    return (COMPLIANCE_PHASES as readonly string[]).includes(String(v))
+      ? String(v)
+      : 'any';
+  }
+
   async listTemplates(
     viewer: ComplianceViewer,
     includeInactive: boolean,
@@ -166,6 +228,10 @@ export class ComplianceService {
       name: string;
       description: string | null;
       fields: NormalizedComplianceField[];
+      category: string;
+      phase: string;
+      instructions: string | null;
+      evidence: NormalizedEvidenceRule;
       active: boolean;
       sortOrder: number;
       createdAt: string;
@@ -189,6 +255,10 @@ export class ComplianceService {
               name: r.name,
               description: r.description,
               fields,
+              category: this.normalizeCategory(r.category),
+              phase: this.normalizePhase(r.phase),
+              instructions: r.instructions ?? null,
+              evidence: this.normalizeEvidence(r.evidence),
               active: r.active,
               sortOrder: r.sortOrder,
               createdAt: r.createdAt.toISOString(),
@@ -211,6 +281,10 @@ export class ComplianceService {
       name: dto.name.trim(),
       description: dto.description?.trim() ? dto.description.trim() : null,
       fields,
+      category: this.normalizeCategory(dto.category),
+      phase: this.normalizePhase(dto.phase),
+      instructions: dto.instructions?.trim() ? dto.instructions.trim() : null,
+      evidence: dto.evidence ? this.normalizeEvidence(dto.evidence) : null,
       active: dto.active !== false,
       sortOrder:
         dto.sortOrder !== undefined && Number.isFinite(dto.sortOrder)
@@ -239,6 +313,17 @@ export class ComplianceService {
     if (dto.fields !== undefined) {
       row.fields = this.normalizeFields(dto.fields);
     }
+    if (dto.category !== undefined)
+      row.category = this.normalizeCategory(dto.category);
+    if (dto.phase !== undefined) row.phase = this.normalizePhase(dto.phase);
+    if (dto.instructions !== undefined) {
+      row.instructions = dto.instructions?.trim()
+        ? dto.instructions.trim()
+        : null;
+    }
+    if (dto.evidence !== undefined) {
+      row.evidence = dto.evidence ? this.normalizeEvidence(dto.evidence) : null;
+    }
     if (dto.active !== undefined) row.active = dto.active;
     if (dto.sortOrder !== undefined && Number.isFinite(dto.sortOrder)) {
       row.sortOrder = Math.trunc(dto.sortOrder);
@@ -258,6 +343,14 @@ export class ComplianceService {
       hasSignature: boolean;
       completedAt: string;
       completedByUserId: string | null;
+      phase: string;
+      category: string;
+      evidence: Array<{
+        id: string;
+        name: string;
+        contentType: string | null;
+        downloadPath: string;
+      }>;
     }>;
   }> {
     await this.assertJobAccess(jobId, viewer);
@@ -266,6 +359,11 @@ export class ComplianceService {
       relations: { template: true },
       order: { completedAt: 'DESC' },
     });
+    const ids = rows.flatMap((r) => r.evidenceFileIds ?? []);
+    const files = ids.length
+      ? await this.filesRepo.find({ where: { id: In(ids) } })
+      : [];
+    const byId = new Map(files.map((f) => [f.id, f]));
     return {
       items: rows.map((r) => ({
         id: r.id,
@@ -275,6 +373,17 @@ export class ComplianceService {
         hasSignature: Boolean(r.signaturePngBase64),
         completedAt: r.completedAt.toISOString(),
         completedByUserId: r.completedByUserId,
+        phase: this.normalizePhase(r.template?.phase),
+        category: this.normalizeCategory(r.template?.category),
+        evidence: (r.evidenceFileIds ?? [])
+          .map((id) => byId.get(id))
+          .filter((f): f is FileEntity => Boolean(f))
+          .map((f) => ({
+            id: f.id,
+            name: f.displayName?.trim() || f.originalName?.trim() || 'Evidence',
+            contentType: f.contentType,
+            downloadPath: `/jobs/${jobId}/files/${f.id}/download`,
+          })),
       })),
     };
   }
@@ -318,6 +427,47 @@ export class ComplianceService {
       signature = dto.signaturePngBase64.trim();
     }
 
+    const rule = this.normalizeEvidence(template.evidence);
+    const evidenceIds = [...new Set(dto.evidenceFileIds ?? [])];
+    if (evidenceIds.length < rule.min) {
+      throw new BadRequestException(
+        rule.min === 1
+          ? 'Attach at least one piece of evidence (photo or document)'
+          : `Attach at least ${rule.min} pieces of evidence`,
+      );
+    }
+    if (evidenceIds.length > rule.max) {
+      throw new BadRequestException(
+        `At most ${rule.max} evidence files allowed`,
+      );
+    }
+    if (evidenceIds.length > 0) {
+      const files = await this.filesRepo.find({
+        where: { id: In(evidenceIds), ownerType: 'job', ownerId: jobId },
+      });
+      if (files.length !== evidenceIds.length) {
+        throw new BadRequestException(
+          'Evidence files must be uploaded to this job first',
+        );
+      }
+      const allowsImage =
+        rule.sources.includes('camera') || rule.sources.includes('gallery');
+      const allowsDocument = rule.sources.includes('document');
+      for (const f of files) {
+        const isImage = (f.contentType ?? '').startsWith('image/');
+        if (isImage && !allowsImage) {
+          throw new BadRequestException(
+            `${f.displayName ?? 'A file'} is an image but this form only accepts documents`,
+          );
+        }
+        if (!isImage && !allowsDocument) {
+          throw new BadRequestException(
+            `${f.displayName ?? 'A file'} is a document but this form only accepts photos`,
+          );
+        }
+      }
+    }
+
     const now = new Date();
     const saved = await this.submissionsRepo.save(
       this.submissionsRepo.create({
@@ -325,6 +475,7 @@ export class ComplianceService {
         templateId: template.id,
         answers,
         signaturePngBase64: signature,
+        evidenceFileIds: evidenceIds.length ? evidenceIds : null,
         completedAt: now,
         completedByUserId: viewer.userId,
       }),
@@ -338,8 +489,10 @@ export class ComplianceService {
           submissionId: saved.id,
           templateId: template.id,
           templateName: template.name,
+          phase: this.normalizePhase(template.phase),
           completedAt: now.toISOString(),
           signed: Boolean(signature),
+          evidenceCount: evidenceIds.length,
         },
         createdByUserId: viewer.userId,
       }),
