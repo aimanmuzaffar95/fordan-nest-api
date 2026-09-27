@@ -5,7 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, In, Not, Repository } from 'typeorm';
+import {
+  Brackets,
+  DataSource,
+  EntityManager,
+  In,
+  Not,
+  Repository,
+} from 'typeorm';
 import { Assignment } from '../assignments/entities/assignment.entity';
 import { Job } from '../jobs/entities/job.entity';
 import { UserRole } from '../users/entities/user-role.enum';
@@ -275,20 +282,38 @@ export class ProposalsService {
   /**
    * Mark a version sent. Supersedes every other non-terminal version for the
    * job so exactly one proposal is ever live with the customer.
+   *
+   * Accepts an optional `manager` so `JobProposalSendService` can run this as
+   * the "record the outcome" transaction *after* the PDF has been built and
+   * the email has actually gone out — no lock/transaction here ever spans
+   * that external work. When omitted, each write below runs against the
+   * injected repos as its own implicit transaction (unchanged behavior for
+   * any other caller).
    */
   async send(
     id: string,
     dto: SendProposalDto,
     viewer: { userId: string; role: UserRole },
+    manager?: EntityManager,
   ): Promise<ProposalVersion> {
-    const version = await this.load(id, viewer);
+    const versionRepo = manager
+      ? manager.getRepository(ProposalVersion)
+      : this.versionRepo;
+    const timelineRepo = manager
+      ? manager.getRepository(TimelineEvent)
+      : this.timelineRepo;
+
+    await this.assertEnabled(viewer.role);
+    const version = await versionRepo.findOne({ where: { id } });
+    if (!version) throw new NotFoundException(`Proposal ${id} not found`);
+    await this.assertJobInScope(version.jobId, viewer);
     if (TERMINAL_STATUSES.includes(version.status)) {
       throw new BadRequestException(
         `A ${version.status} proposal cannot be sent again`,
       );
     }
 
-    await this.versionRepo.update(
+    await versionRepo.update(
       {
         jobId: version.jobId,
         id: Not(version.id),
@@ -296,7 +321,7 @@ export class ProposalsService {
       },
       { status: ProposalStatus.SUPERSEDED },
     );
-    await this.versionRepo.update(
+    await versionRepo.update(
       {
         jobId: version.jobId,
         id: Not(version.id),
@@ -323,10 +348,10 @@ export class ProposalsService {
       };
     }
 
-    const saved = await this.versionRepo.save(version);
+    const saved = await versionRepo.save(version);
 
-    await this.timelineRepo.save(
-      this.timelineRepo.create({
+    await timelineRepo.save(
+      timelineRepo.create({
         jobId: saved.jobId,
         type: 'proposal_sent',
         payload: {

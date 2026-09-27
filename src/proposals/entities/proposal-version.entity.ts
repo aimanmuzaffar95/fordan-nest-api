@@ -22,6 +22,15 @@ export enum PricingMode {
 
 export enum ProposalStatus {
   DRAFT = 'draft',
+  /**
+   * Transient claim state: a `send-proposal` request has atomically won the
+   * right to send this version (PDF/email/file-persist in flight) but has
+   * not yet confirmed the send. Never a resting state — either finalized
+   * back to `SENT` or released back to `DRAFT` if the send fails or the
+   * process crashes mid-flight (see `JobProposalSendService`). Stored in the
+   * same `varchar(20)` column as every other status; no migration needed.
+   */
+  SENDING = 'sending',
   SENT = 'sent',
   VIEWED = 'viewed',
   ACCEPTED = 'accepted',
@@ -177,6 +186,21 @@ export class ProposalVersion {
   @CreateDateColumn()
   createdAt: Date;
 
-  @UpdateDateColumn()
+  /**
+   * `precision: 3` (milliseconds) is deliberate, not cosmetic: `updatedAt`
+   * doubles as the optimistic-concurrency fencing token
+   * `JobProposalSendService` uses to guarantee a stale-reclaimed send can
+   * never overwrite the reclaiming attempt's `sentPdfFileId`. JS `Date` only
+   * carries millisecond precision — the column default (6, microseconds)
+   * silently truncates on every read into a `Date`, so a value read back and
+   * used in a later `WHERE "updatedAt" = :token` almost never equality-
+   * matches its own row, which would make that fence spuriously reject
+   * *every* finalize, not just contended ones. Matching the column's
+   * precision to what `Date` can actually round-trip exactly is what makes
+   * the token reliable. See the migration-equivalent SQL note in
+   * `JobProposalSendService`'s class doc for the manual MariaDB ALTER this
+   * requires on production (no TypeORM `synchronize`/`migration:run` there).
+   */
+  @UpdateDateColumn({ precision: 3 })
   updatedAt: Date;
 }
