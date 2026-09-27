@@ -18,6 +18,7 @@ import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CompletePublicSignatureDto } from './dto/complete-public-signature.dto';
 import { JobSignatureService } from './job-signature.service';
 import { DeclineProposalDto } from '../proposals/dto/proposal.dto';
+import { contentDisposition } from '../common/content-disposition.util';
 
 @ApiTags('Public e-sign')
 @Controller('public/sign')
@@ -58,7 +59,10 @@ export class PublicSignatureController {
       filename.replace(/[\r\n"]/g, '_').trim() || 'quotation.pdf';
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', String(buffer.length));
-    res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      contentDisposition('inline', safeName),
+    );
     return new StreamableFile(buffer);
   }
 
@@ -84,7 +88,10 @@ export class PublicSignatureController {
     if (contentLength !== undefined) {
       res.setHeader('Content-Length', String(contentLength));
     }
-    res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      contentDisposition('inline', safeName),
+    );
     return new StreamableFile(stream);
   }
 
@@ -106,7 +113,10 @@ export class PublicSignatureController {
     if (contentLength !== undefined) {
       res.setHeader('Content-Length', String(contentLength));
     }
-    res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      contentDisposition('inline', safeName),
+    );
     return new StreamableFile(stream);
   }
 

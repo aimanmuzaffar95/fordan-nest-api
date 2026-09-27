@@ -63,6 +63,7 @@ import { JobProposalSendService } from './job-proposal-send.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import type { PermissionKey } from '../permissions/permission-catalog';
 import type { JobListViewer } from './jobs.service';
+import { contentDisposition } from '../common/content-disposition.util';
 
 @ApiTags('Jobs')
 @ApiBearerAuth('JWT')
@@ -248,7 +249,10 @@ export class JobsController {
     const safeName =
       attachmentFilename.replace(/[\r\n"]/g, '_').trim() || 'quotation.pdf';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      contentDisposition('attachment', safeName),
+    );
     res.send(pdfBuffer);
   }
 
@@ -273,7 +277,10 @@ export class JobsController {
     const safeName =
       attachmentFilename.replace(/[\r\n"]/g, '_').trim() || 'proposal.pdf';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      contentDisposition('attachment', safeName),
+    );
     res.send(pdfBuffer);
   }
 
@@ -437,7 +444,7 @@ export class JobsController {
     }
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${safeFileName || 'download'}"`,
+      contentDisposition('attachment', safeFileName),
     );
 
     return new StreamableFile(download.stream);

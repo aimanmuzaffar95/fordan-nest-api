@@ -45,6 +45,7 @@ import { FilesService } from '../files/files.service';
 import { uploadFileFilter } from '../files/upload-file-filter';
 import { UploadedBinaryFile } from '../files/uploaded-binary-file.type';
 import { DEFAULT_MAX_UPLOAD_SIZE_BYTES } from '../files/upload.constants';
+import { contentDisposition } from '../common/content-disposition.util';
 
 @ApiTags('Metering')
 @ApiBearerAuth('JWT')
@@ -214,7 +215,7 @@ export class MeterApplicationsController {
     }
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${safeFileName || 'download'}"`,
+      contentDisposition('attachment', safeFileName),
     );
 
     return new StreamableFile(download.stream);

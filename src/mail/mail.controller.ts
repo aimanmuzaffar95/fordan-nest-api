@@ -22,6 +22,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MailService } from './mail.service';
 import { SendMailDto, UpdateSignatureDto } from './dto/mail.dto';
+import { contentDisposition } from '../common/content-disposition.util';
 
 type AuthedRequest = Request & { user?: { sub?: string } };
 
@@ -84,7 +85,10 @@ export class MailController {
     res.setHeader('Content-Length', String(buffer.length));
     res.setHeader(
       'Content-Disposition',
-      `${disposition}; filename="${filename}"`,
+      contentDisposition(
+        disposition === 'attachment' ? 'attachment' : 'inline',
+        filename,
+      ),
     );
     return new StreamableFile(buffer);
   }

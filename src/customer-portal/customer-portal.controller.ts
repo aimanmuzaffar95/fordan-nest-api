@@ -37,6 +37,7 @@ import { RequirePermission } from '../permissions/decorators/require-permission.
 import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CustomerPortalService } from './customer-portal.service';
+import { contentDisposition } from '../common/content-disposition.util';
 
 type AuthRequest = Request & { user?: { sub?: string; role?: UserRole } };
 
@@ -201,7 +202,7 @@ export class CustomerPortalPublicController {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="${filename.replace(/[\r\n"]/g, '_')}"`,
+      contentDisposition('inline', filename),
     );
     res.setHeader('Cache-Control', 'private, no-store');
     res.send(pdfBuffer);
@@ -226,7 +227,7 @@ export class CustomerPortalPublicController {
       'Content-Type',
       download.file.contentType ?? 'application/octet-stream',
     );
-    res.setHeader('Content-Disposition', `inline; filename="${name}"`);
+    res.setHeader('Content-Disposition', contentDisposition('inline', name));
     if (download.contentLength) {
       res.setHeader('Content-Length', String(download.contentLength));
     }
