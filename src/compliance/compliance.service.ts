@@ -181,9 +181,7 @@ export class ComplianceService {
     return out;
   }
 
-  private normalizeEvidence(
-    raw: unknown,
-  ): NormalizedEvidenceRule {
+  private normalizeEvidence(raw: unknown): NormalizedEvidenceRule {
     if (!raw || typeof raw !== 'object') return { ...DEFAULT_EVIDENCE_RULE };
     const r = raw as Partial<ComplianceEvidenceDto>;
     const sources = (Array.isArray(r.sources) ? r.sources : []).filter(
