@@ -11,6 +11,7 @@ import { IsNull, Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { EmailService } from '../email/email.service';
+import { PermissionsService } from '../permissions/permissions.service';
 import { webAppLink } from '../common/web-app-url.util';
 import { StaffOnboardingInvite } from './entities/staff-onboarding-invite.entity';
 import {
@@ -56,6 +57,7 @@ export class StaffOnboardingService {
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     private readonly email: EmailService,
+    private readonly permissions: PermissionsService,
   ) {}
 
   private hash(token: string): string {
@@ -170,6 +172,19 @@ export class StaffOnboardingService {
         throw new BadRequestException(
           'Installers must be given a staff role on the invite',
         );
+      }
+      if (role === UserRole.INSTALLER && dto.staffRoleId) {
+        // StaffService.resolveStaffRole rejects office-family roles for
+        // installers at submit time — when the new hire, not the admin, is
+        // the one looking at the error with no way to fix it. Catch it here.
+        const family = await this.permissions.getStaffRoleFamily(
+          dto.staffRoleId,
+        );
+        if (family === 'office') {
+          throw new BadRequestException(
+            'That staff role is an office-family role. Installers need an installer-family role — pick another or create one in Settings → Roles & permissions.',
+          );
+        }
       }
       if (role === UserRole.MANAGER && dto.staffRoleId) {
         throw new BadRequestException('Managers cannot be given a staff role');
