@@ -95,6 +95,8 @@ export const PERMISSION_KEYS = [
   'mcp_access:manage',
   'mailbox:manage',
   'org_profile:manage',
+  'training:view',
+  'training:manage',
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -127,7 +129,8 @@ export type PermissionGroup =
   | 'qualification'
   | 'mcp'
   | 'mail_admin'
-  | 'org';
+  | 'org'
+  | 'training';
 
 type PermissionCatalogEntryInput = {
   key: PermissionKey;
@@ -647,6 +650,19 @@ const PERMISSION_CATALOG_ENTRIES: PermissionCatalogEntryInput[] = [
       'Create complaints, change status/priority/assignee, and post replies or internal notes.',
   },
   {
+    key: 'training:view',
+    group: 'training',
+    label: 'View training',
+    description: 'Take onboarding training modules and see own progress.',
+  },
+  {
+    key: 'training:manage',
+    group: 'training',
+    label: 'Manage training',
+    description:
+      'Create, edit and delete training modules; view every staff member’s progress.',
+  },
+  {
     key: 'alert:view',
     group: 'alerts',
     label: 'View alerts',
@@ -824,6 +840,8 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
     'communication:manage',
     'qualification:view',
     'qualification:manage',
+    'training:view',
+    'training:manage',
   ],
   [UserRole.INSTALLER]: [
     'job:view',
@@ -858,6 +876,7 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
     'survey:view',
     'survey:manage',
     'qualification:view',
+    'training:view',
   ],
   [UserRole.EMPLOYEE]: [
     // EMPLOYEE previously had zero catalog permissions even though
@@ -872,6 +891,7 @@ export const DEFAULT_PERMISSIONS_BY_ROLE: Record<UserRole, PermissionKey[]> = {
     // see rows for jobs they are assigned to (see ProposalsService.listAll),
     // same gate INSTALLER already has on the per-job proposal routes.
     'job:proposal:view',
+    'training:view',
   ],
 };
 

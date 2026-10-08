@@ -786,6 +786,18 @@ export class PermissionsService implements OnModuleInit {
     if (profile.name !== role.name) {
       await this.profiles.update(profile.id, { name: role.name });
     }
+    // Custom staff-role profiles keep their stored grants, so a newly
+    // introduced default key is back-filled once (only when no row exists —
+    // an admin's explicit disable is never overridden).
+    if (!profile.grants?.some((g) => g.permissionKey === 'training:view')) {
+      await this.grants.save(
+        this.grants.create({
+          profileId: profile.id,
+          permissionKey: 'training:view',
+          enabled: true,
+        }),
+      );
+    }
     return profile;
   }
 

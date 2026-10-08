@@ -119,6 +119,10 @@ import {
 } from './projects/entities/install-visit.entity';
 import { Task } from './tasks/entities/task.entity';
 import { ComplaintsModule } from './complaints/complaints.module';
+import { TrainingModule } from './training/training.module';
+import { TrainingModuleEntity } from './training/entities/training-module.entity';
+import { TrainingQuestion } from './training/entities/training-question.entity';
+import { TrainingAttempt } from './training/entities/training-attempt.entity';
 import { Complaint } from './complaints/entities/complaint.entity';
 import { ComplaintEvent } from './complaints/entities/complaint-event.entity';
 import { loadEnvFile } from './common/load-env.util';
@@ -310,6 +314,9 @@ getSettingsEncryptionKey();
         CommunicationLog,
         Complaint,
         ComplaintEvent,
+        TrainingModuleEntity,
+        TrainingQuestion,
+        TrainingAttempt,
       ],
       migrations: MIGRATION_PATHS,
       synchronize: SYNCHRONIZE,
@@ -378,6 +385,7 @@ getSettingsEncryptionKey();
     CustomerPortalModule,
     CommunicationsModule,
     ComplaintsModule,
+    TrainingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
