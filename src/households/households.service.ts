@@ -224,21 +224,97 @@ export class HouseholdsService {
     // gated.
     return members
       .filter((m) => m.id !== customerId)
-      .map((m) =>
-        scrubFields(
-          {
-            customerId: m.id,
-            firstName: m.firstName,
-            lastName: m.lastName,
-            email: m.email,
-            phone: m.phone,
-            address: m.address,
-            strength: 'exact' as const,
-            reason: 'Same household address',
-          } as unknown as Record<string, unknown>,
-          { email: canViewCustomerPii, phone: canViewCustomerPii },
-        ) as unknown as DuplicateCandidate,
+      .map(
+        (m) =>
+          scrubFields(
+            {
+              customerId: m.id,
+              firstName: m.firstName,
+              lastName: m.lastName,
+              email: m.email,
+              phone: m.phone,
+              address: m.address,
+              strength: 'exact' as const,
+              reason: 'Same household address',
+            } as unknown as Record<string, unknown>,
+            { email: canViewCustomerPii, phone: canViewCustomerPii },
+          ) as unknown as DuplicateCandidate,
       );
+  }
+
+  /**
+   * Manually put `otherId` in the same household as `customerId` — for the
+   * cases address matching cannot see (unit vs. street spelling, a relative
+   * at a PO box, a site owner living elsewhere). Both records get the
+   * subject's key; if the subject has none, a `manual:<subjectId>` key is
+   * minted so the group survives address edits (CustomersService.update
+   * keeps `manual:` keys).
+   */
+  async link(params: {
+    customerId: string;
+    otherId: string;
+    actorUserId: string;
+    role: UserRole;
+  }): Promise<{ householdKey: string }> {
+    await this.assertEnabled(params.role);
+    if (params.customerId === params.otherId) {
+      throw new BadRequestException(
+        'A customer is already in their own household',
+      );
+    }
+    const subject = await this.customerRepo.findOne({
+      where: { id: params.customerId, mergedIntoCustomerId: IsNull() },
+    });
+    const other = await this.customerRepo.findOne({
+      where: { id: params.otherId, mergedIntoCustomerId: IsNull() },
+    });
+    if (!subject)
+      throw new NotFoundException(`Customer ${params.customerId} not found`);
+    if (!other)
+      throw new NotFoundException(`Customer ${params.otherId} not found`);
+
+    const key =
+      subject.householdKey ??
+      normalizeAddressKey(subject.address) ??
+      `manual:${subject.id}`;
+    if (subject.householdKey !== key) {
+      await this.customerRepo.update({ id: subject.id }, { householdKey: key });
+    }
+    await this.customerRepo.update({ id: other.id }, { householdKey: key });
+    await this.systemAudit.record({
+      action: 'customer.household.link',
+      actorUserId: params.actorUserId,
+      resourceType: 'customer',
+      resourceId: subject.id,
+      metadata: { linkedCustomerId: other.id, householdKey: key },
+    });
+    return { householdKey: key };
+  }
+
+  /** Take `customerId` out of a manual/shared household: key follows their own address again. */
+  async unlink(params: {
+    customerId: string;
+    actorUserId: string;
+    role: UserRole;
+  }): Promise<{ householdKey: string | null }> {
+    await this.assertEnabled(params.role);
+    const customer = await this.customerRepo.findOne({
+      where: { id: params.customerId },
+    });
+    if (!customer)
+      throw new NotFoundException(`Customer ${params.customerId} not found`);
+    // Their own address may still match the group; a distinct `manual:` key
+    // of their own guarantees they leave.
+    const key = `manual:${customer.id}`;
+    await this.customerRepo.update({ id: customer.id }, { householdKey: key });
+    await this.systemAudit.record({
+      action: 'customer.household.unlink',
+      actorUserId: params.actorUserId,
+      resourceType: 'customer',
+      resourceId: customer.id,
+      metadata: { previousHouseholdKey: customer.householdKey },
+    });
+    return { householdKey: key };
   }
 
   /**

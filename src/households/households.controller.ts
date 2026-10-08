@@ -50,6 +50,12 @@ export class MergeCustomersDto {
   reason?: string;
 }
 
+class LinkHouseholdDto {
+  /** Customer to put in the same household as the path customer. */
+  @IsUUID()
+  customerId: string;
+}
+
 @ApiTags('Households')
 @ApiBearerAuth('JWT')
 @ApiUnauthorizedResponse({
@@ -128,6 +134,47 @@ export class HouseholdsController {
     @Req() req: AuthRequest,
   ) {
     return this.households.mergeHistory(id, viewerOf(req).role);
+  }
+
+  @Post(':id/household/link')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('household:manage')
+  @ApiOperation({
+    summary: 'Add a customer to this customer’s household',
+    description:
+      'Manual grouping for cases address matching misses. Both records share one household key afterwards; the link survives later address edits. Audited `customer.household.link`.',
+  })
+  @ApiParam({ name: 'id', description: 'Customer UUID (household owner)' })
+  link(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: LinkHouseholdDto,
+    @Req() req: AuthRequest,
+  ) {
+    const viewer = viewerOf(req);
+    return this.households.link({
+      customerId: id,
+      otherId: dto.customerId,
+      actorUserId: viewer.userId,
+      role: viewer.role,
+    });
+  }
+
+  @Post(':id/household/unlink')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @RequirePermission('household:manage')
+  @ApiOperation({
+    summary: 'Remove this customer from their household',
+    description:
+      'Gives the customer a household key of their own so they stop appearing under “Same property”. Audited `customer.household.unlink`.',
+  })
+  @ApiParam({ name: 'id', description: 'Customer UUID' })
+  unlink(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
+    const viewer = viewerOf(req);
+    return this.households.unlink({
+      customerId: id,
+      actorUserId: viewer.userId,
+      role: viewer.role,
+    });
   }
 
   @Post(':id/merge')

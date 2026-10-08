@@ -29,6 +29,7 @@ import { CustomerAuditLog } from './entities/customer-audit-log.entity';
 import { Customer } from './entities/customer.entity';
 import { CustomerAcquisitionSource } from './constants/customer-acquisition-source.constants';
 import { LeadRoutingService } from '../territories/lead-routing.service';
+import { normalizeAddressKey } from '../households/address-normalize.util';
 
 type TimelineEventDto = {
   event: string;
@@ -115,6 +116,10 @@ export class CustomersService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       address: dto.address ?? null,
+      // Household ("same property") grouping keys off the normalised address.
+      // Previously only the admin backfill ever set this, so new customers
+      // never joined a household.
+      householdKey: normalizeAddressKey(dto.address ?? null),
       lat: dto.lat ?? null,
       lng: dto.lng ?? null,
       phone: dto.phone,
@@ -386,6 +391,11 @@ export class CustomersService {
     }
     if (typeof dto.address !== 'undefined') {
       customer.address = dto.address;
+      // Keep a manual household link (`manual:` key) when only the address
+      // text changes; otherwise follow the address.
+      if (!customer.householdKey?.startsWith('manual:')) {
+        customer.householdKey = normalizeAddressKey(dto.address);
+      }
     }
     if (typeof dto.lat !== 'undefined') {
       customer.lat = dto.lat;
