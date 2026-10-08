@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEmail,
   IsIn,
   IsOptional,
@@ -10,6 +11,16 @@ import {
 import { UserRole } from '../../users/entities/user-role.enum';
 
 export class CreateStaffDto {
+  /**
+   * When a soft-deleted staff member still holds this email / identification
+   * number / username, archive those values on the deleted record (suffix
+   * them) so this account can take them. Only honoured for deleted records —
+   * an active clash still 409s.
+   */
+  @IsOptional()
+  @IsBoolean()
+  forceReuseDeleted?: boolean;
+
   @IsString()
   @MinLength(1)
   @MaxLength(100)

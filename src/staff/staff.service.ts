@@ -12,6 +12,9 @@ import { UserCredential } from '../auth/entities/user-credential.entity';
 import { assertActorCanActOnTarget } from '../common/actor-target-hierarchy.util';
 import { scrubFields } from '../common/field-scrub.util';
 import { webAppLink } from '../common/web-app-url.util';
+
+/** 409 `code` when the clash is with a soft-deleted staff member — the client may retry with `forceReuseDeleted`. */
+export const STAFF_DELETED_CONFLICT = 'STAFF_DELETED_CONFLICT';
 import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
@@ -216,6 +219,10 @@ export class StaffService {
     webOrigin?: string | null,
   ): Promise<StaffListItem> {
     const payload = this.normalizeCreatePayload(dto);
+
+    if (payload.forceReuseDeleted) {
+      await this.releaseDeletedIdentities(payload, actorUserId);
+    }
 
     // Handle EMPLOYEE type (non-technical staff).
     //
@@ -825,7 +832,11 @@ export class StaffService {
     if (user) {
       throw new ConflictException(
         user.deletedAt
-          ? 'Identification number belongs to a deleted staff member — use a different one'
+          ? {
+              message:
+                'Identification number belongs to a deleted staff member',
+              code: STAFF_DELETED_CONFLICT,
+            }
           : 'Identification number already exists',
       );
     }
@@ -845,7 +856,10 @@ export class StaffService {
     if (user) {
       throw new ConflictException(
         user.deletedAt
-          ? 'Email address belongs to a deleted staff member — use a different email'
+          ? {
+              message: 'Email address belongs to a deleted staff member',
+              code: STAFF_DELETED_CONFLICT,
+            }
           : 'Email address already exists',
       );
     }
@@ -870,7 +884,74 @@ export class StaffService {
     });
 
     if (credential && credential.user.id !== excludeUserId) {
-      throw new ConflictException('Username already exists');
+      throw new ConflictException(
+        credential.user.deletedAt
+          ? {
+              message: 'Username belongs to a deleted staff member',
+              code: STAFF_DELETED_CONFLICT,
+            }
+          : 'Username already exists',
+      );
+    }
+  }
+
+  /**
+   * `forceReuseDeleted`: move the email / identification number / username
+   * held by soft-deleted users out of the way (suffixed with `.deleted-<id8>`)
+   * so a new account can take them. The deleted rows and their history stay.
+   */
+  private async releaseDeletedIdentities(
+    payload: CreateStaffDto,
+    actorUserId?: string,
+  ): Promise<void> {
+    const released: Record<string, string> = {};
+    const suffix = (userId: string) => `.deleted-${userId.slice(0, 8)}`;
+
+    const byEmail = await this.usersRepository.find({
+      where: { emailAddress: payload.emailAddress, deletedAt: Not(IsNull()) },
+    });
+    const byId = payload.identificationNumber
+      ? await this.usersRepository.find({
+          where: {
+            identificationNumber: payload.identificationNumber,
+            deletedAt: Not(IsNull()),
+          },
+        })
+      : [];
+    for (const user of [...byEmail, ...byId]) {
+      if (user.emailAddress === payload.emailAddress) {
+        user.emailAddress = `${user.emailAddress}${suffix(user.id)}`;
+        released.emailAddress = user.id;
+      }
+      if (
+        payload.identificationNumber &&
+        user.identificationNumber === payload.identificationNumber
+      ) {
+        user.identificationNumber = `${user.identificationNumber}${suffix(user.id)}`;
+        released.identificationNumber = user.id;
+      }
+      await this.usersRepository.save(user);
+    }
+
+    if (payload.username) {
+      const credential = await this.credentialsRepository.findOne({
+        where: { username: payload.username },
+      });
+      if (credential?.user?.deletedAt) {
+        credential.username = `${credential.username}${suffix(credential.user.id)}`;
+        await this.credentialsRepository.save(credential);
+        released.username = credential.user.id;
+      }
+    }
+
+    if (Object.keys(released).length > 0) {
+      await this.audit.record({
+        action: 'staff.identity.release',
+        actorUserId,
+        resourceType: 'user',
+        resourceId: Object.values(released)[0],
+        metadata: { ...released, reusedFor: payload.emailAddress },
+      });
     }
   }
 
