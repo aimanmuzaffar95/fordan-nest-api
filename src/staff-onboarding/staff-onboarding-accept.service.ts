@@ -34,6 +34,7 @@ export class StaffOnboardingAcceptService {
   async acceptInvite(
     token: string,
     dto: UpsertEmployeeFormDto,
+    webOrigin?: string | null,
   ): Promise<{ submitted: true; accountCreated: boolean }> {
     const invite = await this.onboarding.resolveToken(token);
 
@@ -41,34 +42,39 @@ export class StaffOnboardingAcceptService {
     let accountCreated = false;
 
     if (!userId) {
-      const created = await this.staff.createStaff({
-        firstName: dto.firstName,
-        lastName: dto.surname,
-        phoneNumber: dto.phoneMobile,
-        address: dto.homeAddress ?? '',
-        emailAddress: invite.email,
-        // Fixed when the invite was issued — a submission cannot choose it.
-        staffType: invite.intendedRole as
-          | UserRole.MANAGER
-          | UserRole.INSTALLER
-          | UserRole.EMPLOYEE,
-        ...(invite.employeeRoleId
-          ? { employeeRoleId: invite.employeeRoleId }
-          : {}),
-        ...(invite.staffRoleId ? { staffRoleId: invite.staffRoleId } : {}),
-        // Technical staff (manager/installer) must have a username, and the
-        // invitee never picks one — derive it from the invited email and let
-        // the suffix break ties.
-        ...(invite.intendedRole === UserRole.EMPLOYEE
-          ? {}
-          : {
-              username: await this.suggestUsername(invite.email),
-              // Technical staff need credentials. The invitee never chooses
-              // one here — `createStaff` emails the generated password through
-              // the same welcome path used when an admin adds staff by hand.
-              password: randomBytes(12).toString('base64url'),
-            }),
-      });
+      const created = await this.staff.createStaff(
+        {
+          firstName: dto.firstName,
+          lastName: dto.surname,
+          phoneNumber: dto.phoneMobile,
+          address: dto.homeAddress ?? '',
+          emailAddress: invite.email,
+          // Fixed when the invite was issued — a submission cannot choose it.
+          staffType: invite.intendedRole as
+            | UserRole.MANAGER
+            | UserRole.INSTALLER
+            | UserRole.EMPLOYEE,
+          ...(invite.employeeRoleId
+            ? { employeeRoleId: invite.employeeRoleId }
+            : {}),
+          ...(invite.staffRoleId ? { staffRoleId: invite.staffRoleId } : {}),
+          // Technical staff (manager/installer) must have a username, and the
+          // invitee never picks one — derive it from the invited email and let
+          // the suffix break ties.
+          ...(invite.intendedRole === UserRole.EMPLOYEE
+            ? {}
+            : {
+                username: await this.suggestUsername(invite.email),
+                // Technical staff need credentials. The invitee never chooses
+                // one here — `createStaff` emails the generated password through
+                // the same welcome path used when an admin adds staff by hand.
+                password: randomBytes(12).toString('base64url'),
+              }),
+        },
+        false,
+        undefined,
+        webOrigin,
+      );
       userId = created.id;
       accountCreated = true;
       this.logger.log(`Onboarding invite created staff account ${userId}`);

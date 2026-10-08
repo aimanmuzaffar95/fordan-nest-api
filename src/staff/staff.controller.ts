@@ -22,6 +22,7 @@ import { PermissionsService } from '../permissions/permissions.service';
 import { UserRole } from '../users/entities/user-role.enum';
 import { CreateEmployeeRoleDto } from './dto/create-employee-role.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { webOriginOf } from '../common/web-app-url.util';
 import { CreateStaffRoleDto } from './dto/create-staff-role.dto';
 import { GrantAdminAccessDto } from './dto/grant-admin-access.dto';
 import { ResetStaffPasswordDto } from './dto/reset-staff-password.dto';
@@ -86,7 +87,12 @@ export class StaffController {
     await this.assertStaffPermission(req, 'staff:create');
     const viewerCanSeePii = await this.canViewStaffPii(req);
     const actorUserId = req.user?.sub;
-    return this.staffService.createStaff(dto, viewerCanSeePii, actorUserId);
+    return this.staffService.createStaff(
+      dto,
+      viewerCanSeePii,
+      actorUserId,
+      webOriginOf(req),
+    );
   }
 
   @Patch(':id')

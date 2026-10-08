@@ -11,6 +11,7 @@ import { IsNull, Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/entities/user-role.enum';
 import { EmailService } from '../email/email.service';
+import { webAppLink } from '../common/web-app-url.util';
 import { StaffOnboardingInvite } from './entities/staff-onboarding-invite.entity';
 
 /** Roles an invite may create. Admin is deliberately absent. */
@@ -86,16 +87,9 @@ export class StaffOnboardingService {
     };
   }
 
-  /** `WEB_APP_URL`-based onboarding link. Mirrors `StaffService.getStaffLoginUrl`. */
-  private onboardingUrl(token: string): string {
-    const base = process.env.WEB_APP_URL?.trim() || 'http://localhost:5173';
-    try {
-      const normalized = base.endsWith('/') ? base : `${base}/`;
-      return new URL(`onboarding/${token}`, normalized).toString();
-    } catch {
-      this.logger.warn(`Invalid WEB_APP_URL "${base}" — using the raw path`);
-      return `/onboarding/${token}`;
-    }
+  /** `WEB_APP_URL` → allow-listed browser Origin → localhost (see web-app-url.util). */
+  private onboardingUrl(token: string, webOrigin?: string | null): string {
+    return webAppLink(`onboarding/${token}`, webOrigin);
   }
 
   async list(): Promise<InviteSummary[]> {
@@ -126,6 +120,7 @@ export class StaffOnboardingService {
       ttlDays?: number;
     },
     actorUserId: string,
+    webOrigin?: string | null,
   ): Promise<{ invite: InviteSummary; url: string }> {
     let userId: string | null = null;
     let email = dto.email?.trim().toLowerCase() ?? '';
@@ -226,7 +221,7 @@ export class StaffOnboardingService {
       }),
     );
 
-    const url = this.onboardingUrl(token);
+    const url = this.onboardingUrl(token, webOrigin);
     await this.sendInviteEmail(email, firstName, url, expiresAt);
 
     return { invite: this.toSummary(invite), url };
@@ -259,7 +254,7 @@ export class StaffOnboardingService {
     }
   }
 
-  async resend(id: string): Promise<InviteSummary> {
+  async resend(id: string, webOrigin?: string | null): Promise<InviteSummary> {
     const invite = await this.inviteRepo.findOne({ where: { id } });
     if (!invite) throw new NotFoundException('Invite not found');
     if (this.statusOf(invite) !== 'pending') {
@@ -278,7 +273,7 @@ export class StaffOnboardingService {
     await this.sendInviteEmail(
       invite.email,
       invite.firstName,
-      this.onboardingUrl(token),
+      this.onboardingUrl(token, webOrigin),
       invite.expiresAt,
     );
     return this.toSummary(saved);

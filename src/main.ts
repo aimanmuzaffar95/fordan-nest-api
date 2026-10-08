@@ -5,6 +5,7 @@ import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { SuccessResponseInterceptor } from './common/interceptors/success-response.interceptor';
+import { ALLOWED_WEB_ORIGINS } from './common/web-app-url.util';
 import { setupOpenApi } from './openapi-setup';
 
 async function bootstrap() {
@@ -21,16 +22,7 @@ async function bootstrap() {
   app.use(urlencoded({ extended: true, limit: '5mb' }));
 
   app.enableCors({
-    origin: [
-      'http://localhost:8080', // docker dev web
-      'http://localhost:8081', // local staging (vite preview)
-      'http://localhost:5173', // host dev web (common vite default)
-      'http://127.0.0.1:8080',
-      'http://127.0.0.1:8081',
-      'http://127.0.0.1:5173',
-      'https://crm.fordan.com.au',
-      'https://api.fordan.com.au',
-    ],
+    origin: ALLOWED_WEB_ORIGINS,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',

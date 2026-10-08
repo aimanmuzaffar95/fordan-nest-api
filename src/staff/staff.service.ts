@@ -11,6 +11,7 @@ import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 import { UserCredential } from '../auth/entities/user-credential.entity';
 import { assertActorCanActOnTarget } from '../common/actor-target-hierarchy.util';
 import { scrubFields } from '../common/field-scrub.util';
+import { webAppLink } from '../common/web-app-url.util';
 import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TYPE } from '../notifications/notification-type.constants';
@@ -211,6 +212,8 @@ export class StaffService {
     dto: CreateStaffDto,
     viewerCanSeePii = false,
     actorUserId?: string,
+    /** Allow-listed browser `Origin`; base of the welcome-email login link when `WEB_APP_URL` is unset. */
+    webOrigin?: string | null,
   ): Promise<StaffListItem> {
     const payload = this.normalizeCreatePayload(dto);
 
@@ -279,7 +282,7 @@ export class StaffService {
         return this.toStaffListItem(user, viewerCanSeePii);
       });
 
-      this.sendWelcomeEmail(result, password);
+      this.sendWelcomeEmail(result, password, webOrigin);
       await this.sendNotificationSafely(
         () =>
           this.notificationsService.sendToRole(
@@ -373,7 +376,7 @@ export class StaffService {
       return this.toStaffListItem(user, viewerCanSeePii);
     });
 
-    this.sendWelcomeEmail(createdStaff, password);
+    this.sendWelcomeEmail(createdStaff, password, webOrigin);
     await this.sendNotificationSafely(
       () =>
         this.notificationsService.sendToRole(
@@ -810,16 +813,21 @@ export class StaffService {
     identificationNumber: string,
     excludeUserId?: string,
   ): Promise<void> {
+    // No `deletedAt` filter: the column is UNIQUE in the DB, so a soft-deleted
+    // row still blocks reuse — checking only live rows turned that into a 500.
     const user = await this.usersRepository.findOne({
       where: {
         identificationNumber,
-        deletedAt: IsNull(),
         ...(excludeUserId ? { id: Not(excludeUserId) } : {}),
       },
     });
 
     if (user) {
-      throw new ConflictException('Identification number already exists');
+      throw new ConflictException(
+        user.deletedAt
+          ? 'Identification number belongs to a deleted staff member — use a different one'
+          : 'Identification number already exists',
+      );
     }
   }
 
@@ -830,13 +838,16 @@ export class StaffService {
     const user = await this.usersRepository.findOne({
       where: {
         emailAddress,
-        deletedAt: IsNull(),
         ...(excludeUserId ? { id: Not(excludeUserId) } : {}),
       },
     });
 
     if (user) {
-      throw new ConflictException('Email address already exists');
+      throw new ConflictException(
+        user.deletedAt
+          ? 'Email address belongs to a deleted staff member — use a different email'
+          : 'Email address already exists',
+      );
     }
   }
 
@@ -1066,6 +1077,7 @@ export class StaffService {
   private sendWelcomeEmail(
     staff: StaffListItem,
     temporaryPassword: string,
+    webOrigin?: string | null,
   ): void {
     this.email.fireAndForget({
       to: staff.emailAddress,
@@ -1075,7 +1087,7 @@ export class StaffService {
         firstName: staff.firstName,
         username: staff.username,
         temporaryPassword,
-        loginUrl: this.getStaffLoginUrl(),
+        loginUrl: webAppLink('login', webOrigin),
         currentYear: new Date().getFullYear(),
         staffTypeLabel: this.toStaffTypeLabel(staff.staffType),
         staffRoleName: staff.staffRole?.name ?? null,
@@ -1092,27 +1104,6 @@ export class StaffService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Notification skipped for ${context}: ${message}`);
-    }
-  }
-
-  private getStaffLoginUrl(): string {
-    const fallbackUrl = 'http://localhost:5173/login';
-    const rawBaseUrl = process.env.WEB_APP_URL?.trim();
-
-    if (!rawBaseUrl) {
-      return fallbackUrl;
-    }
-
-    try {
-      const normalizedBaseUrl = rawBaseUrl.endsWith('/')
-        ? rawBaseUrl
-        : `${rawBaseUrl}/`;
-      return new URL('login', normalizedBaseUrl).toString();
-    } catch {
-      this.logger.warn(
-        `Invalid WEB_APP_URL "${rawBaseUrl}" — falling back to ${fallbackUrl}`,
-      );
-      return fallbackUrl;
     }
   }
 
@@ -1201,7 +1192,6 @@ export class StaffService {
     const latest = await this.usersRepository
       .createQueryBuilder('user')
       .where('user.identificationNumber LIKE :prefix', { prefix: `${prefix}%` })
-      .andWhere('user.deletedAt IS NULL')
       .orderBy('user.identificationNumber', 'DESC')
       .getOne();
 

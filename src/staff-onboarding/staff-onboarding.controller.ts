@@ -23,6 +23,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { RequirePermission } from '../permissions/decorators/require-permission.decorator';
 import { PermissionsGuard } from '../permissions/guards/permissions.guard';
 import { UserRole } from '../users/entities/user-role.enum';
+import { webOriginOf } from '../common/web-app-url.util';
 import { UpsertEmployeeFormDto } from '../employee-forms/dto/upsert-employee-form.dto';
 import { CreateOnboardingInviteDto } from './dto/staff-onboarding.dto';
 import { StaffOnboardingService } from './staff-onboarding.service';
@@ -63,7 +64,7 @@ export class StaffOnboardingController {
       'Supply `userId` for an existing staff member, or an email plus role for a new hire whose account is created when they submit. Emails the link and returns it once — only the hash is stored. Any previous pending invite for the same person is revoked.',
   })
   invite(@Body() dto: CreateOnboardingInviteDto, @Req() req: AuthRequest) {
-    return this.onboarding.invite(dto, actorOf(req));
+    return this.onboarding.invite(dto, actorOf(req), webOriginOf(req));
   }
 
   @Post(':id/resend')
@@ -75,8 +76,8 @@ export class StaffOnboardingController {
       'Mints a fresh token — the stored hash cannot be reversed — which retires the previous link.',
   })
   @ApiParam({ name: 'id', description: 'Invite UUID' })
-  resend(@Param('id', ParseUUIDPipe) id: string) {
-    return this.onboarding.resend(id);
+  resend(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {
+    return this.onboarding.resend(id, webOriginOf(req));
   }
 
   @Post(':id/revoke')
@@ -133,7 +134,11 @@ export class StaffOnboardingPublicController {
       'Creates the staff account first when the invite was for a new hire, using the role fixed at invite time. Single use — the invite is spent on success.',
   })
   @ApiParam({ name: 'token', description: 'Invite token from the email' })
-  submit(@Param('token') token: string, @Body() dto: UpsertEmployeeFormDto) {
-    return this.accept.acceptInvite(token, dto);
+  submit(
+    @Param('token') token: string,
+    @Body() dto: UpsertEmployeeFormDto,
+    @Req() req: AuthRequest,
+  ) {
+    return this.accept.acceptInvite(token, dto, webOriginOf(req));
   }
 }
