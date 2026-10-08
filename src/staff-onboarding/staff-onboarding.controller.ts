@@ -73,7 +73,7 @@ export class StaffOnboardingController {
   @ApiOperation({
     summary: 'Resend an invite',
     description:
-      'Mints a fresh token — the stored hash cannot be reversed — which retires the previous link.',
+      'Mints a fresh token — the stored hash cannot be reversed — which retires the previous link. Works for pending and expired invites; an expired invite gets a fresh 14-day window.',
   })
   @ApiParam({ name: 'id', description: 'Invite UUID' })
   resend(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) {

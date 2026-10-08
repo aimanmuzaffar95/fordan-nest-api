@@ -12,6 +12,7 @@ import { UserCredential } from '../auth/entities/user-credential.entity';
 import { assertActorCanActOnTarget } from '../common/actor-target-hierarchy.util';
 import { scrubFields } from '../common/field-scrub.util';
 import { webAppLink } from '../common/web-app-url.util';
+import { onboardingStagesHtml } from '../staff-onboarding/onboarding-stages';
 
 /** 409 `code` when the clash is with a soft-deleted staff member — the client may retry with `forceReuseDeleted`. */
 export const STAFF_DELETED_CONFLICT = 'STAFF_DELETED_CONFLICT';
@@ -1169,6 +1170,8 @@ export class StaffService {
         username: staff.username,
         temporaryPassword,
         loginUrl: webAppLink('login', webOrigin),
+        // Account exists → the next thing to do is log in and train.
+        stagesHtml: onboardingStagesHtml(2),
         currentYear: new Date().getFullYear(),
         staffTypeLabel: this.toStaffTypeLabel(staff.staffType),
         staffRoleName: staff.staffRole?.name ?? null,

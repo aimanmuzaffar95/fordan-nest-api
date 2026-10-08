@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Complete your onboarding</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4efe8;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1f1a14;-webkit-text-size-adjust:100%;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4efe8;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e6e0d8;">
+          <tr>
+            <td style="padding:28px 32px;background-color:#2b1d0e;">
+              <p style="margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#ffddb8;">Staff onboarding</p>
+              <h1 style="margin:0 0 12px;font-size:26px;line-height:1.25;font-weight:800;color:#ffffff;">{{greeting}}</h1>
+              <p style="margin:0;font-size:16px;line-height:1.6;color:rgba(239,241,243,0.84);">{{intro}}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 32px 32px;">
+              {{{stagesHtml}}}
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">
+                <tr>
+                  <td style="border-radius:10px;background-color:#855300;">
+                    <a href="{{url}}" target="_blank" style="display:inline-block;padding:14px 28px;border-radius:10px;font-size:16px;font-weight:700;line-height:1.2;color:#ffffff;text-decoration:none;">Complete onboarding</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#534434;">This link works until <strong>{{expiry}}</strong> and can only be used once. If it has expired, ask your manager to resend it.</p>
+              <p style="margin:0;font-size:12px;line-height:1.6;color:#8a7a68;word-break:break-all;">Button not working? Copy this address into your browser: {{url}}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 24px;border-top:1px solid #e6e0d8;">
+              <p style="margin:0;font-size:12px;line-height:1.6;color:#534434;">&copy; {{currentYear}} Fordan Solar. This invitation was sent to {{to}}.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

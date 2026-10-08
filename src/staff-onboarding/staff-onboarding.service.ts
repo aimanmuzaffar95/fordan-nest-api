@@ -13,6 +13,10 @@ import { UserRole } from '../users/entities/user-role.enum';
 import { EmailService } from '../email/email.service';
 import { webAppLink } from '../common/web-app-url.util';
 import { StaffOnboardingInvite } from './entities/staff-onboarding-invite.entity';
+import {
+  onboardingStagesHtml,
+  onboardingStagesText,
+} from './onboarding-stages';
 
 /** Roles an invite may create. Admin is deliberately absent. */
 export const INVITABLE_ROLES: UserRole[] = [
@@ -236,17 +240,23 @@ export class StaffOnboardingService {
   ): Promise<void> {
     const greeting = firstName ? `Hi ${firstName},` : 'Hi,';
     const expiry = expiresAt.toDateString();
+    const intro =
+      'Please complete your staff onboarding form using the button below.';
     try {
       await this.email.send({
         to,
         subject: 'Complete your onboarding',
-        html: `
-          <p>${greeting}</p>
-          <p>Please complete your staff onboarding form using the link below.</p>
-          <p><a href="${url}">Complete onboarding</a></p>
-          <p>This link works until ${expiry} and can only be used once.</p>
-        `,
-        text: `${greeting}\n\nComplete your staff onboarding form: ${url}\n\nThis link works until ${expiry} and can only be used once.`,
+        template: 'onboarding-invite',
+        context: {
+          greeting,
+          intro,
+          url,
+          expiry,
+          to,
+          stagesHtml: onboardingStagesHtml(1),
+          currentYear: new Date().getFullYear(),
+        },
+        text: `${greeting}\n\n${intro}\n${url}\n\nThis link works until ${expiry} and can only be used once.\n\nYour onboarding:\n${onboardingStagesText(1)}`,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -257,9 +267,17 @@ export class StaffOnboardingService {
   async resend(id: string, webOrigin?: string | null): Promise<InviteSummary> {
     const invite = await this.inviteRepo.findOne({ where: { id } });
     if (!invite) throw new NotFoundException('Invite not found');
-    if (this.statusOf(invite) !== 'pending') {
+    const status = this.statusOf(invite);
+    if (status !== 'pending' && status !== 'expired') {
       throw new BadRequestException(
-        'Only a pending invite can be resent — issue a new one instead',
+        'Only a pending or expired invite can be resent — issue a new one instead',
+      );
+    }
+    if (status === 'expired') {
+      // Resending a lapsed link (e.g. the original pointed at the wrong host)
+      // gives it a full fresh window rather than failing the recipient again.
+      invite.expiresAt = new Date(
+        Date.now() + DEFAULT_TTL_DAYS * 24 * 60 * 60 * 1000,
       );
     }
     // The stored hash cannot be reversed, so resending mints a fresh token and
