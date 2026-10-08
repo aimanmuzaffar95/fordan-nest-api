@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
   Post,
   Req,
   UnauthorizedException,
@@ -87,6 +88,30 @@ export class AuthController {
     }
 
     return this.authService.getProfile(userId);
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @AllowPasswordResetRequired()
+  @ApiOperation({
+    summary: 'Sliding session — re-issue the access token',
+    description:
+      'Call while the user is active and the current token is past half its lifetime. Returns a fresh token with the same claims; the old one stays valid until its own expiry. Not available to MCP tokens.',
+  })
+  async refresh(
+    @Req() req: Request & { user?: { sub: string; mcp?: boolean } },
+  ): Promise<{
+    accessToken: string;
+    role: UserRole;
+    mustChangePassword: boolean;
+  }> {
+    const userId = req.user?.sub;
+    if (!userId || req.user?.mcp) {
+      throw new UnauthorizedException('Cannot refresh this session');
+    }
+    return this.authService.refresh(userId);
   }
 
   @Post('change-password')

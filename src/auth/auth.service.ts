@@ -230,6 +230,35 @@ export class AuthService implements OnModuleInit {
   }
 
   /**
+   * Sliding session: re-issue a token for a user whose current token is still
+   * valid (JwtAuthGuard already checked deletion/active/tokenVersion). Same
+   * payload as login, fresh `exp`, no audit row (not a new login).
+   */
+  async refresh(userId: string): Promise<AuthLoginResult> {
+    const credential = await this.credentialsRepository.findOne({
+      where: { user: { id: userId } },
+    });
+    if (
+      !credential ||
+      credential.user.deletedAt ||
+      credential.user.active === false
+    ) {
+      throw new UnauthorizedException('Session is no longer valid');
+    }
+    const payload = {
+      sub: credential.user.id,
+      role: credential.user.role,
+      isAdmin: credential.user.role === UserRole.ADMIN,
+      tv: credential.tokenVersion ?? 0,
+    };
+    return {
+      accessToken: await this.jwtService.signAsync(payload),
+      role: credential.user.role,
+      mustChangePassword: credential.mustChangePassword,
+    };
+  }
+
+  /**
    * Exchange an MCP access key for a short-lived JWT bound to the key's staff
    * account. The token carries `mcp: true` and `mcpWrites` so the guard can
    * enforce read-only server-side regardless of the MCP client. The bound
